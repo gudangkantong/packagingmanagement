@@ -1,0 +1,6 @@
+{
+  "name": "Laporan Pemakaian Kantong",
+  "description": "Aplikasi pelaporan pemakaian kantong semen real-time terhubung ke Firebase Firestore dengan autentikasi email & password dan manajemen otorisasi pengguna.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

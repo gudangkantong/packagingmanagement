@@ -1,0 +1,118 @@
+{
+  "entities": {
+    "AllowedUser": {
+      "title": "Allowed User",
+      "description": "User email address authorized to log in, view real-time data, and edit records.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Email address of the authorized user (lowercase)"
+        },
+        "allowed": {
+          "type": "boolean",
+          "description": "Whether this user is allowed to access the application"
+        },
+        "addedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the user was added"
+        }
+      },
+      "required": ["email", "allowed"]
+    },
+    "LaporanKantong": {
+      "title": "Laporan Kantong",
+      "description": "Record representing bag usage report details per shift, pabrik, vendor, and jenis kantong.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the record"
+        },
+        "vendor": {
+          "type": "string",
+          "enum": ["GEMAH", "YANA", "HARDO", "IKSG", "KRR", "SAMI"],
+          "description": "The name of the vendor"
+        },
+        "nama": {
+          "type": "string",
+          "enum": [
+            "Semen Baturaja (SMBR)",
+            "Semen DYNAMIX (DYX)",
+            "Semen MERDEKA (MDK)",
+            "Semen PADANG (PDG)",
+            "BIGBAG OPC",
+            "BIGBAG PCC",
+            "MACAN"
+          ],
+          "description": "Type of the bag (jenis kantong)"
+        },
+        "pabrik": {
+          "type": "string",
+          "enum": ["Pabrik Baturaja 1 (PBR 1)", "Pabrik Baturaja 2 (PBR 2)"],
+          "description": "The factory location"
+        },
+        "shift": {
+          "type": "integer",
+          "enum": [1, 2, 3],
+          "description": "The work shift (1, 2, or 3)"
+        },
+        "tanggal": {
+          "type": "string",
+          "format": "date",
+          "description": "The reporting date (YYYY-MM-DD)"
+        },
+        "utuh": {
+          "type": "integer",
+          "description": "Count of intact bags"
+        },
+        "pecah": {
+          "type": "integer",
+          "description": "Count of broken bags"
+        },
+        "sortir": {
+          "type": "integer",
+          "description": "Count of sorted bags"
+        },
+        "total": {
+          "type": "integer",
+          "description": "Sum of utuh + pecah + sortir"
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "Email address of the creator"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of the last modification"
+        }
+      },
+      "required": [
+        "id",
+        "vendor",
+        "nama",
+        "pabrik",
+        "shift",
+        "tanggal",
+        "utuh",
+        "pecah",
+        "sortir",
+        "total",
+        "createdBy",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/allowed_users/{email}": {
+      "schema": "AllowedUser",
+      "description": "Collection of authorized email addresses."
+    },
+    "/laporan_kantong/{id}": {
+      "schema": "LaporanKantong",
+      "description": "Collection of real-time bag usage reports."
+    }
+  }
+}

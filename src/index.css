@@ -1,0 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', -apple-system, sans-serif;
+  --color-brand-green: #2d5a27;
+  --color-brand-green-hover: #234a1e;
+  --color-brand-green-light: #e8f0e6;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #fcfbfa;
+  color: #1a1814;
+}
+
+/* Custom scrollbar for better visual polish */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f0ec;
+}
+::-webkit-scrollbar-thumb {
+  background: #c4bfb7;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9e9892;
+}

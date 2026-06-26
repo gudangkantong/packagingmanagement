@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper to check if user is authenticated and has an email
+    function isAuthenticated() {
+      return request.auth != null && request.auth.token.email != null;
+    }
+    
+    // Helper to check if the user is the master admin
+    function isMasterAdmin() {
+      return isAuthenticated() && request.auth.token.email == "managementpackaging@gmail.com";
+    }
+    
+    // Helper to check if the user's email exists in allowed_users collection
+    function isAllowedUser() {
+      return isMasterAdmin() || (
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/allowed_users/$(request.auth.token.email))
+      );
+    }
+
+    match /allowed_users/{email} {
+      allow read: if isAuthenticated();
+      allow write: if isMasterAdmin();
+    }
+
+    match /laporan_kantong/{id} {
+      allow read, write: if isAllowedUser();
+    }
+  }
+}

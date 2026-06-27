@@ -874,7 +874,7 @@ export default function App() {
                         type="date"
                         value={selectedDate}
                         onChange={(e) => setSelectedDate(e.target.value)}
-                        className="bg-transparent border-none text-sm font-bold text-[#1a1814] focus:outline-none cursor-pointer text-center"
+                        className="bg-transparent border-none text-sm font-bold text-[#1a1814] focus:outline-none cursor-pointer text-center w-24"
                       />
                     </div>
                   </div>

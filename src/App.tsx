@@ -48,6 +48,7 @@ import {
 import { auth, db, firebaseConfig } from "./firebase";
 import { LaporanKantong, AllowedUser } from "./types";
 import { getDateString } from "./utils";
+import logo from "./assets/logo.jpg";
 enum OperationType {
   CREATE = "create",
   UPDATE = "update",
@@ -628,7 +629,7 @@ export default function App() {
                 <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-white border border-[#e8e4de] p-1.5 shadow-sm mb-4">
                   {!logoErrorLogin ? (
                     <img 
-                      src="/logo.png"
+                      src={logo}
                       alt="Semen Baturaja Logo" 
                       className="w-full h-full object-contain"
                       onError={() => setLogoErrorLogin(true)}
@@ -774,11 +775,11 @@ export default function App() {
             <header className="border-b border-[#e8e4de] bg-white sticky top-0 z-10 shadow-xs">
               <div className="max-w-7xl mx-auto px-4 md:px-6 h-18 flex items-center justify-between gap-4">
                 {/* Brand Logo & Name */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-white border border-[#e8e4de] flex items-center justify-center p-0.5 shadow-sm overflow-hidden shrink-0">
                     {!logoErrorHeader ? (
                       <img 
-                        src="/logo.png"
+                        src={logo}
                         alt="Semen Baturaja Logo" 
                         className="w-full h-full object-contain"
                         onError={() => setLogoErrorHeader(true)}
@@ -789,15 +790,15 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                  <div>
-                    <h1 className="text-sm sm:text-base font-extrabold leading-tight tracking-tight text-[#1a1814] whitespace-nowrap">
+                  <div className="min-w-0">
+                    <h1 className="text-sm sm:text-base font-extrabold leading-tight tracking-tight text-[#1a1814] truncate">
                       Laporan <span className="text-brand-green">Pemakaian Kantong</span>
                     </h1>
-                    <div className="text-[10px] text-[#9e9892] font-semibold flex items-center gap-1">
+                    <div className="text-[10px] text-[#9e9892] font-semibold flex items-center gap-1 truncate">
                       <UserCheck className="w-3 h-3 text-emerald-600" />
-                      <span>{currentUser.email}</span>
-                      <span className="text-[#c4bfb7]">•</span>
-                      <span className="text-emerald-700 bg-emerald-50 px-1 rounded-sm text-[9px] uppercase font-bold tracking-wider">Authorized</span>
+                      <span className="truncate">{currentUser.email}</span>
+                      <span className="text-[#c4bfb7] shrink-0">•</span>
+                      <span className="text-emerald-700 bg-emerald-50 px-1 rounded-sm text-[9px] uppercase font-bold tracking-wider shrink-0">Authorized</span>
                     </div>
                   </div>
                 </div>
@@ -859,7 +860,7 @@ export default function App() {
             <div className="bg-white border-b border-[#e8e4de] py-3 shadow-xs">
               <div className="max-w-7xl mx-auto px-4 md:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
                 {/* Datepicker Navigation */}
-                <div className="flex items-center gap-1 border border-[#e8e4de] bg-[#fcfbfa] p-1.5 rounded-2xl w-full sm:w-auto justify-between shadow-xs">
+                <div className="flex items-center gap-1 border border-[#e8e4de] bg-[#fcfbfa] p-1.5 rounded-2xl w-full sm:w-auto shadow-xs">
                   <button
                     onClick={handlePrevDay}
                     className="p-1.5 hover:bg-[#faf9f7] rounded-xl text-[#6b6560] hover:text-[#1a1814] active:scale-95 transition-transform"
@@ -867,14 +868,15 @@ export default function App() {
                     <ChevronLeft className="w-5 h-5" />
                   </button>
 
-                  <div className="flex items-center gap-2 px-3">
-                    <CalendarIcon className="w-4 h-4 text-brand-green" />
-                    <input
-                      type="date"
-                      value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      className="bg-transparent border-none text-sm font-bold text-[#1a1814] focus:outline-none cursor-pointer"
-                    />
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="flex items-center bg-white border border-gray-200 shadow-sm rounded-lg p-0.5 cursor-pointer hover:shadow-md transition-shadow">
+                      <input
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="bg-transparent border-none text-sm font-bold text-[#1a1814] focus:outline-none cursor-pointer text-center"
+                      />
+                    </div>
                   </div>
 
                   <button

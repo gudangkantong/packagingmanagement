@@ -1239,7 +1239,7 @@ export default function App() {
                         <div className="text-4xl mb-3">📭</div>
                         <h4 className="text-sm font-extrabold text-[#1a1814]">Belum Ada Laporan Pemakaian</h4>
                         <p className="text-xs text-[#9e9892] mt-1 max-w-sm mx-auto">
-                          Tidak ada transaksi kantong yang dilaporkan untuk tanggal {selectedDate}. Silakan buka tab <span className="font-bold text-brand-green">Pelaporan</span> untuk menambahkan data baru.
+                          Tidak ada laporan pemakaian kantong untuk tanggal {selectedDate}. Silakan buka tab <span className="font-bold text-brand-green">Pelaporan</span> untuk menambahkan data baru.
                         </p>
                       </div>
                     ) : (
@@ -1278,7 +1278,7 @@ export default function App() {
                               <span className="text-lg">🏭</span>
                               <h2 className="text-base font-extrabold text-[#1a1814]">{pabrikName}</h2>
                               <span className="ml-auto text-[10px] bg-brand-green-light text-brand-green font-bold px-2 py-0.5 rounded-full">
-                                {factoryReports.length} transaksi
+                                {factoryReports.length} laporan
                               </span>
                             </div>
 
@@ -1494,7 +1494,7 @@ export default function App() {
                         <div className="text-4xl mb-3">📝</div>
                         <h4 className="text-sm font-extrabold text-[#1a1814]">Belum Ada Data</h4>
                         <p className="text-xs text-[#9e9892] mt-1 max-w-sm mx-auto">
-                          Belum ada transaksi kantong terdaftar untuk tanggal ini. Klik tombol <span className="font-bold text-brand-green">Tambah Data Baru</span> di atas untuk menginput laporan.
+                          Belum ada laporan pemakaian kantong untuk tanggal ini. Klik tombol <span className="font-bold text-brand-green">Tambah Data Baru</span> di atas untuk menginput laporan.
                         </p>
                       </div>
                     ) : (

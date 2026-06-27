@@ -669,6 +669,7 @@ export default function App() {
   // Filter current reports by selected date
   const filteredReports = reports.filter((r) => r.tanggal === selectedDate);
   const isSelectedDateLocked = !!lockedDates[selectedDate]?.locked;
+  const isToday = selectedDate === getDateString(new Date());
 
   // Statistics calculation for the selected date
   const selectedDateStats = filteredReports.reduce(
@@ -1118,7 +1119,7 @@ export default function App() {
                   </button>
 
                   <div className="flex-1 flex items-center justify-center">
-                    <div className="flex items-center bg-white border-2 border-brand-green/30 shadow-sm rounded-lg p-0.5 cursor-pointer hover:shadow-md transition-shadow w-[7rem]">
+                    <div className="flex items-center bg-white border-2 border-brand-green/30 shadow-sm rounded-lg p-0.5 cursor-pointer hover:shadow-md transition-shadow w-[7.5rem]">
                       <input
                         type="date"
                         value={selectedDate}
@@ -1140,7 +1141,11 @@ export default function App() {
                 <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-center sm:justify-end">
                   <button
                     onClick={handleGoToday}
-                    className="border-2 border-brand-green/30 bg-white hover:bg-[#faf9f7] text-[#1a1814] px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold transition-all"
+                    className={`border-2 transition-all px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold cursor-pointer ${
+                      isToday
+                        ? "border-brand-green bg-[#e8f0e6] text-brand-green"
+                        : "border-[#e8e4de] bg-white hover:border-brand-green/50 text-[#6b6560] hover:text-[#1a1814] hover:bg-[#faf9f7]"
+                    }`}
                   >
                     Hari Ini
                   </button>

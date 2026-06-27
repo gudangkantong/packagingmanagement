@@ -48,8 +48,6 @@ import {
 import { auth, db, firebaseConfig } from "./firebase";
 import { LaporanKantong, AllowedUser } from "./types";
 import { getDateString } from "./utils";
-import logo from "./logo_semen_baturaja.png";
-
 enum OperationType {
   CREATE = "create",
   UPDATE = "update",
@@ -630,7 +628,7 @@ export default function App() {
                 <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-white border border-[#e8e4de] p-1.5 shadow-sm mb-4">
                   {!logoErrorLogin ? (
                     <img 
-                      src={logo}
+                      src="/logo.png"
                       alt="Semen Baturaja Logo" 
                       className="w-full h-full object-contain"
                       onError={() => setLogoErrorLogin(true)}
@@ -780,7 +778,7 @@ export default function App() {
                   <div className="w-10 h-10 rounded-xl bg-white border border-[#e8e4de] flex items-center justify-center p-0.5 shadow-sm overflow-hidden shrink-0">
                     {!logoErrorHeader ? (
                       <img 
-                        src={logo}
+                        src="/logo.png"
                         alt="Semen Baturaja Logo" 
                         className="w-full h-full object-contain"
                         onError={() => setLogoErrorHeader(true)}
@@ -849,7 +847,7 @@ export default function App() {
                   <button
                     onClick={handleLogout}
                     title="Log Out"
-                    className="p-2 border-2 border-[#e8e4de] text-[#6b6560] hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 rounded-xl transition-all mr-2"
+                    className="shrink-0 p-2 border-2 border-[#e8e4de] text-[#6b6560] hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 rounded-xl transition-all"
                   >
                     <LogOut className="w-4.5 h-4.5" />
                   </button>

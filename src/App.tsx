@@ -135,6 +135,7 @@ export default function App() {
   const [formJenis, setFormJenis] = useState(JENIS_KANTONG[0]);
   const [formPabrik, setFormPabrik] = useState(PABRIK_LIST[0]);
   const [formShift, setFormShift] = useState(1);
+  const [formTanggal, setFormTanggal] = useState(getDateString(new Date()));
   const [formUtuh, setFormUtuh] = useState("");
   const [formPecah, setFormPecah] = useState("");
   const [formSortir, setFormSortir] = useState("");
@@ -374,7 +375,14 @@ export default function App() {
         const secondaryAppName = `Secondary-${Date.now()}`;
         secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
         const secondaryAuth = getAuth(secondaryApp);
-        await createUserWithEmailAndPassword(secondaryAuth, targetEmail, targetPassword);
+        try {
+          await createUserWithEmailAndPassword(secondaryAuth, targetEmail, targetPassword);
+        } catch (authErr: any) {
+          if (authErr.code !== "auth/email-already-in-use") {
+            throw authErr;
+          }
+          // Already exists, just proceed to add to allowed_users
+        }
       }
 
       const userDocRef = doc(db, "allowed_users", targetEmail);
@@ -446,6 +454,7 @@ export default function App() {
     setFormPabrik(PABRIK_LIST[0]);
     const currentHour = new Date().getHours();
     setFormShift(currentHour < 8 ? 1 : currentHour < 16 ? 2 : 3);
+    setFormTanggal(getDateString(new Date()));
     setFormUtuh("");
     setFormPecah("");
     setFormSortir("");
@@ -458,6 +467,7 @@ export default function App() {
     setFormJenis(item.nama);
     setFormPabrik(item.pabrik);
     setFormShift(item.shift);
+    setFormTanggal(item.tanggal);
     setFormUtuh(item.utuh.toString());
     setFormPecah(item.pecah.toString());
     setFormSortir(item.sortir.toString());
@@ -483,7 +493,7 @@ export default function App() {
       nama: formJenis,
       pabrik: formPabrik,
       shift: Number(formShift),
-      tanggal: selectedDate,
+      tanggal: formTanggal,
       utuh: utuhNum,
       pecah: pecahNum,
       sortir: sortirNum,
@@ -869,12 +879,12 @@ export default function App() {
                   </button>
 
                   <div className="flex-1 flex items-center justify-center">
-                    <div className="flex items-center bg-white border border-gray-200 shadow-sm rounded-lg p-0.5 cursor-pointer hover:shadow-md transition-shadow">
+                    <div className="flex items-center bg-white border border-gray-200 shadow-sm rounded-lg p-0.5 cursor-pointer hover:shadow-md transition-shadow w-[6.625rem]">
                       <input
                         type="date"
                         value={selectedDate}
                         onChange={(e) => setSelectedDate(e.target.value)}
-                        className="bg-transparent border-none text-sm font-bold text-[#1a1814] focus:outline-none cursor-pointer text-center w-24"
+                        className="bg-transparent border-none text-sm font-bold text-[#1a1814] focus:outline-none cursor-pointer text-center w-full"
                       />
                     </div>
                   </div>
@@ -967,10 +977,11 @@ export default function App() {
                               </span>
                             </div>
 
+
                             {/* Consolidated Factory Bag Usage Grid/Table */}
                             <div className="space-y-2">
-                              <h3 className="text-xs font-extrabold text-[#6b6560] tracking-wide uppercase mb-2">Konsolidasi Total Hari Ini</h3>
-                              <div className="border border-[#e8e4de] rounded-2xl overflow-hidden">
+                              <h3 className="text-xs font-extrabold text-[#6b6560] tracking-wide uppercase mb-2 text-center [text-shadow:0_1px_0_rgba(255,255,255,0.8)]">Konsolidasi Total Hari Ini</h3>
+                              <div className="border border-brand-green/30 rounded-2xl overflow-hidden bg-[#fdfcfb]">
                                 <div className="overflow-x-auto">
                                   <table className="w-full text-left text-xs border-collapse">
                                     <thead>
@@ -1268,28 +1279,6 @@ export default function App() {
                             </div>
                           ))}
 
-                          {/* Mobile Total Kumulatif card */}
-                          <div className="bg-[#faf9f7] border-2 border-brand-green/20 rounded-2xl p-4 shadow-xs space-y-2.5">
-                            <h4 className="text-[10px] font-black text-brand-green uppercase tracking-widest text-center">Total Kumulatif Hari Ini</h4>
-                            <div className="grid grid-cols-4 gap-1.5 text-center">
-                              <div className="bg-white p-2 rounded-xl border border-[#e8e4de]">
-                                <div className="text-[9px] font-bold text-brand-green uppercase">Utuh</div>
-                                <div className="text-xs font-black text-brand-green mt-0.5">{selectedDateStats.utuh}</div>
-                              </div>
-                              <div className="bg-white p-2 rounded-xl border border-[#e8e4de]">
-                                <div className="text-[9px] font-bold text-rose-600 uppercase">Pecah</div>
-                                <div className="text-xs font-black text-rose-600 mt-0.5">{selectedDateStats.pecah}</div>
-                              </div>
-                              <div className="bg-white p-2 rounded-xl border border-[#e8e4de]">
-                                <div className="text-[9px] font-bold text-amber-600 uppercase">Sortir</div>
-                                <div className="text-xs font-black text-amber-600 mt-0.5">{selectedDateStats.sortir}</div>
-                              </div>
-                              <div className="bg-brand-green text-white p-2 rounded-xl border border-brand-green shadow-xs">
-                                <div className="text-[9px] font-bold uppercase opacity-90">Total</div>
-                                <div className="text-xs font-black mt-0.5">{selectedDateStats.total}</div>
-                              </div>
-                            </div>
-                          </div>
                         </div>
                       </>
                     )}
@@ -1545,6 +1534,17 @@ export default function App() {
               <form onSubmit={handleSaveEntry} className="flex-1 overflow-y-auto p-5 md:p-6 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Vendor Selection */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">
+                      Tanggal
+                    </label>
+                    <input
+                      type="date"
+                      value={formTanggal}
+                      onChange={(e) => setFormTanggal(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white"
+                    />
+                  </div>
                   <div>
                     <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">
                       Vendor

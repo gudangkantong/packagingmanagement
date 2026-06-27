@@ -879,7 +879,7 @@ export default function App() {
                   </button>
 
                   <div className="flex-1 flex items-center justify-center">
-                    <div className="flex items-center bg-white border border-gray-200 shadow-sm rounded-lg p-0.5 cursor-pointer hover:shadow-md transition-shadow w-[7rem]">
+                    <div className="flex items-center bg-white border border-gray-200 shadow-sm rounded-lg p-0.5 cursor-pointer hover:shadow-md transition-shadow w-[9rem]">
                       <input
                         type="date"
                         value={selectedDate}

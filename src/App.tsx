@@ -47,6 +47,8 @@ import {
 } from "lucide-react";
 import { auth, db, firebaseConfig } from "./firebase";
 import { LaporanKantong, AllowedUser } from "./types";
+import { getDateString } from "./utils";
+import logo from "./logo_semen_baturaja.png";
 
 enum OperationType {
   CREATE = "create",
@@ -116,9 +118,11 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"dash" | "input" | "users">("dash");
 
   // Selected date state
-  const [selectedDate, setSelectedDate] = useState<string>(() => {
-    return new Date().toISOString().split("T")[0];
-  });
+  const [selectedDate, setSelectedDate] = useState<string>(getDateString(new Date()));
+
+  useEffect(() => {
+    setSelectedDate(getDateString(new Date()));
+  }, []);
 
   // Toast notification state
   const [toasts, setToasts] = useState<{ id: string; text: string; type: "ok" | "er" | "inf" }[]>([]);
@@ -517,19 +521,21 @@ export default function App() {
 
   // Date controls
   const handlePrevDay = () => {
-    const d = new Date(selectedDate);
+    const [year, month, day] = selectedDate.split('-').map(Number);
+    const d = new Date(year, month - 1, day);
     d.setDate(d.getDate() - 1);
-    setSelectedDate(d.toISOString().split("T")[0]);
+    setSelectedDate(getDateString(d));
   };
 
   const handleNextDay = () => {
-    const d = new Date(selectedDate);
+    const [year, month, day] = selectedDate.split('-').map(Number);
+    const d = new Date(year, month - 1, day);
     d.setDate(d.getDate() + 1);
-    setSelectedDate(d.toISOString().split("T")[0]);
+    setSelectedDate(getDateString(d));
   };
 
   const handleGoToday = () => {
-    setSelectedDate(new Date().toISOString().split("T")[0]);
+    setSelectedDate(getDateString(new Date()));
   };
 
   // Filter current reports by selected date
@@ -624,10 +630,9 @@ export default function App() {
                 <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-white border border-[#e8e4de] p-1.5 shadow-sm mb-4">
                   {!logoErrorLogin ? (
                     <img 
-                      src="https://lh3.googleusercontent.com/d/1bm7RZvFfZ34pwHQ8FO35b3PUYkwwoSlQ" 
+                      src={logo}
                       alt="Semen Baturaja Logo" 
                       className="w-full h-full object-contain"
-                      referrerPolicy="no-referrer"
                       onError={() => setLogoErrorLogin(true)}
                     />
                   ) : (
@@ -775,10 +780,9 @@ export default function App() {
                   <div className="w-10 h-10 rounded-xl bg-white border border-[#e8e4de] flex items-center justify-center p-0.5 shadow-sm overflow-hidden shrink-0">
                     {!logoErrorHeader ? (
                       <img 
-                        src="https://lh3.googleusercontent.com/d/1bm7RZvFfZ34pwHQ8FO35b3PUYkwwoSlQ" 
+                        src={logo}
                         alt="Semen Baturaja Logo" 
                         className="w-full h-full object-contain"
-                        referrerPolicy="no-referrer"
                         onError={() => setLogoErrorHeader(true)}
                       />
                     ) : (

@@ -1307,16 +1307,22 @@ export default function App() {
                                       {JENIS_KANTONG.map((name, idx) => {
                                         const stat = grandFactoryAgg[name];
                                         const isZero = stat.utuh === 0 && stat.pecah === 0 && stat.sortir === 0;
-                                        const isExpanded = expandedBagTypes[name];
+                                        const isExpanded = !isZero && expandedBagTypes[name];
                                         return (
                                           <React.Fragment key={name}>
                                             <tr 
-                                              className={`hover:bg-[#faf9f7]/50 transition-colors cursor-pointer ${isExpanded ? 'bg-[#faf9f7] ring-2 ring-inset ring-brand-green/50' : ''}`}
-                                              onClick={() => setExpandedBagTypes(prev => ({ ...prev, [name]: !prev[name] }))}
+                                              className={`hover:bg-[#faf9f7]/50 transition-colors ${!isZero ? 'cursor-pointer' : 'cursor-default'} ${isExpanded ? 'bg-[#faf9f7] ring-2 ring-inset ring-brand-green/50' : ''}`}
+                                              onClick={() => {
+                                                if (!isZero) {
+                                                  setExpandedBagTypes(prev => ({ ...prev, [name]: !prev[name] }));
+                                                }
+                                              }}
                                             >
                                               <td className="py-2 px-2 sm:px-4 font-bold text-[#1a1814] text-xs sm:text-sm">
                                                 {JENIS_KANTONG_SHORT[idx]}
-                                                <span className="ml-2 text-[10px] text-[#9e9892]">{isExpanded ? '▼' : '▶'}</span>
+                                                {!isZero && (
+                                                  <span className="ml-2 text-[10px] text-[#9e9892]">{isExpanded ? '▼' : '▶'}</span>
+                                                )}
                                               </td>
                                               <td className={`py-2 px-2 sm:px-4 text-center font-semibold text-xs sm:text-sm ${isZero ? "text-[#c4bfb7]" : "text-[#1a1814]"}`}>
                                                 {stat.utuh.toLocaleString()}
@@ -1414,16 +1420,22 @@ export default function App() {
                                             {JENIS_KANTONG.map((name, idx) => {
                                               const sData = shiftAgg[name];
                                               const isZero = sData.utuh === 0 && sData.pecah === 0 && sData.sortir === 0;
-                                              const isExpanded = expandedBagTypes[`${shift.id}-${name}`];
+                                              const isExpanded = !isZero && expandedBagTypes[`${shift.id}-${name}`];
                                               return (
                                                 <React.Fragment key={name}>
                                                   <tr 
-                                                    className={`hover:bg-[#faf9f7]/50 cursor-pointer ${isExpanded ? 'bg-[#faf9f7] ring-2 ring-inset ring-brand-green/50' : ''}`}
-                                                    onClick={() => setExpandedBagTypes(prev => ({ ...prev, [`${shift.id}-${name}`]: !prev[`${shift.id}-${name}`] }))}
+                                                    className={`hover:bg-[#faf9f7]/50 ${!isZero ? 'cursor-pointer' : 'cursor-default'} ${isExpanded ? 'bg-[#faf9f7] ring-2 ring-inset ring-brand-green/50' : ''}`}
+                                                    onClick={() => {
+                                                      if (!isZero) {
+                                                        setExpandedBagTypes(prev => ({ ...prev, [`${shift.id}-${name}`]: !prev[`${shift.id}-${name}`] }));
+                                                      }
+                                                    }}
                                                   >
                                                     <td className="py-2 px-2 font-bold text-[#1a1814]">
                                                       {JENIS_KANTONG_SHORT[idx]}
-                                                      <span className="ml-1 text-[8px] text-[#c4bfb7]">{isExpanded ? '▼' : '▶'}</span>
+                                                      {!isZero && (
+                                                        <span className="ml-1 text-[8px] text-[#9e9892]">{isExpanded ? '▼' : '▶'}</span>
+                                                      )}
                                                     </td>
                                                     <td className={`py-2 px-2 text-center font-medium ${isZero ? "text-[#c4bfb7]" : "text-[#1a1814]"}`}>{sData.utuh.toLocaleString()}</td>
                                                     <td className={`py-2 px-2 text-center font-medium ${isZero ? "text-[#c4bfb7]" : "text-rose-600"}`}>{sData.pecah.toLocaleString()}</td>

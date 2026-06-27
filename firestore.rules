@@ -20,13 +20,42 @@ service cloud.firestore {
       );
     }
 
+    // Helper to check if a date's data is verified/locked by the admin
+    function isDateLocked(dateStr) {
+      return exists(/databases/$(database)/documents/locked_dates/$(dateStr)) &&
+             get(/databases/$(database)/documents/locked_dates/$(dateStr)).data.locked == true;
+    }
+
     match /allowed_users/{email} {
       allow read: if isAuthenticated();
       allow write: if isMasterAdmin();
     }
 
+    match /locked_dates/{date} {
+      allow read: if isAllowedUser();
+      allow write: if isMasterAdmin();
+    }
+
     match /laporan_kantong/{id} {
-      allow read, write: if isAllowedUser();
+      allow read: if isAllowedUser();
+      
+      // Allow create only if user is allowed and date is not locked (or is master admin)
+      allow create: if isAllowedUser() && (
+        isMasterAdmin() || 
+        !isDateLocked(request.resource.data.tanggal)
+      );
+      
+      // Allow update only if user is allowed and date is not locked (or is master admin)
+      allow update: if isAllowedUser() && (
+        isMasterAdmin() || 
+        !isDateLocked(request.resource.data.tanggal)
+      );
+      
+      // Allow delete only if user is allowed and date is not locked (or is master admin)
+      allow delete: if isAllowedUser() && (
+        isMasterAdmin() || 
+        !isDateLocked(resource.data.tanggal)
+      );
     }
   }
 }

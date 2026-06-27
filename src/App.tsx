@@ -41,12 +41,13 @@ import {
   LogIn,
   UserPlus,
   Lock,
+  Unlock,
   Mail,
   UserCheck,
   X
 } from "lucide-react";
 import { auth, db, firebaseConfig } from "./firebase";
-import { LaporanKantong, AllowedUser } from "./types";
+import { LaporanKantong, AllowedUser, LockedDate } from "./types";
 import { getDateString } from "./utils";
 import logo from "./assets/logo.jpg";
 enum OperationType {
@@ -78,7 +79,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   console.error("Firestore Error: ", JSON.stringify(errInfo));
 }
 
-const VENDORS = ["GEMAH", "YANA", "HARDO", "IKSG", "KRR", "SAMI"];
+const VENDORS = ["GEMAH", "YANA", "HARDO", "IKSG", "KRR", "SAMI", "TRI USAHA"];
 const JENIS_KANTONG = [
   "Semen Baturaja (SMBR)",
   "Semen DYNAMIX (DYX)",
@@ -111,7 +112,10 @@ export default function App() {
   // App data state (real-time synchronized from Firestore)
   const [reports, setReports] = useState<LaporanKantong[]>([]);
   const [allowedUsers, setAllowedUsers] = useState<AllowedUser[]>([]);
+  const [lockedDates, setLockedDates] = useState<Record<string, LockedDate>>({});
   const [dataLoading, setDataLoading] = useState<boolean>(true);
+
+  const isMasterAdmin = currentUser?.email?.toLowerCase() === "managementpackaging@gmail.com";
 
   // Active page state
   const [activeTab, setActiveTab] = useState<"dash" | "input" | "users">("dash");
@@ -130,7 +134,15 @@ export default function App() {
 
   // Modal form state
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [expandedBagTypes, setExpandedBagTypes] = useState<Record<string, boolean>>({});
+  const [expandedShifts, setExpandedShifts] = useState<Record<string, boolean>>({});
   const [formVendor, setFormVendor] = useState(VENDORS[0]);
   const [formJenis, setFormJenis] = useState(JENIS_KANTONG[0]);
   const [formPabrik, setFormPabrik] = useState(PABRIK_LIST[0]);
@@ -292,6 +304,35 @@ export default function App() {
     return () => unsubUsers();
   }, [currentUser, isAllowed]);
 
+  // Listen to locked_dates collection when authorized
+  useEffect(() => {
+    if (!currentUser || isAllowed !== true) {
+      setLockedDates({});
+      return;
+    }
+
+    const lockedQuery = collection(db, "locked_dates");
+    const unsubLocked = onSnapshot(lockedQuery, (querySnapshot) => {
+      const datesMap: Record<string, LockedDate> = {};
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.locked) {
+          datesMap[docSnap.id] = {
+            locked: true,
+            lockedBy: data.lockedBy || "",
+            lockedAt: data.lockedAt || ""
+          };
+        }
+      });
+      setLockedDates(datesMap);
+    }, (err) => {
+      console.error("Failed to sync locked dates:", err);
+      handleFirestoreError(err, OperationType.GET, "locked_dates");
+    });
+
+    return () => unsubLocked();
+  }, [currentUser, isAllowed]);
+
   // Prevent unauthorized access to "users" tab
   useEffect(() => {
     if (activeTab === "users" && currentUser?.email?.toLowerCase() !== "managementpackaging@gmail.com") {
@@ -431,19 +472,23 @@ export default function App() {
       triggerToast("Admin utama tidak dapat dihapus!", "er");
       return;
     }
-    if (!window.confirm(`Apakah Anda yakin ingin mencabut izin akses untuk ${targetEmail}?`)) {
-      return;
-    }
-
-    try {
-      const userDocRef = doc(db, "allowed_users", targetEmail.toLowerCase());
-      await deleteDoc(userDocRef);
-      triggerToast(`Berhasil menghapus izin untuk ${targetEmail}`, "ok");
-    } catch (err) {
-      console.error("Remove user failed:", err);
-      triggerToast("Gagal menghapus izin akses", "er");
-      handleFirestoreError(err, OperationType.DELETE, `allowed_users/${targetEmail}`);
-    }
+    
+    setConfirmModal({
+      isOpen: true,
+      title: "Hapus Akses Pengguna",
+      message: `Apakah Anda yakin ingin mencabut izin akses untuk ${targetEmail}?`,
+      onConfirm: async () => {
+        try {
+          const userDocRef = doc(db, "allowed_users", targetEmail.toLowerCase());
+          await deleteDoc(userDocRef);
+          triggerToast(`Berhasil menghapus izin untuk ${targetEmail}`, "ok");
+        } catch (err) {
+          console.error("Remove user failed:", err);
+          triggerToast("Gagal menghapus izin akses", "er");
+          handleFirestoreError(err, OperationType.DELETE, `allowed_users/${targetEmail}`);
+        }
+      }
+    });
   };
 
   // Manage Report Records
@@ -462,6 +507,12 @@ export default function App() {
   };
 
   const handleOpenEditForm = (item: LaporanKantong) => {
+    const isDateLocked = !!lockedDates[item.tanggal]?.locked;
+    if (isDateLocked && !isMasterAdmin) {
+      triggerToast(`Laporan pada tanggal ${item.tanggal} telah dikunci & diverifikasi oleh Admin.`, "er");
+      return;
+    }
+
     setEditingId(item.id);
     setFormVendor(item.vendor);
     setFormJenis(item.nama);
@@ -476,6 +527,26 @@ export default function App() {
 
   const handleSaveEntry = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Check if the target date is locked
+    const isTargetDateLocked = !!lockedDates[formTanggal]?.locked;
+    if (isTargetDateLocked && !isMasterAdmin) {
+      triggerToast(`Data pada tanggal ${formTanggal} telah dikunci & diverifikasi oleh Admin Utama.`, "er");
+      return;
+    }
+
+    // Check if original date (if editing) was locked
+    if (editingId) {
+      const existingEntry = reports.find(r => r.id === editingId);
+      if (existingEntry) {
+        const isOrigDateLocked = !!lockedDates[existingEntry.tanggal]?.locked;
+        if (isOrigDateLocked && !isMasterAdmin) {
+          triggerToast(`Data pada tanggal asli (${existingEntry.tanggal}) telah dikunci & diverifikasi.`, "er");
+          return;
+        }
+      }
+    }
+
     const utuhNum = Number(formUtuh) || 0;
     const pecahNum = Number(formPecah) || 0;
     const sortirNum = Number(formSortir) || 0;
@@ -514,18 +585,66 @@ export default function App() {
   };
 
   const handleDeleteEntry = async (id: string) => {
-    if (!window.confirm("Apakah Anda yakin ingin menghapus baris laporan ini?")) {
-      return;
+    const item = reports.find(r => r.id === id);
+    if (item) {
+      const isDateLocked = !!lockedDates[item.tanggal]?.locked;
+      if (isDateLocked && !isMasterAdmin) {
+        triggerToast(`Laporan pada tanggal ${item.tanggal} telah dikunci & diverifikasi oleh Admin Utama. Tidak dapat dihapus.`, "er");
+        return;
+      }
     }
 
-    try {
-      await deleteDoc(doc(db, "laporan_kantong", id));
-      triggerToast("Laporan berhasil dihapus", "ok");
-    } catch (err) {
-      console.error("Delete entry failed:", err);
-      triggerToast("Gagal menghapus laporan", "er");
-      handleFirestoreError(err, OperationType.DELETE, `laporan_kantong/${id}`);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Hapus Baris Laporan",
+      message: "Apakah Anda yakin ingin menghapus baris laporan ini?",
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, "laporan_kantong", id));
+          triggerToast("Laporan berhasil dihapus", "ok");
+        } catch (err) {
+          console.error("Delete entry failed:", err);
+          triggerToast("Gagal menghapus laporan", "er");
+          handleFirestoreError(err, OperationType.DELETE, `laporan_kantong/${id}`);
+        }
+      }
+    });
+  };
+
+  const handleToggleLockDate = async () => {
+    if (!isMasterAdmin) return;
+    const isCurrentlyLocked = !!lockedDates[selectedDate]?.locked;
+    const actionText = isCurrentlyLocked ? "membuka kunci" : "mengunci & memverifikasi";
+    
+    setConfirmModal({
+      isOpen: true,
+      title: isCurrentlyLocked ? "Buka Kunci Laporan" : "Kunci & Verifikasi Laporan",
+      message: `Apakah Anda yakin ingin ${actionText} seluruh data laporan pada tanggal ${selectedDate}?`,
+      onConfirm: async () => {
+        try {
+          const docRef = doc(db, "locked_dates", selectedDate);
+          if (isCurrentlyLocked) {
+            await setDoc(docRef, {
+              locked: false,
+              unlockedBy: currentUser?.email || "",
+              unlockedAt: new Date().toISOString()
+            }, { merge: true });
+            triggerToast(`Kunci tanggal ${selectedDate} berhasil dibuka.`, "ok");
+          } else {
+            await setDoc(docRef, {
+              locked: true,
+              lockedBy: currentUser?.email || "",
+              lockedAt: new Date().toISOString()
+            }, { merge: true });
+            triggerToast(`Laporan tanggal ${selectedDate} telah diverifikasi & dikunci.`, "ok");
+          }
+        } catch (err) {
+          console.error("Toggle date lock failed:", err);
+          triggerToast(`Gagal ${actionText} tanggal`, "er");
+          handleFirestoreError(err, OperationType.WRITE, `locked_dates/${selectedDate}`);
+        }
+      }
+    });
   };
 
   // Date controls
@@ -549,6 +668,7 @@ export default function App() {
 
   // Filter current reports by selected date
   const filteredReports = reports.filter((r) => r.tanggal === selectedDate);
+  const isSelectedDateLocked = !!lockedDates[selectedDate]?.locked;
 
   // Statistics calculation for the selected date
   const selectedDateStats = filteredReports.reduce(
@@ -569,12 +689,125 @@ export default function App() {
       return;
     }
 
-    const header = "No,Tanggal,Vendor,Jenis Kantong,Pabrik,Shift,Utuh,Pecah,Sortir,Total,Dilaporkan Oleh";
-    const rows = filteredReports.map((r, index) => {
-      return `${index + 1},${r.tanggal},"${r.vendor}","${r.nama}","${r.pabrik}",Shift ${r.shift},${r.utuh},${r.pecah},${r.sortir},${r.total},"${r.createdBy}"`;
+    // 1. Title and Metadata
+    const metadata = [
+      "LAPORAN PEMAKAIAN KANTONG",
+      "PACKAGING MANAGEMENT SYSTEM",
+      `Tanggal Laporan,${selectedDate}`,
+      `Diunduh Oleh,${currentUser?.email || "Sistem"}`,
+      `Waktu Unduh,${new Date().toLocaleString("id-ID")}`,
+      ""
+    ];
+
+    // 2. Section I: Consolidation totals
+    const reconAgg = JENIS_KANTONG.reduce((acc, name) => {
+      acc[name] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
+      return acc;
+    }, {} as Record<string, { utuh: number; pecah: number; sortir: number; total: number }>);
+
+    filteredReports.forEach((r) => {
+      if (reconAgg[r.nama]) {
+        reconAgg[r.nama].utuh += r.utuh;
+        reconAgg[r.nama].pecah += r.pecah;
+        reconAgg[r.nama].sortir += r.sortir;
+        reconAgg[r.nama].total += r.total;
+      }
     });
 
-    const csvContent = "\uFEFF" + header + "\n" + rows.join("\n");
+    const sec1Rows = [
+      "I. REKAPITULASI KONSOLIDASI KANTONG (PABRIK 1 & 2)",
+      "No,Jenis Kantong (Kode),Jenis Kantong (Lengkap),Utuh,Pecah,Sortir,Total"
+    ];
+    JENIS_KANTONG.forEach((name, idx) => {
+      const stat = reconAgg[name];
+      sec1Rows.push(`${idx + 1},"${JENIS_KANTONG_SHORT[idx]}","${name}",${stat.utuh},${stat.pecah},${stat.sortir},${stat.total}`);
+    });
+    sec1Rows.push(`Total,TOTAL KESELURUHAN,,${selectedDateStats.utuh},${selectedDateStats.pecah},${selectedDateStats.sortir},${selectedDateStats.total}`);
+    sec1Rows.push("");
+
+    // 3. Section II: Baturaja 1 Detail
+    const pbr1Reports = filteredReports.filter(r => r.pabrik.includes("1"));
+    const subtotalPbr1 = pbr1Reports.reduce((acc, r) => {
+      acc.utuh += r.utuh;
+      acc.pecah += r.pecah;
+      acc.sortir += r.sortir;
+      acc.total += r.total;
+      return acc;
+    }, { utuh: 0, pecah: 0, sortir: 0, total: 0 });
+
+    const sec2Rows = [
+      "II. DATA DETAIL LAPORAN PABRIK BATURAJA 1 (PBR 1)",
+      "No,Vendor,Jenis Kantong,Shift,Utuh,Pecah,Sortir,Total,Dilaporkan Oleh"
+    ];
+    if (pbr1Reports.length > 0) {
+      pbr1Reports.forEach((r, idx) => {
+        sec2Rows.push(`${idx + 1},"${r.vendor}","${r.nama}",Shift ${r.shift},${r.utuh},${r.pecah},${r.sortir},${r.total},"${r.createdBy}"`);
+      });
+      sec2Rows.push(`Total,TOTAL KUMULATIF PBR 1,,,${subtotalPbr1.utuh},${subtotalPbr1.pecah},${subtotalPbr1.sortir},${subtotalPbr1.total},`);
+    } else {
+      sec2Rows.push("-,Tidak ada data untuk PBR 1,,,,,");
+    }
+    sec2Rows.push("");
+
+    // 4. Section III: Baturaja 2 Detail
+    const pbr2Reports = filteredReports.filter(r => r.pabrik.includes("2"));
+    const subtotalPbr2 = pbr2Reports.reduce((acc, r) => {
+      acc.utuh += r.utuh;
+      acc.pecah += r.pecah;
+      acc.sortir += r.sortir;
+      acc.total += r.total;
+      return acc;
+    }, { utuh: 0, pecah: 0, sortir: 0, total: 0 });
+
+    const sec3Rows = [
+      "III. DATA DETAIL LAPORAN PABRIK BATURAJA 2 (PBR 2)",
+      "No,Vendor,Jenis Kantong,Shift,Utuh,Pecah,Sortir,Total,Dilaporkan Oleh"
+    ];
+    if (pbr2Reports.length > 0) {
+      pbr2Reports.forEach((r, idx) => {
+        sec3Rows.push(`${idx + 1},"${r.vendor}","${r.nama}",Shift ${r.shift},${r.utuh},${r.pecah},${r.sortir},${r.total},"${r.createdBy}"`);
+      });
+      sec3Rows.push(`Total,TOTAL KUMULATIF PBR 2,,,${subtotalPbr2.utuh},${subtotalPbr2.pecah},${subtotalPbr2.sortir},${subtotalPbr2.total},`);
+    } else {
+      sec3Rows.push("-,Tidak ada data untuk PBR 2,,,,,");
+    }
+    sec3Rows.push("");
+
+    // 5. Section IV: Shift Breakdown
+    const shiftAgg = {
+      1: { utuh: 0, pecah: 0, sortir: 0, total: 0 },
+      2: { utuh: 0, pecah: 0, sortir: 0, total: 0 },
+      3: { utuh: 0, pecah: 0, sortir: 0, total: 0 }
+    };
+    filteredReports.forEach(r => {
+      if (r.shift === 1 || r.shift === 2 || r.shift === 3) {
+        shiftAgg[r.shift].utuh += r.utuh;
+        shiftAgg[r.shift].pecah += r.pecah;
+        shiftAgg[r.shift].sortir += r.sortir;
+        shiftAgg[r.shift].total += r.total;
+      }
+    });
+
+    const sec4Rows = [
+      "IV. REKAPITULASI PEMAKAIAN PER SHIFT",
+      "Shift,Utuh,Pecah,Sortir,Total"
+    ];
+    [1, 2, 3].forEach(sNum => {
+      const stat = shiftAgg[sNum as 1 | 2 | 3];
+      sec4Rows.push(`Shift ${sNum},${stat.utuh},${stat.pecah},${stat.sortir},${stat.total}`);
+    });
+    sec4Rows.push(`Total,${selectedDateStats.utuh},${selectedDateStats.pecah},${selectedDateStats.sortir},${selectedDateStats.total}`);
+
+    // Combine all sections with UTF-8 BOM so Excel opens with proper Indonesian accents and symbols
+    const fullContent = [
+      ...metadata,
+      ...sec1Rows,
+      ...sec2Rows,
+      ...sec3Rows,
+      ...sec4Rows
+    ].join("\n");
+
+    const csvContent = "\uFEFF" + fullContent;
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -583,11 +816,15 @@ export default function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    triggerToast("File CSV berhasil diunduh", "ok");
+    triggerToast("File CSV Berhasil Diunduh", "ok");
   };
 
   return (
-    <div className="min-h-screen bg-[#faf9f6] text-[#1a1814] flex flex-col selection:bg-brand-green selection:text-white">
+    <div className="min-h-screen bg-[#faf9f6] text-[#1a1814] flex flex-col selection:bg-brand-green selection:text-white scrollbar-hide">
+      <style>{`
+        html, body { overflow: hidden; height: 100%; }
+        .scrollbar-hide { height: 100vh; overflow-y: auto; }
+      `}</style>
       {/* Toast Wrapper */}
       <div className="fixed top-4 right-4 left-4 sm:left-auto z-50 flex flex-col gap-2 max-w-sm sm:w-80 mx-auto sm:mx-0 pointer-events-none">
         <AnimatePresence>
@@ -651,12 +888,12 @@ export default function App() {
                     </div>
                   )}
                 </div>
-                <h1 className="text-lg sm:text-2xl font-extrabold tracking-tight text-[#1a1814] mb-1 whitespace-nowrap">
+                <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-[#1a1814] mb-1 whitespace-nowrap">
                   PACKAGING <span className="text-brand-green">MANAGEMENT</span>
                 </h1>
-                <p className="text-xs font-bold text-brand-green tracking-wide mb-3">
+                <h2 className="text-sm font-bold text-[#6b6560] tracking-tight uppercase mb-4">
                   Laporan Pemakaian Kantong
-                </p>
+                </h2>
                 <p className="text-xs text-[#6b6560] leading-relaxed">
                   Silakan masuk dengan akun terdaftar untuk mengakses database.
                 </p>
@@ -783,10 +1020,10 @@ export default function App() {
           <div className="flex-1 flex flex-col pb-24 md:pb-8">
             {/* Header section */}
             <header className="border-b border-[#e8e4de] bg-white sticky top-0 z-10 shadow-xs">
-              <div className="max-w-7xl mx-auto px-4 md:px-6 h-18 flex items-center justify-between gap-4">
-                {/* Brand Logo & Name */}
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-white border border-[#e8e4de] flex items-center justify-center p-0.5 shadow-sm overflow-hidden shrink-0">
+              <div className="max-w-7xl mx-auto px-4 md:px-6 h-18 flex items-center justify-between gap-2 sm:gap-4">
+                {/* Brand Logo */}
+                <div className="flex items-center shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-white border border-[#e8e4de] flex items-center justify-center p-0.5 shadow-sm overflow-hidden">
                     {!logoErrorHeader ? (
                       <img 
                         src={logo}
@@ -800,21 +1037,23 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                  <div className="min-w-0">
-                    <h1 className="text-sm sm:text-base font-extrabold leading-tight tracking-tight text-[#1a1814] truncate">
-                      Laporan <span className="text-brand-green">Pemakaian Kantong</span>
-                    </h1>
-                    <div className="text-[10px] text-[#9e9892] font-semibold flex items-center gap-1 truncate">
-                      <UserCheck className="w-3 h-3 text-emerald-600" />
-                      <span className="truncate">{currentUser.email}</span>
-                      <span className="text-[#c4bfb7] shrink-0">•</span>
-                      <span className="text-emerald-700 bg-emerald-50 px-1 rounded-sm text-[9px] uppercase font-bold tracking-wider shrink-0">Authorized</span>
-                    </div>
+                </div>
+
+                {/* Centered Title & User Info */}
+                <div className="flex-1 min-w-0 flex flex-col items-center justify-center text-center px-1 sm:px-2">
+                  <h1 className="text-sm sm:text-lg md:text-xl font-extrabold leading-tight tracking-tight text-[#1a1814] uppercase">
+                    LAPORAN <span className="text-brand-green">PEMAKAIAN KANTONG</span>
+                  </h1>
+                  <div className="text-[9px] sm:text-[10px] text-[#9e9892] font-semibold flex items-center justify-center gap-1 w-full min-w-0 mt-0.5">
+                    <UserCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                    <span className="truncate max-w-[100px] xs:max-w-[140px] sm:max-w-none">{currentUser.email}</span>
+                    <span className="text-[#c4bfb7] shrink-0">•</span>
+                    <span className="text-emerald-700 bg-emerald-50 px-1 rounded-sm text-[8px] sm:text-[9px] uppercase font-bold tracking-wider shrink-0">Authorized</span>
                   </div>
                 </div>
 
                 {/* Navigation and Date filter controls */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   {/* Desktop navigation tabs */}
                   <div className="hidden md:flex items-center gap-1 mr-4 border-r border-[#e8e4de] pr-4">
                     <button
@@ -873,13 +1112,13 @@ export default function App() {
                 <div className="flex items-center gap-1 border border-[#e8e4de] bg-[#fcfbfa] p-1.5 rounded-2xl w-full sm:w-auto shadow-xs">
                   <button
                     onClick={handlePrevDay}
-                    className="p-1.5 hover:bg-[#faf9f7] rounded-xl text-[#6b6560] hover:text-[#1a1814] active:scale-95 transition-transform"
+                    className="p-1.5 border border-[#e8e4de] hover:bg-[#faf9f7] rounded-xl text-[#6b6560] hover:text-[#1a1814] active:scale-95 transition-all"
                   >
                     <ChevronLeft className="w-5 h-5" />
                   </button>
 
                   <div className="flex-1 flex items-center justify-center">
-                    <div className="flex items-center bg-white border border-gray-200 shadow-sm rounded-lg p-0.5 cursor-pointer hover:shadow-md transition-shadow w-[7.5rem]">
+                    <div className="flex items-center bg-white border-2 border-brand-green/30 shadow-sm rounded-lg p-0.5 cursor-pointer hover:shadow-md transition-shadow w-[6.625rem]">
                       <input
                         type="date"
                         value={selectedDate}
@@ -891,33 +1130,90 @@ export default function App() {
 
                   <button
                     onClick={handleNextDay}
-                    className="p-1.5 hover:bg-[#faf9f7] rounded-xl text-[#6b6560] hover:text-[#1a1814] active:scale-95 transition-transform"
+                    className="p-1.5 border border-[#e8e4de] hover:bg-[#faf9f7] rounded-xl text-[#6b6560] hover:text-[#1a1814] active:scale-95 transition-all"
                   >
                     <ChevronRight className="w-5 h-5" />
                   </button>
                 </div>
 
-                {/* Today shortcuts & CSV Export action */}
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                {/* Today shortcuts, CSV Export & Verification Lock */}
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-center sm:justify-end">
                   <button
                     onClick={handleGoToday}
-                    className="flex-1 sm:flex-none border-2 border-[#e8e4de] bg-white hover:bg-[#faf9f7] text-[#1a1814] px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                    className="border-2 border-brand-green/30 bg-white hover:bg-[#faf9f7] text-[#1a1814] px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold transition-all"
                   >
                     Hari Ini
                   </button>
                   <button
                     onClick={handleExportCSV}
-                    className="flex-1 sm:flex-none border-2 border-[#e8e4de] bg-[#e8f0e6] hover:bg-brand-green-light text-brand-green px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                    className="border-2 border-[#e8e4de] bg-[#e8f0e6] hover:bg-brand-green-light text-brand-green px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
                   >
                     <Download className="w-4 h-4" />
                     Export CSV
                   </button>
+
+                  {/* Verification status badge or action */}
+                  {isMasterAdmin ? (
+                    <button
+                      onClick={handleToggleLockDate}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold border-2 transition-all cursor-pointer ${
+                        isSelectedDateLocked
+                          ? "border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                          : "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                      }`}
+                    >
+                      {isSelectedDateLocked ? (
+                        <>
+                          <Lock className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Kunci Aktif (Buka)</span>
+                        </>
+                      ) : (
+                        <>
+                          <Unlock className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Kunci & Verifikasi</span>
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <div
+                      className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold border-2 select-none ${
+                        isSelectedDateLocked
+                          ? "border-rose-200 bg-rose-50/50 text-rose-700"
+                          : "border-emerald-200 bg-emerald-50/50 text-emerald-700"
+                      }`}
+                    >
+                      {isSelectedDateLocked ? (
+                        <>
+                          <Lock className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Terverifikasi & Terkunci</span>
+                        </>
+                      ) : (
+                        <>
+                          <Unlock className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Terbuka (Dapat Diubah)</span>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
             {/* Main viewports */}
             <main className="flex-1 max-w-7xl mx-auto px-4 md:px-6 py-6 w-full">
+              {/* Locked/Verified Banner */}
+              {isSelectedDateLocked && (
+                <div className="bg-rose-50 border-2 border-rose-200 text-rose-800 rounded-2xl p-4 mb-6 flex items-start gap-3 shadow-xs">
+                  <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="text-xs">
+                    <p className="font-extrabold text-[#1a1814] mb-0.5">Laporan Tanggal Ini Terkunci & Terverifikasi</p>
+                    <p className="text-rose-700">
+                      Seluruh data laporan pada tanggal <span className="font-extrabold">{selectedDate}</span> telah diverifikasi & dikunci oleh Admin Utama. {isMasterAdmin ? "Sebagai Admin Utama, Anda dapat mengubah data ini jika diperlukan, namun disarankan untuk membuka kunci terlebih dahulu." : "Data tidak dapat ditambahkan, diubah, atau dihapus."}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Data Loading Progress Bar */}
               {dataLoading && (
                 <div className="bg-white border-2 border-[#e8e4de] rounded-2xl p-6 text-center shadow-xs mb-6 flex flex-col items-center justify-center gap-2">
@@ -953,16 +1249,25 @@ export default function App() {
 
                         // Global factory aggregation per bag type
                         const grandFactoryAgg = JENIS_KANTONG.reduce((acc, name) => {
-                          acc[name] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
+                          acc[name] = { utuh: 0, pecah: 0, sortir: 0, total: 0, vendors: {} };
                           return acc;
-                        }, {} as Record<string, { utuh: number; pecah: number; sortir: number; total: number }>);
+                        }, {} as Record<string, { utuh: number; pecah: number; sortir: number; total: number, vendors: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> }>);
 
                         factoryReports.forEach((r) => {
                           if (grandFactoryAgg[r.nama]) {
-                            grandFactoryAgg[r.nama].utuh += r.utuh;
-                            grandFactoryAgg[r.nama].pecah += r.pecah;
-                            grandFactoryAgg[r.nama].sortir += r.sortir;
-                            grandFactoryAgg[r.nama].total += r.total;
+                            const agg = grandFactoryAgg[r.nama];
+                            agg.utuh += r.utuh;
+                            agg.pecah += r.pecah;
+                            agg.sortir += r.sortir;
+                            agg.total += r.total;
+
+                            if (!agg.vendors[r.vendor]) {
+                              agg.vendors[r.vendor] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
+                            }
+                            agg.vendors[r.vendor].utuh += r.utuh;
+                            agg.vendors[r.vendor].pecah += r.pecah;
+                            agg.vendors[r.vendor].sortir += r.sortir;
+                            agg.vendors[r.vendor].total += r.total;
                           }
                         });
 
@@ -979,8 +1284,8 @@ export default function App() {
 
 
                             {/* Consolidated Factory Bag Usage Grid/Table */}
-                            <div className="space-y-2">
-                              <h3 className="text-xs font-extrabold text-[#6b6560] tracking-wide uppercase mb-2 text-center [text-shadow:0_1px_0_rgba(255,255,255,0.8)]">Konsolidasi Total Hari Ini</h3>
+                            <div className="space-y-2 -mt-4">
+                              <h3 className="text-sm font-extrabold text-[#6b6560] tracking-wide uppercase mb-2 text-center [text-shadow:0_1px_0_rgba(255,255,255,0.8)]">TOTAL PEMAKAIAN KANTONG</h3>
                               <div className="border border-brand-green/30 rounded-2xl overflow-hidden bg-[#fdfcfb]">
                                 <div className="overflow-x-auto">
                                   <table className="w-full text-left text-xs border-collapse">
@@ -997,22 +1302,40 @@ export default function App() {
                                       {JENIS_KANTONG.map((name, idx) => {
                                         const stat = grandFactoryAgg[name];
                                         const isZero = stat.utuh === 0 && stat.pecah === 0 && stat.sortir === 0;
+                                        const isExpanded = expandedBagTypes[name];
                                         return (
-                                          <tr key={name} className="hover:bg-[#faf9f7]/50 transition-colors">
-                                            <td className="py-2 px-2 sm:px-4 font-bold text-[#1a1814] text-xs sm:text-sm">{JENIS_KANTONG_SHORT[idx]}</td>
-                                            <td className={`py-2 px-2 sm:px-4 text-center font-semibold text-xs sm:text-sm ${isZero ? "text-[#c4bfb7]" : "text-[#1a1814]"}`}>
-                                              {stat.utuh.toLocaleString()}
-                                            </td>
-                                            <td className={`py-2 px-2 sm:px-4 text-center font-semibold text-xs sm:text-sm ${isZero ? "text-[#c4bfb7]" : "text-rose-600"}`}>
-                                              {stat.pecah.toLocaleString()}
-                                            </td>
-                                            <td className={`py-2 px-2 sm:px-4 text-center font-semibold text-xs sm:text-sm ${isZero ? "text-[#c4bfb7]" : "text-amber-600"}`}>
-                                              {stat.sortir.toLocaleString()}
-                                            </td>
-                                            <td className={`py-2 px-2 sm:px-4 text-center font-extrabold text-xs sm:text-sm bg-[#e8f0e6]/20 ${isZero ? "text-[#c4bfb7]" : "text-brand-green"}`}>
-                                              {stat.total.toLocaleString()}
-                                            </td>
-                                          </tr>
+                                          <React.Fragment key={name}>
+                                            <tr 
+                                              className={`hover:bg-[#faf9f7]/50 transition-colors cursor-pointer ${isExpanded ? 'bg-[#faf9f7] ring-2 ring-inset ring-brand-green/50' : ''}`}
+                                              onClick={() => setExpandedBagTypes(prev => ({ ...prev, [name]: !prev[name] }))}
+                                            >
+                                              <td className="py-2 px-2 sm:px-4 font-bold text-[#1a1814] text-xs sm:text-sm">
+                                                {JENIS_KANTONG_SHORT[idx]}
+                                                <span className="ml-2 text-[10px] text-[#9e9892]">{isExpanded ? '▼' : '▶'}</span>
+                                              </td>
+                                              <td className={`py-2 px-2 sm:px-4 text-center font-semibold text-xs sm:text-sm ${isZero ? "text-[#c4bfb7]" : "text-[#1a1814]"}`}>
+                                                {stat.utuh.toLocaleString()}
+                                              </td>
+                                              <td className={`py-2 px-2 sm:px-4 text-center font-semibold text-xs sm:text-sm ${isZero ? "text-[#c4bfb7]" : "text-rose-600"}`}>
+                                                {stat.pecah.toLocaleString()}
+                                              </td>
+                                              <td className={`py-2 px-2 sm:px-4 text-center font-semibold text-xs sm:text-sm ${isZero ? "text-[#c4bfb7]" : "text-amber-600"}`}>
+                                                {stat.sortir.toLocaleString()}
+                                              </td>
+                                              <td className={`py-2 px-2 sm:px-4 text-center font-extrabold text-xs sm:text-sm bg-[#e8f0e6]/20 ${isZero ? "text-[#c4bfb7]" : "text-brand-green"}`}>
+                                                {stat.total.toLocaleString()}
+                                              </td>
+                                            </tr>
+                                            {isExpanded && Object.entries(stat.vendors).map(([vendorName, vStat]) => (
+                                              <tr key={`${name}-${vendorName}`} className="bg-[#fdfcfb]">
+                                                <td className="py-1 px-4 sm:px-6 text-[10px] text-[#6b6560] italic pl-8">↳ {vendorName}</td>
+                                                <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#6b6560]">{vStat.utuh.toLocaleString()}</td>
+                                                <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#6b6560]">{vStat.pecah.toLocaleString()}</td>
+                                                <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#6b6560]">{vStat.sortir.toLocaleString()}</td>
+                                                <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#6b6560] font-bold">{vStat.total.toLocaleString()}</td>
+                                              </tr>
+                                            ))}
+                                          </React.Fragment>
                                         );
                                       })}
                                     </tbody>
@@ -1028,53 +1351,96 @@ export default function App() {
 
                                 // Aggregate per bag type for this shift
                                 const shiftAgg = JENIS_KANTONG.reduce((acc, name) => {
-                                  acc[name] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
+                                  acc[name] = { utuh: 0, pecah: 0, sortir: 0, total: 0, vendors: {} };
                                   return acc;
-                                }, {} as Record<string, { utuh: number; pecah: number; sortir: number; total: number }>);
+                                }, {} as Record<string, { utuh: number; pecah: number; sortir: number; total: number, vendors: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> }>);
 
                                 shiftReports.forEach((r) => {
                                   if (shiftAgg[r.nama]) {
-                                    shiftAgg[r.nama].utuh += r.utuh;
-                                    shiftAgg[r.nama].pecah += r.pecah;
-                                    shiftAgg[r.nama].sortir += r.sortir;
-                                    shiftAgg[r.nama].total += r.total;
+                                    const agg = shiftAgg[r.nama];
+                                    agg.utuh += r.utuh;
+                                    agg.pecah += r.pecah;
+                                    agg.sortir += r.sortir;
+                                    agg.total += r.total;
+
+                                    if (!agg.vendors[r.vendor]) {
+                                      agg.vendors[r.vendor] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
+                                    }
+                                    agg.vendors[r.vendor].utuh += r.utuh;
+                                    agg.vendors[r.vendor].pecah += r.pecah;
+                                    agg.vendors[r.vendor].sortir += r.sortir;
+                                    agg.vendors[r.vendor].total += r.total;
                                   }
                                 });
 
+                                const shiftKey = `${pabrikName}-${shift.id}`;
+                                const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+                                const isShiftExpanded = expandedShifts[shiftKey] !== undefined 
+                                  ? expandedShifts[shiftKey] 
+                                  : !isMobile;
+
                                 return (
-                                  <div key={shift.id} className="border border-[#e8e4de] rounded-2xl p-3 bg-[#faf9f7]/40 space-y-3">
-                                    <div className="flex items-center gap-1.5 pb-2 border-b border-[#e8e4de]">
+                                  <div key={shift.id} className="border border-[#e8e4de] rounded-2xl p-3 bg-[#faf9f7]/40 transition-all duration-200">
+                                    <div 
+                                      onClick={() => setExpandedShifts((prev) => ({ ...prev, [shiftKey]: !isShiftExpanded }))}
+                                      className="flex items-center gap-1.5 cursor-pointer hover:bg-[#faf9f7] p-1 -m-1 rounded-xl select-none"
+                                    >
                                       <div className={`w-2.5 h-2.5 rounded-full ${shift.id === 1 ? "bg-blue-500" : shift.id === 2 ? "bg-purple-500" : "bg-amber-500"}`} />
                                       <h4 className="text-xs font-extrabold text-[#1a1814]">{shift.label}</h4>
                                       <span className="text-[9px] text-[#9e9892] font-semibold">({shift.time})</span>
+                                      <span className="ml-auto text-[10px] text-brand-green font-extrabold flex items-center gap-0.5">
+                                        {isShiftExpanded ? "▼ Sembunyikan" : "▶ Tampilkan"}
+                                      </span>
                                     </div>
 
-                                    <table className="w-full text-left text-[11px] border-collapse">
-                                      <thead>
-                                        <tr className="text-[#9e9892] font-extrabold text-[9px] uppercase border-b border-[#e8e4de]">
-                                          <th className="pb-1.5 font-bold">Jenis</th>
-                                          <th className="pb-1.5 font-bold text-center text-brand-green">U</th>
-                                          <th className="pb-1.5 font-bold text-center text-rose-600">P</th>
-                                          <th className="pb-1.5 font-bold text-center text-amber-600">S</th>
-                                          <th className="pb-1.5 font-bold text-center">Tot</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-[#e8e4de]/50">
-                                        {JENIS_KANTONG.map((name, idx) => {
-                                          const sData = shiftAgg[name];
-                                          const isZero = sData.utuh === 0 && sData.pecah === 0 && sData.sortir === 0;
-                                          return (
-                                            <tr key={name} className="hover:bg-white/40">
-                                              <td className="py-1 font-bold text-[#6b6560]">{JENIS_KANTONG_SHORT[idx]}</td>
-                                              <td className={`py-1 text-center font-medium ${isZero ? "text-[#c4bfb7]" : "text-[#1a1814]"}`}>{sData.utuh}</td>
-                                              <td className={`py-1 text-center font-medium ${isZero ? "text-[#c4bfb7]" : "text-rose-600"}`}>{sData.pecah}</td>
-                                              <td className={`py-1 text-center font-medium ${isZero ? "text-[#c4bfb7]" : "text-amber-600"}`}>{sData.sortir}</td>
-                                              <td className={`py-1 text-center font-bold bg-[#e8f0e6]/10 ${isZero ? "text-[#c4bfb7]" : "text-brand-green"}`}>{sData.total}</td>
+                                    {isShiftExpanded && (
+                                      <div className="border border-[#e8e4de] rounded-2xl overflow-hidden bg-[#fdfcfb] mt-3 animate-in fade-in duration-200">
+                                        <table className="w-full text-left text-[11px] border-collapse">
+                                          <thead>
+                                            <tr className="bg-[#faf9f7] text-[#9e9892] font-extrabold text-[9px] uppercase border-b border-[#e8e4de]">
+                                              <th className="py-2.5 px-2 font-bold text-[#1a1814]">Jenis</th>
+                                              <th className="py-2.5 px-2 font-bold text-center text-brand-green">U</th>
+                                              <th className="py-2.5 px-2 font-bold text-center text-rose-600">P</th>
+                                              <th className="py-2.5 px-2 font-bold text-center text-amber-600">S</th>
+                                              <th className="py-2.5 px-2 font-bold text-center text-[#1a1814]">Tot</th>
                                             </tr>
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
+                                          </thead>
+                                          <tbody className="divide-y divide-[#e8e4de]">
+                                            {JENIS_KANTONG.map((name, idx) => {
+                                              const sData = shiftAgg[name];
+                                              const isZero = sData.utuh === 0 && sData.pecah === 0 && sData.sortir === 0;
+                                              const isExpanded = expandedBagTypes[`${shift.id}-${name}`];
+                                              return (
+                                                <React.Fragment key={name}>
+                                                  <tr 
+                                                    className={`hover:bg-[#faf9f7]/50 cursor-pointer ${isExpanded ? 'bg-[#faf9f7] ring-2 ring-inset ring-brand-green/50' : ''}`}
+                                                    onClick={() => setExpandedBagTypes(prev => ({ ...prev, [`${shift.id}-${name}`]: !prev[`${shift.id}-${name}`] }))}
+                                                  >
+                                                    <td className="py-2 px-2 font-bold text-[#1a1814]">
+                                                      {JENIS_KANTONG_SHORT[idx]}
+                                                      <span className="ml-1 text-[8px] text-[#c4bfb7]">{isExpanded ? '▼' : '▶'}</span>
+                                                    </td>
+                                                    <td className={`py-2 px-2 text-center font-medium ${isZero ? "text-[#c4bfb7]" : "text-[#1a1814]"}`}>{sData.utuh.toLocaleString()}</td>
+                                                    <td className={`py-2 px-2 text-center font-medium ${isZero ? "text-[#c4bfb7]" : "text-rose-600"}`}>{sData.pecah.toLocaleString()}</td>
+                                                    <td className={`py-2 px-2 text-center font-medium ${isZero ? "text-[#c4bfb7]" : "text-amber-600"}`}>{sData.sortir.toLocaleString()}</td>
+                                                    <td className={`py-2 px-2 text-center font-bold bg-[#e8f0e6]/20 ${isZero ? "text-[#c4bfb7]" : "text-brand-green"}`}>{sData.total.toLocaleString()}</td>
+                                                  </tr>
+                                                  {isExpanded && Object.entries(sData.vendors).map(([vendorName, vStat]) => (
+                                                    <tr key={`${shift.id}-${name}-${vendorName}`} className="bg-[#fdfcfb]">
+                                                      <td className="py-1 px-4 text-[10px] text-[#6b6560] italic">↳ {vendorName}</td>
+                                                      <td className="py-1 px-2 text-center text-[10px] text-[#6b6560]">{vStat.utuh.toLocaleString()}</td>
+                                                      <td className="py-1 px-2 text-center text-[10px] text-[#6b6560]">{vStat.pecah.toLocaleString()}</td>
+                                                      <td className="py-1 px-2 text-center text-[10px] text-[#6b6560]">{vStat.sortir.toLocaleString()}</td>
+                                                      <td className="py-1 px-2 text-center text-[10px] text-[#6b6560] font-bold">{vStat.total.toLocaleString()}</td>
+                                                    </tr>
+                                                  ))}
+                                                </React.Fragment>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })}
@@ -1102,10 +1468,24 @@ export default function App() {
                       </h2>
                       <button
                         onClick={handleOpenAddForm}
-                        className="bg-brand-green hover:bg-brand-green-hover text-white py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all"
+                        disabled={isSelectedDateLocked && !isMasterAdmin}
+                        className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all ${
+                          isSelectedDateLocked && !isMasterAdmin
+                            ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200 shadow-none"
+                            : "bg-brand-green hover:bg-brand-green-hover text-white"
+                        }`}
                       >
-                        <Plus className="w-4 h-4" />
-                        Tambah Data Baru
+                        {isSelectedDateLocked && !isMasterAdmin ? (
+                          <>
+                            <Lock className="w-4 h-4 text-slate-400" />
+                            Terkunci
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-4 h-4" />
+                            Tambah Data Baru
+                          </>
+                        )}
                       </button>
                     </div>
 
@@ -1119,167 +1499,204 @@ export default function App() {
                       </div>
                     ) : (
                       <>
-                        {/* Desktop Table View (hidden on small screens) */}
-                        <div className="hidden md:block bg-white border-2 border-[#e8e4de] rounded-3xl shadow-xs overflow-hidden">
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs border-collapse">
-                              <thead>
-                                <tr className="bg-[#faf9f7] border-b border-[#e8e4de] text-[#6b6560] font-bold uppercase text-[9px] tracking-wider">
-                                  <th className="py-3 px-4 text-center w-12">No</th>
-                                  <th className="py-3 px-4">Vendor</th>
-                                  <th className="py-3 px-4">Jenis Kantong</th>
-                                  <th className="py-3 px-4">Pabrik</th>
-                                  <th className="py-3 px-4 text-center">Shift</th>
-                                  <th className="py-3 px-4 text-center text-brand-green">Utuh</th>
-                                  <th className="py-3 px-4 text-center text-rose-600">Pecah</th>
-                                  <th className="py-3 px-4 text-center text-amber-600">Sortir</th>
-                                  <th className="py-3 px-4 text-center font-extrabold">Total</th>
-                                  <th className="py-3 px-4 text-center w-28">Aksi</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-[#e8e4de]">
-                                {filteredReports.map((item, index) => (
-                                  <tr key={item.id} className="hover:bg-[#faf9f7]/50 transition-colors">
-                                    <td className="py-2.5 px-4 text-center font-bold text-[#9e9892]">{index + 1}</td>
-                                    <td className="py-2.5 px-4 font-extrabold text-brand-green text-[13px]">{item.vendor}</td>
-                                    <td className="py-2.5 px-4 font-bold text-[#1a1814]">{item.nama}</td>
-                                    <td className="py-2.5 px-4 font-semibold text-[#6b6560] text-[11px]">
-                                      {item.pabrik.includes("1") ? "PBR 1" : "PBR 2"}
-                                    </td>
-                                    <td className="py-2.5 px-4 text-center">
-                                      <span
-                                        className={`inline-block px-2 py-0.5 rounded-md font-bold text-[10px] border ${
-                                          item.shift === 1
-                                            ? "text-blue-600 bg-blue-50 border-blue-200"
-                                            : item.shift === 2
-                                            ? "text-purple-600 bg-purple-50 border-purple-200"
-                                            : "text-amber-600 bg-amber-50 border-amber-200"
-                                        }`}
-                                      >
-                                        S{item.shift}
-                                      </span>
-                                    </td>
-                                    <td className="py-2.5 px-4 text-center font-bold text-brand-green">{item.utuh}</td>
-                                    <td className="py-2.5 px-4 text-center font-bold text-rose-600">{item.pecah}</td>
-                                    <td className="py-2.5 px-4 text-center font-bold text-amber-600">{item.sortir}</td>
-                                    <td className="py-2.5 px-4 text-center font-extrabold bg-[#e8f0e6]/20 text-[#1a1814]">
-                                      {item.total}
-                                    </td>
-                                    <td className="py-2.5 px-4 text-center">
-                                      <div className="flex items-center justify-center gap-1.5">
+                        {["PBR 1", "PBR 2"].map((pbr) => {
+                          const pbrReports = filteredReports.filter(r => pbr === "PBR 1" ? r.pabrik.includes("1") : r.pabrik.includes("2"));
+                          const pbrStats = pbrReports.reduce((acc, r) => ({
+                            utuh: acc.utuh + r.utuh,
+                            pecah: acc.pecah + r.pecah,
+                            sortir: acc.sortir + r.sortir,
+                            total: acc.total + r.total
+                          }), { utuh: 0, pecah: 0, sortir: 0, total: 0 });
+
+                          if (pbrReports.length === 0) return null;
+
+                          return (
+                            <div key={pbr} className="space-y-2">
+                              <h3 className="text-center text-sm font-extrabold text-[#6b6560] tracking-wide uppercase">{pbr === "PBR 1" ? "Data Laporan Pabrik Baturaja 1 (PBR 1)" : "Data Laporan Pabrik Baturaja 2 (PBR 2)"}</h3>
+                              
+                              {/* Desktop Table View */}
+                              <div className="hidden md:block bg-white border-2 border-[#e8e4de] rounded-3xl shadow-xs overflow-hidden">
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left text-xs border-collapse">
+                                    <thead>
+                                      <tr className="bg-[#faf9f7] border-b border-[#e8e4de] text-[#6b6560] font-bold uppercase text-[9px] tracking-wider">
+                                        <th className="py-3 px-4 text-center w-12">No</th>
+                                        <th className="py-3 px-4">Vendor</th>
+                                        <th className="py-3 px-4">Jenis Kantong</th>
+                                        <th className="py-3 px-4">Pabrik</th>
+                                        <th className="py-3 px-4 text-center">Shift</th>
+                                        <th className="py-3 px-4 text-center text-brand-green">Utuh</th>
+                                        <th className="py-3 px-4 text-center text-rose-600">Pecah</th>
+                                        <th className="py-3 px-4 text-center text-amber-600">Sortir</th>
+                                        <th className="py-3 px-4 text-center font-extrabold">Total</th>
+                                        <th className="py-3 px-4 text-center w-28">Aksi</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-[#e8e4de]">
+                                      {pbrReports.map((item, index) => (
+                                        <tr key={item.id} className="hover:bg-[#faf9f7]/50 transition-colors">
+                                          <td className="py-2.5 px-4 text-center font-bold text-[#9e9892]">{index + 1}</td>
+                                          <td className="py-2.5 px-4 font-extrabold text-brand-green text-[13px]">{item.vendor}</td>
+                                          <td className="py-2.5 px-4 font-bold text-[#1a1814]">{item.nama}</td>
+                                          <td className="py-2.5 px-4 font-semibold text-[#6b6560] text-[11px]">
+                                            {item.pabrik.includes("1") ? "PBR 1" : "PBR 2"}
+                                          </td>
+                                          <td className="py-2.5 px-4 text-center">
+                                            <span
+                                              className={`inline-block px-2 py-0.5 rounded-md font-bold text-[10px] border ${
+                                                item.shift === 1
+                                                  ? "text-blue-600 bg-blue-50 border-blue-200"
+                                                  : item.shift === 2
+                                                  ? "text-purple-600 bg-purple-50 border-purple-200"
+                                                  : "text-amber-600 bg-amber-50 border-amber-200"
+                                              }`}
+                                            >
+                                              S{item.shift}
+                                            </span>
+                                          </td>
+                                          <td className="py-2.5 px-4 text-center font-bold text-brand-green">{item.utuh}</td>
+                                          <td className="py-2.5 px-4 text-center font-bold text-rose-600">{item.pecah}</td>
+                                          <td className="py-2.5 px-4 text-center font-bold text-amber-600">{item.sortir}</td>
+                                          <td className="py-2.5 px-4 text-center font-extrabold bg-[#e8f0e6]/20 text-[#1a1814]">
+                                            {item.total}
+                                          </td>
+                                          <td className="py-2.5 px-4 text-center">
+                                            <div className="flex items-center justify-center gap-1.5">
+                                              <button
+                                                onClick={() => handleOpenEditForm(item)}
+                                                disabled={isSelectedDateLocked && !isMasterAdmin}
+                                                className={`p-1.5 border rounded-lg transition-all ${
+                                                  isSelectedDateLocked && !isMasterAdmin
+                                                    ? "border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed"
+                                                    : "border-[#e8e4de] hover:border-brand-green hover:bg-brand-green-light text-[#6b6560] hover:text-brand-green"
+                                                }`}
+                                                title={isSelectedDateLocked && !isMasterAdmin ? "Data Terkunci" : "Edit Baris"}
+                                              >
+                                                <Edit2 className="w-3.5 h-3.5" />
+                                              </button>
+                                              <button
+                                                onClick={() => handleDeleteEntry(item.id)}
+                                                disabled={isSelectedDateLocked && !isMasterAdmin}
+                                                className={`p-1.5 border rounded-lg transition-all ${
+                                                  isSelectedDateLocked && !isMasterAdmin
+                                                    ? "border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed"
+                                                    : "border-[#e8e4de] hover:border-rose-200 hover:bg-rose-50 text-[#6b6560] hover:text-rose-600"
+                                                }`}
+                                                title={isSelectedDateLocked && !isMasterAdmin ? "Data Terkunci" : "Hapus Baris"}
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                    <tfoot>
+                                      <tr className="bg-[#faf9f7]/80 font-bold border-t-2 border-[#e8e4de]">
+                                        <td colSpan={5} className="py-3 px-4 text-right font-extrabold text-[#1a1814]">Total Kumulatif {pbr}</td>
+                                        <td className="py-3 px-4 text-center font-extrabold text-brand-green bg-[#e8f0e6]/15">{pbrStats.utuh}</td>
+                                        <td className="py-3 px-4 text-center font-extrabold text-rose-600 bg-[#e8f0e6]/15">{pbrStats.pecah}</td>
+                                        <td className="py-3 px-4 text-center font-extrabold text-amber-600 bg-[#e8f0e6]/15">{pbrStats.sortir}</td>
+                                        <td className="py-3 px-4 text-center font-extrabold text-brand-green bg-[#e8f0e6]/30">{pbrStats.total}</td>
+                                        <td></td>
+                                      </tr>
+                                    </tfoot>
+                                  </table>
+                                </div>
+                              </div>
+
+                              {/* Mobile Card View */}
+                              <div className="block md:hidden space-y-4">
+                                {pbrReports.map((item, index) => (
+                                  <div key={item.id} className="bg-white border-2 border-[#e8e4de] rounded-2xl p-4 shadow-xs space-y-3 relative overflow-hidden">
+                                    <div className="absolute top-0 left-0 w-1.5 h-full bg-brand-green" />
+                                    <div className="flex items-center justify-between pl-1">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[10px] font-black text-[#9e9892] bg-[#faf9f7] px-1.5 py-0.5 rounded-md border border-[#e8e4de]">
+                                          #{index + 1}
+                                        </span>
+                                        <span className="font-extrabold text-brand-green text-sm tracking-tight">{item.vendor}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[#6b6560] font-bold text-[9px] uppercase">
+                                          {item.pabrik.includes("1") ? "PBR 1" : "PBR 2"}
+                                        </span>
+                                        <span
+                                          className={`px-1.5 py-0.5 rounded font-bold text-[9px] border ${
+                                            item.shift === 1
+                                              ? "text-blue-600 bg-blue-50 border-blue-200"
+                                              : item.shift === 2
+                                              ? "text-purple-600 bg-purple-50 border-purple-200"
+                                              : "text-amber-600 bg-amber-50 border-amber-200"
+                                          }`}
+                                        >
+                                          Shift {item.shift}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="text-xs font-bold text-[#1a1814] pl-2 border-l-2 border-[#e8e4de]">
+                                      {item.nama}
+                                    </div>
+
+                                    {/* Bag counts grid */}
+                                    <div className="grid grid-cols-4 gap-1.5 bg-[#faf9f7] p-2 rounded-xl border border-[#e8e4de] text-center">
+                                      <div>
+                                        <div className="text-[9px] font-bold text-brand-green uppercase tracking-wider">Utuh</div>
+                                        <div className="text-xs font-extrabold text-[#1a1814] mt-0.5">{item.utuh}</div>
+                                      </div>
+                                      <div>
+                                        <div className="text-[9px] font-bold text-rose-600 uppercase tracking-wider">Pecah</div>
+                                        <div className="text-xs font-extrabold text-rose-600 mt-0.5">{item.pecah}</div>
+                                      </div>
+                                      <div>
+                                        <div className="text-[9px] font-bold text-amber-600 uppercase tracking-wider">Sortir</div>
+                                        <div className="text-xs font-extrabold text-amber-600 mt-0.5">{item.sortir}</div>
+                                      </div>
+                                      <div className="bg-[#e8f0e6]/40 rounded-lg py-0.5 border border-brand-green/10">
+                                        <div className="text-[9px] font-bold text-brand-green uppercase tracking-wider">Total</div>
+                                        <div className="text-xs font-black text-brand-green mt-0.5">{item.total}</div>
+                                      </div>
+                                    </div>
+
+                                    {/* Actions footer */}
+                                    <div className="flex items-center justify-between pt-2 border-t border-[#faf9f6]">
+                                      <div className="text-[9px] text-[#9e9892] font-semibold break-all max-w-[50%]">
+                                        Oleh: {item.createdBy?.split("@")[0] || "Sistem"}
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
                                         <button
                                           onClick={() => handleOpenEditForm(item)}
-                                          className="p-1.5 border border-[#e8e4de] hover:border-brand-green hover:bg-brand-green-light text-[#6b6560] hover:text-brand-green rounded-lg transition-all"
-                                          title="Edit Baris"
+                                          disabled={isSelectedDateLocked && !isMasterAdmin}
+                                          className={`px-2.5 py-1.5 border rounded-lg transition-all text-[11px] font-bold flex items-center gap-1 ${
+                                            isSelectedDateLocked && !isMasterAdmin
+                                              ? "border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed"
+                                              : "border-[#e8e4de] bg-white hover:border-brand-green hover:bg-brand-green-light text-[#6b6560] hover:text-brand-green"
+                                          }`}
                                         >
-                                          <Edit2 className="w-3.5 h-3.5" />
+                                          <Edit2 className="w-3 h-3" />
+                                          Edit
                                         </button>
                                         <button
                                           onClick={() => handleDeleteEntry(item.id)}
-                                          className="p-1.5 border border-[#e8e4de] hover:border-rose-200 hover:bg-rose-50 text-[#6b6560] hover:text-rose-600 rounded-lg transition-all"
-                                          title="Hapus Baris"
+                                          disabled={isSelectedDateLocked && !isMasterAdmin}
+                                          className={`px-2.5 py-1.5 border rounded-lg transition-all text-[11px] font-bold flex items-center gap-1 ${
+                                            isSelectedDateLocked && !isMasterAdmin
+                                              ? "border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed"
+                                              : "border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700"
+                                          }`}
                                         >
-                                          <Trash2 className="w-3.5 h-3.5" />
+                                          <Trash2 className="w-3 h-3" />
+                                          Hapus
                                         </button>
                                       </div>
-                                    </td>
-                                  </tr>
+                                    </div>
+                                  </div>
                                 ))}
-                              </tbody>
-                              <tfoot>
-                                <tr className="bg-[#faf9f7]/80 font-bold border-t-2 border-[#e8e4de]">
-                                  <td colSpan={5} className="py-3 px-4 text-right font-extrabold text-[#1a1814]">Total Kumulatif</td>
-                                  <td className="py-3 px-4 text-center font-extrabold text-brand-green bg-[#e8f0e6]/15">{selectedDateStats.utuh}</td>
-                                  <td className="py-3 px-4 text-center font-extrabold text-rose-600 bg-[#e8f0e6]/15">{selectedDateStats.pecah}</td>
-                                  <td className="py-3 px-4 text-center font-extrabold text-amber-600 bg-[#e8f0e6]/15">{selectedDateStats.sortir}</td>
-                                  <td className="py-3 px-4 text-center font-extrabold text-brand-green bg-[#e8f0e6]/30">{selectedDateStats.total}</td>
-                                  <td></td>
-                                </tr>
-                              </tfoot>
-                            </table>
-                          </div>
-                        </div>
-
-                        {/* Mobile Card View (shown only on mobile/small screens) */}
-                        <div className="block md:hidden space-y-4 pb-16">
-                          {filteredReports.map((item, index) => (
-                            <div key={item.id} className="bg-white border-2 border-[#e8e4de] rounded-2xl p-4 shadow-xs space-y-3 relative overflow-hidden">
-                              <div className="absolute top-0 left-0 w-1.5 h-full bg-brand-green" />
-                              <div className="flex items-center justify-between pl-1">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] font-black text-[#9e9892] bg-[#faf9f7] px-1.5 py-0.5 rounded-md border border-[#e8e4de]">
-                                    #{index + 1}
-                                  </span>
-                                  <span className="font-extrabold text-brand-green text-sm tracking-tight">{item.vendor}</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[#6b6560] font-bold text-[9px] uppercase">
-                                    {item.pabrik.includes("1") ? "PBR 1" : "PBR 2"}
-                                  </span>
-                                  <span
-                                    className={`px-1.5 py-0.5 rounded font-bold text-[9px] border ${
-                                      item.shift === 1
-                                        ? "text-blue-600 bg-blue-50 border-blue-200"
-                                        : item.shift === 2
-                                        ? "text-purple-600 bg-purple-50 border-purple-200"
-                                        : "text-amber-600 bg-amber-50 border-amber-200"
-                                    }`}
-                                  >
-                                    Shift {item.shift}
-                                  </span>
-                                </div>
-                              </div>
-
-                              <div className="text-xs font-bold text-[#1a1814] pl-2 border-l-2 border-[#e8e4de]">
-                                {item.nama}
-                              </div>
-
-                              {/* Bag counts grid */}
-                              <div className="grid grid-cols-4 gap-1.5 bg-[#faf9f7] p-2 rounded-xl border border-[#e8e4de] text-center">
-                                <div>
-                                  <div className="text-[9px] font-bold text-brand-green uppercase tracking-wider">Utuh</div>
-                                  <div className="text-xs font-extrabold text-[#1a1814] mt-0.5">{item.utuh}</div>
-                                </div>
-                                <div>
-                                  <div className="text-[9px] font-bold text-rose-600 uppercase tracking-wider">Pecah</div>
-                                  <div className="text-xs font-extrabold text-rose-600 mt-0.5">{item.pecah}</div>
-                                </div>
-                                <div>
-                                  <div className="text-[9px] font-bold text-amber-600 uppercase tracking-wider">Sortir</div>
-                                  <div className="text-xs font-extrabold text-amber-600 mt-0.5">{item.sortir}</div>
-                                </div>
-                                <div className="bg-[#e8f0e6]/40 rounded-lg py-0.5 border border-brand-green/10">
-                                  <div className="text-[9px] font-bold text-brand-green uppercase tracking-wider">Total</div>
-                                  <div className="text-xs font-black text-brand-green mt-0.5">{item.total}</div>
-                                </div>
-                              </div>
-
-                              {/* Actions footer */}
-                              <div className="flex items-center justify-between pt-2 border-t border-[#faf9f6]">
-                                <div className="text-[9px] text-[#9e9892] font-semibold break-all max-w-[50%]">
-                                  Oleh: {item.createdBy?.split("@")[0] || "Sistem"}
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <button
-                                    onClick={() => handleOpenEditForm(item)}
-                                    className="px-2.5 py-1.5 border border-[#e8e4de] bg-white hover:border-brand-green hover:bg-brand-green-light text-[#6b6560] hover:text-brand-green rounded-lg transition-all text-[11px] font-bold flex items-center gap-1"
-                                  >
-                                    <Edit2 className="w-3 h-3" />
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteEntry(item.id)}
-                                    className="px-2.5 py-1.5 border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg transition-all text-[11px] font-bold flex items-center gap-1"
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                    Hapus
-                                  </button>
-                                </div>
                               </div>
                             </div>
-                          ))}
-
-                        </div>
+                          );
+                        })}
                       </>
                     )}
                   </motion.div>
@@ -1681,6 +2098,57 @@ export default function App() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* CUSTOM CONFIRMATION MODAL */}
+      <AnimatePresence>
+        {confirmModal?.isOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setConfirmModal(null)}
+              className="absolute inset-0 bg-[#1a1814]/40 backdrop-blur-xs"
+            />
+            <motion.div
+              initial={{ y: 50, opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 50, opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="bg-white border-2 border-[#e8e4de] rounded-2xl shadow-xl w-full max-w-sm relative overflow-hidden z-10 p-5 flex flex-col gap-4"
+            >
+              <div>
+                <h4 className="font-extrabold text-[#1a1814] text-base mb-1">
+                  {confirmModal.title}
+                </h4>
+                <p className="text-xs text-[#6b6560] leading-relaxed">
+                  {confirmModal.message}
+                </p>
+              </div>
+              <div className="flex items-center justify-end gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmModal(null)}
+                  className="px-4 py-2 bg-[#faf9f7] hover:bg-[#faf9f7]/80 text-[#6b6560] border border-[#e8e4de] rounded-xl text-xs font-bold transition-all"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const cb = confirmModal.onConfirm;
+                    setConfirmModal(null);
+                    await cb();
+                  }}
+                  className="px-4 py-2 bg-brand-green hover:bg-brand-green-hover text-white rounded-xl text-xs font-bold shadow-xs transition-all"
+                >
+                  Ya, Lanjutkan
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

@@ -32,7 +32,7 @@
         },
         "vendor": {
           "type": "string",
-          "enum": ["GEMAH", "YANA", "HARDO", "IKSG", "KRR", "SAMI"],
+          "enum": ["GEMAH", "YANA", "HARDO", "IKSG", "KRR", "SAMI", "TRI USAHA"],
           "description": "The name of the vendor"
         },
         "nama": {
@@ -103,6 +103,27 @@
         "createdBy",
         "updatedAt"
       ]
+    },
+    "LockedDate": {
+      "title": "Locked Date",
+      "description": "Record specifying whether data for a certain date is locked/verified.",
+      "type": "object",
+      "properties": {
+        "locked": {
+          "type": "boolean",
+          "description": "Whether this date's data is verified and locked"
+        },
+        "lockedBy": {
+          "type": "string",
+          "description": "Email address of the admin who locked this date"
+        },
+        "lockedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when this date was locked"
+        }
+      },
+      "required": ["locked"]
     }
   },
   "firestore": {
@@ -113,6 +134,10 @@
     "/laporan_kantong/{id}": {
       "schema": "LaporanKantong",
       "description": "Collection of real-time bag usage reports."
+    },
+    "/locked_dates/{date}": {
+      "schema": "LockedDate",
+      "description": "Collection of dates that have been locked/verified by the main admin."
     }
   }
 }

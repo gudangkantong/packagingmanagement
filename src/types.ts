@@ -18,3 +18,9 @@ export interface AllowedUser {
   allowed: boolean;
   addedAt: string;
 }
+
+export interface LockedDate {
+  locked: boolean;
+  lockedBy?: string;
+  lockedAt?: string;
+}

@@ -15,6 +15,18 @@ body {
 }
 
 /* Custom scrollbar for better visual polish */
+.scrollbar-hide::-webkit-scrollbar,
+html.scrollbar-hide::-webkit-scrollbar,
+body.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide,
+html.scrollbar-hide,
+body.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

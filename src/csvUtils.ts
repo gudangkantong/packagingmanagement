@@ -62,7 +62,6 @@ export const generateCSVContent = (
     const stat = grandAgg[name];
     sec1Rows.push(`${idx + 1},"${JENIS_KANTONG_SHORT[idx]}","${name}",${stat.utuh},${stat.pecah},${stat.sortir},${stat.total}`);
   });
-  sec1Rows.push(`Total,TOTAL KESELURUHAN,,${selectedDateStats.utuh},${selectedDateStats.pecah},${selectedDateStats.sortir},${selectedDateStats.total}`);
   sec1Rows.push("");
 
   // --- II & III. REKAP PER PABRIK (WITH VENDOR BREAKDOWN) ---
@@ -93,23 +92,20 @@ export const generateCSVContent = (
       "Jenis Kantong,Vendor,Utuh,Pecah,Sortir,Total"
     ];
 
-    let pUtuh = 0, pPecah = 0, pSortir = 0, pTotal = 0;
-
+    let hasData = false;
     JENIS_KANTONG.forEach((name, idx) => {
       const stat = factoryAgg[name];
       if (stat.total > 0) {
-        rows.push(`"${JENIS_KANTONG_SHORT[idx]} (Total)",,${stat.utuh},${stat.pecah},${stat.sortir},${stat.total}`);
+        hasData = true;
+        rows.push(`"${JENIS_KANTONG_SHORT[idx]}",,${stat.utuh},${stat.pecah},${stat.sortir},${stat.total}`);
         Object.entries(stat.vendors).forEach(([vName, vStat]) => {
           rows.push(`,↳ ${vName},${vStat.utuh},${vStat.pecah},${vStat.sortir},${vStat.total}`);
         });
-        pUtuh += stat.utuh; pPecah += stat.pecah; pSortir += stat.sortir; pTotal += stat.total;
       }
     });
     
-    if (pTotal === 0) {
+    if (!hasData) {
       rows.push("Tidak ada data untuk pabrik ini,,,,,");
-    } else {
-      rows.push(`SUBTOTAL ${pabrikLabel},,${pUtuh},${pPecah},${pSortir},${pTotal}`);
     }
     rows.push("");
     return rows;

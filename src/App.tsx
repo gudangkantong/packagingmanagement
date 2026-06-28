@@ -183,7 +183,7 @@ export default function App() {
       setAuthLoading(true);
       setCurrentUser(user);
       if (user) {
-        if (user.isAnonymous || user.email?.toLowerCase() === "guest@laporan.com") {
+        if (user.isAnonymous || user.email?.toLowerCase().includes("guest")) {
           setIsAllowed(true);
           setAuthLoading(false);
           return;
@@ -351,32 +351,40 @@ export default function App() {
   const handleGuestLogin = async () => {
     setAuthError("");
     setAuthLoading(true);
+    
+    // Get or create a sticky guest ID for this device
+    let guestId = localStorage.getItem("smbr_guest_id");
+    if (!guestId) {
+      guestId = Math.random().toString(36).substring(2, 12);
+      localStorage.setItem("smbr_guest_id", guestId);
+    }
+    
+    const guestEmail = `guest_${guestId}@laporan.com`;
+    const guestPass = `pass_${guestId}`;
+
     try {
-      // First try standard Firebase Anonymous Sign-in
-      await signInAnonymously(auth);
+      // Try to sign in with the persistent guest account
+      await signInWithEmailAndPassword(auth, guestEmail, guestPass);
       triggerToast("Berhasil masuk sebagai Tamu!", "ok");
     } catch (err: any) {
-      console.warn("Guest anonymous login failed, attempting fallback guest account...", err);
-      // Fallback to a predefined guest email account
-      const guestEmail = "guest@laporan.com";
-      const guestPass = "guest123456";
-      try {
-        await signInWithEmailAndPassword(auth, guestEmail, guestPass);
-        triggerToast("Berhasil masuk sebagai Tamu!", "ok");
-      } catch (fbErr: any) {
-        // If the guest user doesn't exist, create it on-the-fly
-        if (fbErr.code === "auth/user-not-found" || fbErr.code === "auth/invalid-credential" || fbErr.code === "auth/wrong-password") {
+      // If user doesn't exist, create it
+      if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
+        try {
+          await createUserWithEmailAndPassword(auth, guestEmail, guestPass);
+          triggerToast("Berhasil masuk sebagai Tamu!", "ok");
+        } catch (createErr: any) {
+          console.error("Failed to create sticky guest account:", createErr);
+          // Last resort: standard anonymous sign-in
           try {
-            await createUserWithEmailAndPassword(auth, guestEmail, guestPass);
-            triggerToast("Berhasil masuk sebagai Tamu!", "ok");
-          } catch (createErr: any) {
-            console.error("Failed to create guest fallback account:", createErr);
+            await signInAnonymously(auth);
+            triggerToast("Berhasil masuk sebagai Tamu (Sesi Baru)!", "ok");
+          } catch (anonErr) {
             setAuthError("Gagal masuk sebagai Tamu. Silakan hubungi Admin.");
           }
-        } else {
-          console.error("Failed to sign in with guest fallback account:", fbErr);
-          setAuthError("Gagal masuk sebagai Tamu: " + (fbErr.message || String(fbErr)));
         }
+      } else {
+        console.error("Guest login error:", err);
+        setAuthError("Gagal masuk sebagai Tamu: " + (err.message || String(err)));
       }
     } finally {
       setAuthLoading(false);
@@ -1049,10 +1057,10 @@ export default function App() {
                 type="button"
                 onClick={handleGuestLogin}
                 disabled={authLoading}
-                className="w-full border-2 border-brand-green/30 hover:border-brand-green/70 bg-white hover:bg-brand-green-light/20 text-brand-green py-3 px-6 rounded-xl font-bold text-sm tracking-wide shadow-xs hover:shadow-sm active:translate-y-0 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full border-2 border-brand-green/30 hover:border-brand-green/70 bg-white hover:bg-brand-green-light/20 text-brand-green py-3 px-4 sm:px-6 rounded-xl font-bold text-xs sm:text-sm tracking-wide shadow-xs hover:shadow-sm active:translate-y-0 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <UserPlus className="w-4.5 h-4.5" />
-                Masuk sebagai Tamu (Login as Guest)
+                <UserPlus className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                Masuk Sebagai Tamu
               </button>
             </motion.div>
           </div>

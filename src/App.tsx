@@ -117,17 +117,34 @@ export default function App() {
   const [dataLoading, setDataLoading] = useState<boolean>(true);
 
   const isMasterAdmin = currentUser?.email?.toLowerCase() === "managementpackaging@gmail.com";
-  const isGuest = currentUser?.isAnonymous === true || currentUser?.email?.toLowerCase() === "guest@laporan.com";
+  const isGuest = currentUser?.isAnonymous === true || currentUser?.email?.toLowerCase().includes("guest");
 
   // Active page state
   const [activeTab, setActiveTab] = useState<"dash" | "input" | "users">("dash");
 
   // Selected date state
   const [selectedDate, setSelectedDate] = useState<string>(getDateString(new Date()));
+  const [showLockedAlert, setShowLockedAlert] = useState(false);
 
   useEffect(() => {
     setSelectedDate(getDateString(new Date()));
   }, []);
+
+  // Derived state
+  const isSelectedDateLocked = !!lockedDates[selectedDate]?.locked;
+
+  // Auto-hide locked alert after 8 seconds
+  useEffect(() => {
+    if (isSelectedDateLocked) {
+      setShowLockedAlert(true);
+      const timer = setTimeout(() => {
+        setShowLockedAlert(false);
+      }, 8000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowLockedAlert(false);
+    }
+  }, [selectedDate, isSelectedDateLocked]);
 
   // Toast notification state
   const [toasts, setToasts] = useState<{ id: string; text: string; type: "ok" | "er" | "inf" }[]>([]);
@@ -719,7 +736,6 @@ export default function App() {
 
   // Filter current reports by selected date
   const filteredReports = reports.filter((r) => r.tanggal === selectedDate);
-  const isSelectedDateLocked = !!lockedDates[selectedDate]?.locked;
   const isToday = selectedDate === getDateString(new Date());
 
   // Statistics calculation for the selected date
@@ -1203,125 +1219,137 @@ export default function App() {
             </header>
 
             {/* Sub-header with Date Navigation & Controls */}
-            <div className="bg-white border-b border-[#e8e4de] py-3 shadow-xs">
-              <div className="max-w-7xl mx-auto px-4 md:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-                {/* Datepicker Navigation */}
-                <div className="flex items-center gap-1 border border-[#e8e4de] bg-[#fcfbfa] p-1.5 rounded-2xl w-full sm:w-auto shadow-xs">
-                  <button
-                    onClick={handlePrevDay}
-                    className="p-1.5 border border-[#e8e4de] hover:bg-[#faf9f7] rounded-xl text-[#6b6560] hover:text-[#1a1814] active:scale-95 transition-all"
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                  </button>
+            {activeTab !== "users" && (
+              <div className="bg-white border-b border-[#e8e4de] py-3 shadow-xs">
+                <div className="max-w-7xl mx-auto px-4 md:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  {/* Datepicker Navigation */}
+                  <div className="flex items-center gap-1 border border-[#e8e4de] bg-[#fcfbfa] p-1.5 rounded-2xl w-full sm:w-auto shadow-xs">
+                    <button
+                      onClick={handlePrevDay}
+                      className="p-1.5 border border-[#e8e4de] hover:bg-[#faf9f7] rounded-xl text-[#6b6560] hover:text-[#1a1814] active:scale-95 transition-all"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
 
-                  <div className="flex-1 flex items-center justify-center min-w-[160px]">
-                    <div className="flex items-center bg-white border-2 border-brand-green/30 shadow-xs rounded-xl p-1 px-3 cursor-pointer hover:shadow-md transition-all hover:border-brand-green/60 gap-2 relative">
-                      <div className="text-[11px] text-brand-green font-black uppercase tracking-wider pr-2 border-r border-slate-200 leading-none shrink-0">
-                        {formatDateDisplay(selectedDate).split(",")[0]}
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-1">
-                        <CalendarIcon className="w-3.5 h-3.5 text-[#9e9892]" />
-                        <input
-                          type="date"
-                          value={selectedDate}
-                          onChange={(e) => setSelectedDate(e.target.value)}
-                          className="bg-transparent border-none text-[13px] font-black text-[#1a1814] focus:outline-none cursor-pointer w-full"
-                        />
+                    <div className="flex-1 flex items-center justify-center min-w-[160px]">
+                      <div className="flex items-center bg-white border-2 border-brand-green/30 shadow-xs rounded-xl p-1 px-3 cursor-pointer hover:shadow-md transition-all hover:border-brand-green/60 gap-2 relative">
+                        <div className="text-[11px] text-brand-green font-black uppercase tracking-wider pr-2 border-r border-slate-200 leading-none shrink-0">
+                          {formatDateDisplay(selectedDate).split(",")[0]}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <CalendarIcon className="w-3.5 h-3.5 text-[#9e9892]" />
+                          <input
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => setSelectedDate(e.target.value)}
+                            className="bg-transparent border-none text-[13px] font-black text-[#1a1814] focus:outline-none cursor-pointer w-full"
+                          />
+                        </div>
                       </div>
                     </div>
+
+                    <button
+                      onClick={handleNextDay}
+                      className="p-1.5 border border-[#e8e4de] hover:bg-[#faf9f7] rounded-xl text-[#6b6560] hover:text-[#1a1814] active:scale-95 transition-all"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
                   </div>
 
-                  <button
-                    onClick={handleNextDay}
-                    className="p-1.5 border border-[#e8e4de] hover:bg-[#faf9f7] rounded-xl text-[#6b6560] hover:text-[#1a1814] active:scale-95 transition-all"
-                  >
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
-                </div>
-
-                {/* Today shortcuts, CSV Export & Verification Lock */}
-                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-center sm:justify-end">
-                  <button
-                    onClick={handleGoToday}
-                    className={`border-2 transition-all px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold cursor-pointer ${
-                      isToday
-                        ? "border-brand-green bg-[#e8f0e6] text-brand-green"
-                        : "border-[#e8e4de] bg-white hover:border-brand-green/50 text-[#6b6560] hover:text-[#1a1814] hover:bg-[#faf9f7]"
-                    }`}
-                  >
-                    Hari Ini
-                  </button>
-                  <button
-                    onClick={handleExportCSV}
-                    className="border-2 border-[#e8e4de] bg-[#e8f0e6] hover:bg-brand-green-light text-brand-green px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
-                  >
-                    <Download className="w-4 h-4" />
-                    Export CSV
-                  </button>
-
-                  {/* Verification status badge or action */}
-                  {isMasterAdmin ? (
+                  {/* Today shortcuts, CSV Export & Verification Lock */}
+                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-center sm:justify-end">
                     <button
-                      onClick={handleToggleLockDate}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold border-2 transition-all cursor-pointer ${
-                        isSelectedDateLocked
-                          ? "border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
-                          : "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                      onClick={handleGoToday}
+                      className={`border-2 transition-all px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold cursor-pointer ${
+                        isToday
+                          ? "border-brand-green bg-[#e8f0e6] text-brand-green"
+                          : "border-[#e8e4de] bg-white hover:border-brand-green/50 text-[#6b6560] hover:text-[#1a1814] hover:bg-[#faf9f7]"
                       }`}
                     >
-                      {isSelectedDateLocked ? (
-                        <>
-                          <Lock className="w-3.5 h-3.5 text-rose-600" />
-                          <span>Verified (Buka)</span>
-                        </>
-                      ) : (
-                        <>
-                          <Unlock className="w-3.5 h-3.5 text-amber-600" />
-                          <span>Unverified (Kunci)</span>
-                        </>
-                      )}
+                      Hari Ini
                     </button>
-                  ) : (
-                    <div
-                      className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold border-2 select-none ${
-                        isSelectedDateLocked
-                          ? "border-rose-200 bg-rose-50/50 text-rose-700"
-                          : "border-amber-200 bg-amber-50/50 text-amber-700"
-                      }`}
+                    <button
+                      onClick={handleExportCSV}
+                      className="border-2 border-[#e8e4de] bg-[#e8f0e6] hover:bg-brand-green-light text-brand-green px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
                     >
-                      {isSelectedDateLocked ? (
-                        <>
-                          <Lock className="w-3.5 h-3.5 text-rose-600" />
-                          <span>Verified</span>
-                        </>
-                      ) : (
-                        <>
-                          <Unlock className="w-3.5 h-3.5 text-amber-600" />
-                          <span>Unverified</span>
-                        </>
-                      )}
-                    </div>
-                  )}
+                      <Download className="w-4 h-4" />
+                      Export CSV
+                    </button>
+
+                    {/* Verification status badge or action */}
+                    {isMasterAdmin ? (
+                      <button
+                        onClick={handleToggleLockDate}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold border-2 transition-all cursor-pointer ${
+                          isSelectedDateLocked
+                            ? "border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                            : "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                        }`}
+                      >
+                        {isSelectedDateLocked ? (
+                          <>
+                            <Lock className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Verified (Buka)</span>
+                          </>
+                        ) : (
+                          <>
+                            <Unlock className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Unverified (Kunci)</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <div
+                        className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold border-2 select-none ${
+                          isSelectedDateLocked
+                            ? "border-rose-200 bg-rose-50/50 text-rose-700"
+                            : "border-amber-200 bg-amber-50/50 text-amber-700"
+                        }`}
+                      >
+                        {isSelectedDateLocked ? (
+                          <>
+                            <Lock className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Verified</span>
+                          </>
+                        ) : (
+                          <>
+                            <Unlock className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Unverified</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Main viewports */}
             <main className="flex-1 max-w-7xl mx-auto px-4 md:px-6 py-6 w-full">
               {/* Locked/Verified Banner */}
-              {isSelectedDateLocked && (
-                <div className="bg-rose-50 border-2 border-rose-200 text-rose-800 rounded-2xl p-4 mb-6 flex items-start gap-3 shadow-xs">
-                  <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                  <div className="text-xs">
-                    <p className="font-extrabold text-[#1a1814] mb-0.5">
-                      Status Laporan: Verified
-                    </p>
-                    <p className="text-rose-700">
-                      Seluruh data laporan pada tanggal <span className="font-extrabold">{formatDateDisplay(selectedDate)}</span> telah diverifikasi (Verified) oleh Admin Utama. {isMasterAdmin ? "Sebagai Admin Utama, Anda dapat mengubah data ini jika diperlukan, namun disarankan untuk mengubah status menjadi Unverified terlebih dahulu." : "Data tidak dapat ditambahkan, diubah, atau dihapus."}
-                    </p>
-                  </div>
-                </div>
-              )}
+              <AnimatePresence>
+                {showLockedAlert && isSelectedDateLocked && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -20, height: 0, marginBottom: 0 }}
+                    animate={{ opacity: 1, y: 0, height: "auto", marginBottom: 24 }}
+                    exit={{ opacity: 0, y: -20, height: 0, marginBottom: 0 }}
+                    transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <div className="bg-rose-50 border-2 border-rose-200 text-rose-800 rounded-2xl p-4 flex items-start gap-3 shadow-xs">
+                      <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                      <div className="text-xs">
+                        <p className="font-extrabold text-[#1a1814] mb-0.5">
+                          Status Laporan: Verified
+                        </p>
+                        <p className="text-rose-700">
+                          Seluruh data laporan pada tanggal <span className="font-extrabold">{formatDateDisplay(selectedDate)}</span> telah diverifikasi (Verified) oleh Admin Utama. {isMasterAdmin ? "Sebagai Admin Utama, Anda dapat mengubah data ini jika diperlukan, namun disarankan untuk mengubah status menjadi Unverified terlebih dahulu." : "Data tidak dapat ditambahkan, diubah, atau dihapus."}
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Data Loading Progress Bar */}
               {dataLoading && (

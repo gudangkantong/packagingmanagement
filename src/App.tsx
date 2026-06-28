@@ -36,6 +36,7 @@ import {
   Loader2,
   CheckCircle,
   AlertCircle,
+  Cloud,
   ChevronLeft,
   ChevronRight,
   ShieldAlert,
@@ -50,6 +51,7 @@ import {
 import { auth, db, firebaseConfig } from "./firebase";
 import { LaporanKantong, AllowedUser, LockedDate } from "./types";
 import { getDateString, formatDateDisplay } from "./utils";
+import { generateCSVContent, JENIS_KANTONG, JENIS_KANTONG_SHORT } from "./csvUtils";
 import logo from "./assets/logo.jpg";
 enum OperationType {
   CREATE = "create",
@@ -81,16 +83,6 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 const VENDORS = ["GEMAH", "YANA", "HARDO", "IKSG", "KRR", "SAMI", "TRI USAHA"];
-const JENIS_KANTONG = [
-  "Semen Baturaja (SMBR)",
-  "Semen DYNAMIX (DYX)",
-  "Semen MERDEKA (MDK)",
-  "Semen PADANG (PDG)",
-  "BIGBAG OPC",
-  "BIGBAG PCC",
-  "MACAN"
-];
-const JENIS_KANTONG_SHORT = ["SMBR", "DYX", "MDK", "PDG", "BIGBAG OPC", "BIGBAG PCC", "MACAN"];
 const PABRIK_LIST = ["Pabrik Baturaja 1 (PBR 1)", "Pabrik Baturaja 2 (PBR 2)"];
 const SHIFT_INFO = [
   { id: 1, label: "Shift 1", time: "00:00 – 08:00", color: "text-blue-600 bg-blue-50 border-blue-200" },
@@ -125,6 +117,8 @@ export default function App() {
   // Selected date state
   const [selectedDate, setSelectedDate] = useState<string>(getDateString(new Date()));
   const [showLockedAlert, setShowLockedAlert] = useState(false);
+  const [driveToken, setDriveToken] = useState<string | null>(localStorage.getItem("smbr_drive_token"));
+  const [isDriveUploading, setIsDriveUploading] = useState(false);
 
   useEffect(() => {
     setSelectedDate(getDateString(new Date()));
@@ -453,6 +447,8 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
+      setDriveToken(null);
+      localStorage.removeItem("smbr_drive_token");
       triggerToast("Berhasil keluar", "inf");
     } catch (err) {
       console.error("Logout Error:", err);
@@ -679,6 +675,73 @@ export default function App() {
     });
   };
 
+  // Function to initialize Google Drive Login
+  const handleLoginDrive = () => {
+    if (!(window as any).google) {
+      triggerToast("Gagal memuat layanan Google. Coba refresh halaman.", "er");
+      return;
+    }
+
+    const clientId = (import.meta as any).env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      triggerToast("Konfigurasi Google Client ID belum diatur di Settings.", "er");
+      return;
+    }
+
+    const client = (window as any).google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: "https://www.googleapis.com/auth/drive.file",
+      callback: (response: any) => {
+        if (response.access_token) {
+          setDriveToken(response.access_token);
+          localStorage.setItem("smbr_drive_token", response.access_token);
+          triggerToast("Berhasil terhubung ke Google Drive!", "ok");
+        }
+      },
+    });
+    client.requestAccessToken();
+  };
+
+  const uploadToDrive = async (token: string, csv: string, date: string) => {
+    setIsDriveUploading(true);
+    try {
+      const fileName = `Laporan_Pemakaian_Kantong_${date}.csv`;
+      const response = await fetch("/api/drive/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          csvContent: csv,
+          fileName,
+          accessToken: token,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        triggerToast("Laporan berhasil dikirim ke Google Drive!", "ok");
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (err: any) {
+      console.error("Drive upload failed:", err);
+      const errMsg = err.message || "";
+      if (
+        errMsg.includes("invalid_grant") || 
+        errMsg.includes("expired") || 
+        errMsg.includes("invalid authentication") || 
+        errMsg.includes("401")
+      ) {
+        setDriveToken(null);
+        localStorage.removeItem("smbr_drive_token");
+        triggerToast("Sesi Google Drive berakhir, silakan hubungkan kembali.", "er");
+      } else {
+        triggerToast("Gagal mengirim laporan ke Google Drive.", "er");
+      }
+    } finally {
+      setIsDriveUploading(false);
+    }
+  };
+
   const handleToggleLockDate = async () => {
     if (!isMasterAdmin) return;
     const isCurrentlyLocked = !!lockedDates[selectedDate]?.locked;
@@ -705,6 +768,12 @@ export default function App() {
               lockedAt: new Date().toISOString()
             }, { merge: true });
             triggerToast(`Status tanggal ${formatDateDisplay(selectedDate)} diubah menjadi Verified.`, "ok");
+
+            // Auto-upload to Drive for Admin Utama
+            if (isMasterAdmin && driveToken) {
+              const csv = generateCSVContent(filteredReports, selectedDate, currentUser?.email);
+              uploadToDrive(driveToken, csv, selectedDate);
+            }
           }
         } catch (err) {
           console.error("Toggle date lock failed:", err);
@@ -757,125 +826,7 @@ export default function App() {
       return;
     }
 
-    // 1. Title and Metadata
-    const metadata = [
-      "LAPORAN PEMAKAIAN KANTONG",
-      "PACKAGING MANAGEMENT SYSTEM",
-      `Tanggal Laporan,${formatDateDisplay(selectedDate)}`,
-      `Diunduh Oleh,${currentUser?.email || "Sistem"}`,
-      `Waktu Unduh,${new Date().toLocaleString("id-ID")}`,
-      ""
-    ];
-
-    // 2. Section I: Consolidation totals
-    const reconAgg = JENIS_KANTONG.reduce((acc, name) => {
-      acc[name] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
-      return acc;
-    }, {} as Record<string, { utuh: number; pecah: number; sortir: number; total: number }>);
-
-    filteredReports.forEach((r) => {
-      if (reconAgg[r.nama]) {
-        reconAgg[r.nama].utuh += r.utuh;
-        reconAgg[r.nama].pecah += r.pecah;
-        reconAgg[r.nama].sortir += r.sortir;
-        reconAgg[r.nama].total += r.total;
-      }
-    });
-
-    const sec1Rows = [
-      "I. REKAPITULASI KONSOLIDASI KANTONG (PABRIK 1 & 2)",
-      "No,Jenis Kantong (Kode),Jenis Kantong (Lengkap),Utuh,Pecah,Sortir,Total"
-    ];
-    JENIS_KANTONG.forEach((name, idx) => {
-      const stat = reconAgg[name];
-      sec1Rows.push(`${idx + 1},"${JENIS_KANTONG_SHORT[idx]}","${name}",${stat.utuh},${stat.pecah},${stat.sortir},${stat.total}`);
-    });
-    sec1Rows.push(`Total,TOTAL KESELURUHAN,,${selectedDateStats.utuh},${selectedDateStats.pecah},${selectedDateStats.sortir},${selectedDateStats.total}`);
-    sec1Rows.push("");
-
-    // 3. Section II: Baturaja 1 Detail
-    const pbr1Reports = filteredReports.filter(r => r.pabrik.includes("1"));
-    const subtotalPbr1 = pbr1Reports.reduce((acc, r) => {
-      acc.utuh += r.utuh;
-      acc.pecah += r.pecah;
-      acc.sortir += r.sortir;
-      acc.total += r.total;
-      return acc;
-    }, { utuh: 0, pecah: 0, sortir: 0, total: 0 });
-
-    const sec2Rows = [
-      "II. DATA DETAIL LAPORAN PABRIK BATURAJA 1 (PBR 1)",
-      "No,Vendor,Jenis Kantong,Shift,Utuh,Pecah,Sortir,Total,Dilaporkan Oleh"
-    ];
-    if (pbr1Reports.length > 0) {
-      pbr1Reports.forEach((r, idx) => {
-        sec2Rows.push(`${idx + 1},"${r.vendor}","${r.nama}",Shift ${r.shift},${r.utuh},${r.pecah},${r.sortir},${r.total},"${r.createdBy}"`);
-      });
-      sec2Rows.push(`Total,TOTAL KUMULATIF PBR 1,,,${subtotalPbr1.utuh},${subtotalPbr1.pecah},${subtotalPbr1.sortir},${subtotalPbr1.total},`);
-    } else {
-      sec2Rows.push("-,Tidak ada data untuk PBR 1,,,,,");
-    }
-    sec2Rows.push("");
-
-    // 4. Section III: Baturaja 2 Detail
-    const pbr2Reports = filteredReports.filter(r => r.pabrik.includes("2"));
-    const subtotalPbr2 = pbr2Reports.reduce((acc, r) => {
-      acc.utuh += r.utuh;
-      acc.pecah += r.pecah;
-      acc.sortir += r.sortir;
-      acc.total += r.total;
-      return acc;
-    }, { utuh: 0, pecah: 0, sortir: 0, total: 0 });
-
-    const sec3Rows = [
-      "III. DATA DETAIL LAPORAN PABRIK BATURAJA 2 (PBR 2)",
-      "No,Vendor,Jenis Kantong,Shift,Utuh,Pecah,Sortir,Total,Dilaporkan Oleh"
-    ];
-    if (pbr2Reports.length > 0) {
-      pbr2Reports.forEach((r, idx) => {
-        sec3Rows.push(`${idx + 1},"${r.vendor}","${r.nama}",Shift ${r.shift},${r.utuh},${r.pecah},${r.sortir},${r.total},"${r.createdBy}"`);
-      });
-      sec3Rows.push(`Total,TOTAL KUMULATIF PBR 2,,,${subtotalPbr2.utuh},${subtotalPbr2.pecah},${subtotalPbr2.sortir},${subtotalPbr2.total},`);
-    } else {
-      sec3Rows.push("-,Tidak ada data untuk PBR 2,,,,,");
-    }
-    sec3Rows.push("");
-
-    // 5. Section IV: Shift Breakdown
-    const shiftAgg = {
-      1: { utuh: 0, pecah: 0, sortir: 0, total: 0 },
-      2: { utuh: 0, pecah: 0, sortir: 0, total: 0 },
-      3: { utuh: 0, pecah: 0, sortir: 0, total: 0 }
-    };
-    filteredReports.forEach(r => {
-      if (r.shift === 1 || r.shift === 2 || r.shift === 3) {
-        shiftAgg[r.shift].utuh += r.utuh;
-        shiftAgg[r.shift].pecah += r.pecah;
-        shiftAgg[r.shift].sortir += r.sortir;
-        shiftAgg[r.shift].total += r.total;
-      }
-    });
-
-    const sec4Rows = [
-      "IV. REKAPITULASI PEMAKAIAN PER SHIFT",
-      "Shift,Utuh,Pecah,Sortir,Total"
-    ];
-    [1, 2, 3].forEach(sNum => {
-      const stat = shiftAgg[sNum as 1 | 2 | 3];
-      sec4Rows.push(`Shift ${sNum},${stat.utuh},${stat.pecah},${stat.sortir},${stat.total}`);
-    });
-    sec4Rows.push(`Total,${selectedDateStats.utuh},${selectedDateStats.pecah},${selectedDateStats.sortir},${selectedDateStats.total}`);
-
-    // Combine all sections with UTF-8 BOM so Excel opens with proper Indonesian accents and symbols
-    const fullContent = [
-      ...metadata,
-      ...sec1Rows,
-      ...sec2Rows,
-      ...sec3Rows,
-      ...sec4Rows
-    ].join("\n");
-
-    const csvContent = "\uFEFF" + fullContent;
+    const csvContent = generateCSVContent(filteredReports, selectedDate, currentUser?.email);
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -884,7 +835,7 @@ export default function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    triggerToast("File CSV Berhasil Diunduh", "ok");
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -1232,7 +1183,7 @@ export default function App() {
                     </button>
 
                     <div className="flex-1 flex items-center justify-center min-w-[160px]">
-                      <div className="flex items-center bg-white border-2 border-brand-green/30 shadow-xs rounded-xl p-1 px-3 cursor-pointer hover:shadow-md transition-all hover:border-brand-green/60 gap-2 relative">
+                      <div className="flex items-center bg-white border border-brand-green/30 shadow-xs rounded-xl p-1 px-3 cursor-pointer hover:shadow-md transition-all hover:border-brand-green/60 gap-2 relative">
                         <div className="text-[11px] text-brand-green font-black uppercase tracking-wider pr-2 border-r border-slate-200 leading-none shrink-0">
                           {formatDateDisplay(selectedDate).split(",")[0]}
                         </div>
@@ -1260,7 +1211,7 @@ export default function App() {
                   <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-center sm:justify-end">
                     <button
                       onClick={handleGoToday}
-                      className={`border-2 transition-all px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold cursor-pointer ${
+                      className={`border transition-all px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold cursor-pointer ${
                         isToday
                           ? "border-brand-green bg-[#e8f0e6] text-brand-green"
                           : "border-[#e8e4de] bg-white hover:border-brand-green/50 text-[#6b6560] hover:text-[#1a1814] hover:bg-[#faf9f7]"
@@ -1268,9 +1219,23 @@ export default function App() {
                     >
                       Hari Ini
                     </button>
+                    {isMasterAdmin && (
+                      <button
+                        onClick={handleLoginDrive}
+                        className={`border transition-all px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer ${
+                          driveToken
+                            ? "border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100"
+                            : "border-[#e8e4de] bg-white hover:border-sky-300 text-[#6b6560] hover:text-sky-700 hover:bg-sky-50"
+                        }`}
+                        title={driveToken ? "Sudah Terhubung ke Drive" : "Hubungkan ke Drive"}
+                      >
+                        <Cloud className={`w-4 h-4 ${driveToken ? "text-sky-600" : ""}`} />
+                        {driveToken ? "Drive Connected" : "Connect Drive"}
+                      </button>
+                    )}
                     <button
                       onClick={handleExportCSV}
-                      className="border-2 border-[#e8e4de] bg-[#e8f0e6] hover:bg-brand-green-light text-brand-green px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                      className="border border-[#e8e4de] bg-[#e8f0e6] hover:bg-brand-green-light text-brand-green px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
                     >
                       <Download className="w-4 h-4" />
                       Export CSV
@@ -1280,7 +1245,7 @@ export default function App() {
                     {isMasterAdmin ? (
                       <button
                         onClick={handleToggleLockDate}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold border-2 transition-all cursor-pointer ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                           isSelectedDateLocked
                             ? "border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
                             : "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
@@ -1300,7 +1265,7 @@ export default function App() {
                       </button>
                     ) : (
                       <div
-                        className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold border-2 select-none ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold border select-none ${
                           isSelectedDateLocked
                             ? "border-rose-200 bg-rose-50/50 text-rose-700"
                             : "border-amber-200 bg-amber-50/50 text-amber-700"
@@ -1491,114 +1456,6 @@ export default function App() {
                                   </table>
                                 </div>
                               </div>
-                            </div>
-
-                            {/* Shift-wise broken down aggregates */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
-                              {SHIFT_INFO.map((shift) => {
-                                const shiftReports = factoryReports.filter((r) => r.shift === shift.id);
-
-                                // Aggregate per bag type for this shift
-                                const shiftAgg = JENIS_KANTONG.reduce((acc, name) => {
-                                  acc[name] = { utuh: 0, pecah: 0, sortir: 0, total: 0, vendors: {} };
-                                  return acc;
-                                }, {} as Record<string, { utuh: number; pecah: number; sortir: number; total: number, vendors: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> }>);
-
-                                shiftReports.forEach((r) => {
-                                  if (shiftAgg[r.nama]) {
-                                    const agg = shiftAgg[r.nama];
-                                    agg.utuh += r.utuh;
-                                    agg.pecah += r.pecah;
-                                    agg.sortir += r.sortir;
-                                    agg.total += r.total;
-
-                                    if (!agg.vendors[r.vendor]) {
-                                      agg.vendors[r.vendor] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
-                                    }
-                                    agg.vendors[r.vendor].utuh += r.utuh;
-                                    agg.vendors[r.vendor].pecah += r.pecah;
-                                    agg.vendors[r.vendor].sortir += r.sortir;
-                                    agg.vendors[r.vendor].total += r.total;
-                                  }
-                                });
-
-                                const shiftKey = `${pabrikName}-${shift.id}`;
-                                const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
-                                const isShiftExpanded = expandedShifts[shiftKey] !== undefined 
-                                  ? expandedShifts[shiftKey] 
-                                  : !isMobile;
-
-                                return (
-                                  <div key={shift.id} className="border border-[#e8e4de] rounded-2xl p-3 bg-[#faf9f7]/40 transition-all duration-200">
-                                    <div 
-                                      onClick={() => setExpandedShifts((prev) => ({ ...prev, [shiftKey]: !isShiftExpanded }))}
-                                      className="flex items-center gap-1.5 cursor-pointer hover:bg-[#faf9f7] p-1 -m-1 rounded-xl select-none"
-                                    >
-                                      <div className={`w-2.5 h-2.5 rounded-full ${shift.id === 1 ? "bg-blue-500" : shift.id === 2 ? "bg-purple-500" : "bg-amber-500"}`} />
-                                      <h4 className="text-xs font-extrabold text-[#1a1814]">{shift.label}</h4>
-                                      <span className="text-[9px] text-[#9e9892] font-semibold">({shift.time})</span>
-                                      <span className="ml-auto text-[10px] text-brand-green font-extrabold flex items-center gap-0.5">
-                                        {isShiftExpanded ? "▼ Sembunyikan" : "▶ Tampilkan"}
-                                      </span>
-                                    </div>
-
-                                    {isShiftExpanded && (
-                                      <div className="border border-[#e8e4de] rounded-2xl overflow-hidden bg-[#fdfcfb] mt-3 animate-in fade-in duration-200">
-                                        <table className="w-full text-left text-[11px] border-collapse">
-                                          <thead>
-                                            <tr className="bg-[#faf9f7] text-[#9e9892] font-extrabold text-[9px] uppercase border-b border-[#e8e4de]">
-                                              <th className="py-2.5 px-2 font-bold text-[#1a1814]">Jenis</th>
-                                              <th className="py-2.5 px-2 font-bold text-center text-brand-green">U</th>
-                                              <th className="py-2.5 px-2 font-bold text-center text-rose-600">P</th>
-                                              <th className="py-2.5 px-2 font-bold text-center text-amber-600">S</th>
-                                              <th className="py-2.5 px-2 font-bold text-center text-[#1a1814]">Tot</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody className="divide-y divide-[#e8e4de]">
-                                            {JENIS_KANTONG.map((name, idx) => {
-                                              const sData = shiftAgg[name];
-                                              const isZero = sData.utuh === 0 && sData.pecah === 0 && sData.sortir === 0;
-                                              const isExpanded = !isZero && expandedBagTypes[`${shift.id}-${name}`];
-                                              return (
-                                                <React.Fragment key={name}>
-                                                  <tr 
-                                                    className={`hover:bg-[#faf9f7]/50 ${!isZero ? 'cursor-pointer' : 'cursor-default'} ${isExpanded ? 'bg-[#faf9f7] ring-2 ring-inset ring-brand-green/50' : ''}`}
-                                                    onClick={() => {
-                                                      if (!isZero) {
-                                                        setExpandedBagTypes(prev => ({ ...prev, [`${shift.id}-${name}`]: !prev[`${shift.id}-${name}`] }));
-                                                      }
-                                                    }}
-                                                  >
-                                                    <td className="py-2 px-2 font-bold text-[#1a1814]">
-                                                      {JENIS_KANTONG_SHORT[idx]}
-                                                      {!isZero && (
-                                                        <span className="ml-1 text-[8px] text-[#9e9892]">{isExpanded ? '▼' : '▶'}</span>
-                                                      )}
-                                                    </td>
-                                                    <td className={`py-2 px-2 text-center font-medium ${isZero ? "text-[#c4bfb7]" : "text-[#1a1814]"}`}>{sData.utuh.toLocaleString()}</td>
-                                                    <td className={`py-2 px-2 text-center font-medium ${isZero ? "text-[#c4bfb7]" : "text-rose-600"}`}>{sData.pecah.toLocaleString()}</td>
-                                                    <td className={`py-2 px-2 text-center font-medium ${isZero ? "text-[#c4bfb7]" : "text-amber-600"}`}>{sData.sortir.toLocaleString()}</td>
-                                                    <td className={`py-2 px-2 text-center font-bold bg-[#e8f0e6]/20 ${isZero ? "text-[#c4bfb7]" : "text-brand-green"}`}>{sData.total.toLocaleString()}</td>
-                                                  </tr>
-                                                  {isExpanded && Object.entries(sData.vendors).map(([vendorName, vStat]) => (
-                                                    <tr key={`${shift.id}-${name}-${vendorName}`} className="bg-[#fdfcfb]">
-                                                      <td className="py-1 px-4 text-[10px] text-[#6b6560] italic">↳ {vendorName}</td>
-                                                      <td className="py-1 px-2 text-center text-[10px] text-[#6b6560]">{vStat.utuh.toLocaleString()}</td>
-                                                      <td className="py-1 px-2 text-center text-[10px] text-[#6b6560]">{vStat.pecah.toLocaleString()}</td>
-                                                      <td className="py-1 px-2 text-center text-[10px] text-[#6b6560]">{vStat.sortir.toLocaleString()}</td>
-                                                      <td className="py-1 px-2 text-center text-[10px] text-[#6b6560] font-bold">{vStat.total.toLocaleString()}</td>
-                                                    </tr>
-                                                  ))}
-                                                </React.Fragment>
-                                              );
-                                            })}
-                                          </tbody>
-                                        </table>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
                             </div>
                           </div>
                         );

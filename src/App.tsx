@@ -907,7 +907,7 @@ export default function App() {
                     </div>
                   )}
                 </div>
-                <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-[#1a1814] mb-1 whitespace-nowrap">
+                <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#1a1814] mb-1 whitespace-nowrap">
                   PACKAGING <span className="text-brand-green">MANAGEMENT</span>
                 </h1>
                 <h2 className="text-sm font-bold text-[#6b6560] tracking-tight uppercase mb-4">

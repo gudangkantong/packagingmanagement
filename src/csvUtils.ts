@@ -31,6 +31,7 @@ export const generateCSVContent = (
 
   // 1. Metadata
   const metadata = [
+    "sep=,",
     "LAPORAN PEMAKAIAN KANTONG (SUMMARY DASHBOARD)",
     "PACKAGING MANAGEMENT SYSTEM",
     `Tanggal Laporan,${formatDateDisplay(selectedDate)}`,
@@ -99,7 +100,7 @@ export const generateCSVContent = (
         hasData = true;
         rows.push(`"${JENIS_KANTONG_SHORT[idx]}",,${stat.utuh},${stat.pecah},${stat.sortir},${stat.total}`);
         Object.entries(stat.vendors).forEach(([vName, vStat]) => {
-          rows.push(`,↳ ${vName},${vStat.utuh},${vStat.pecah},${vStat.sortir},${vStat.total}`);
+          rows.push(`, - ${vName},${vStat.utuh},${vStat.pecah},${vStat.sortir},${vStat.total}`);
         });
       }
     });

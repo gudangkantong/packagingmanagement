@@ -3,6 +3,7 @@ import { initializeApp, deleteApp } from "firebase/app";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInAnonymously,
   signOut,
   onAuthStateChanged,
   getAuth,
@@ -48,7 +49,7 @@ import {
 } from "lucide-react";
 import { auth, db, firebaseConfig } from "./firebase";
 import { LaporanKantong, AllowedUser, LockedDate } from "./types";
-import { getDateString } from "./utils";
+import { getDateString, formatDateDisplay } from "./utils";
 import logo from "./assets/logo.jpg";
 enum OperationType {
   CREATE = "create",
@@ -116,6 +117,7 @@ export default function App() {
   const [dataLoading, setDataLoading] = useState<boolean>(true);
 
   const isMasterAdmin = currentUser?.email?.toLowerCase() === "managementpackaging@gmail.com";
+  const isGuest = currentUser?.isAnonymous === true || currentUser?.email?.toLowerCase() === "guest@laporan.com";
 
   // Active page state
   const [activeTab, setActiveTab] = useState<"dash" | "input" | "users">("dash");
@@ -181,6 +183,11 @@ export default function App() {
       setAuthLoading(true);
       setCurrentUser(user);
       if (user) {
+        if (user.isAnonymous || user.email?.toLowerCase() === "guest@laporan.com") {
+          setIsAllowed(true);
+          setAuthLoading(false);
+          return;
+        }
         const userEmail = user.email ? user.email.toLowerCase() : "";
 
         // Admin bootstrapping check: automatically authorize managementpackaging@gmail.com
@@ -279,7 +286,7 @@ export default function App() {
 
   // Listen to allowed_users collection when authorized
   useEffect(() => {
-    if (!currentUser || isAllowed !== true) {
+    if (!currentUser || isAllowed !== true || currentUser.isAnonymous) {
       setAllowedUsers([]);
       return;
     }
@@ -339,6 +346,42 @@ export default function App() {
       setActiveTab("dash");
     }
   }, [activeTab, currentUser]);
+
+  // Handle Guest Login
+  const handleGuestLogin = async () => {
+    setAuthError("");
+    setAuthLoading(true);
+    try {
+      // First try standard Firebase Anonymous Sign-in
+      await signInAnonymously(auth);
+      triggerToast("Berhasil masuk sebagai Tamu!", "ok");
+    } catch (err: any) {
+      console.warn("Guest anonymous login failed, attempting fallback guest account...", err);
+      // Fallback to a predefined guest email account
+      const guestEmail = "guest@laporan.com";
+      const guestPass = "guest123456";
+      try {
+        await signInWithEmailAndPassword(auth, guestEmail, guestPass);
+        triggerToast("Berhasil masuk sebagai Tamu!", "ok");
+      } catch (fbErr: any) {
+        // If the guest user doesn't exist, create it on-the-fly
+        if (fbErr.code === "auth/user-not-found" || fbErr.code === "auth/invalid-credential" || fbErr.code === "auth/wrong-password") {
+          try {
+            await createUserWithEmailAndPassword(auth, guestEmail, guestPass);
+            triggerToast("Berhasil masuk sebagai Tamu!", "ok");
+          } catch (createErr: any) {
+            console.error("Failed to create guest fallback account:", createErr);
+            setAuthError("Gagal masuk sebagai Tamu. Silakan hubungi Admin.");
+          }
+        } else {
+          console.error("Failed to sign in with guest fallback account:", fbErr);
+          setAuthError("Gagal masuk sebagai Tamu: " + (fbErr.message || String(fbErr)));
+        }
+      }
+    } finally {
+      setAuthLoading(false);
+    }
+  };
 
   // Handle Authentication
   const handleAuth = async (e: React.FormEvent) => {
@@ -509,7 +552,7 @@ export default function App() {
   const handleOpenEditForm = (item: LaporanKantong) => {
     const isDateLocked = !!lockedDates[item.tanggal]?.locked;
     if (isDateLocked && !isMasterAdmin) {
-      triggerToast(`Laporan pada tanggal ${item.tanggal} telah dikunci & diverifikasi oleh Admin.`, "er");
+      triggerToast(`Laporan pada tanggal ${formatDateDisplay(item.tanggal)} berstatus Verified (Terkunci) oleh Admin Utama.`, "er");
       return;
     }
 
@@ -531,7 +574,7 @@ export default function App() {
     // Check if the target date is locked
     const isTargetDateLocked = !!lockedDates[formTanggal]?.locked;
     if (isTargetDateLocked && !isMasterAdmin) {
-      triggerToast(`Data pada tanggal ${formTanggal} telah dikunci & diverifikasi oleh Admin Utama.`, "er");
+      triggerToast(`Data pada tanggal ${formTanggal} berstatus Verified (Terkunci) oleh Admin Utama.`, "er");
       return;
     }
 
@@ -541,7 +584,7 @@ export default function App() {
       if (existingEntry) {
         const isOrigDateLocked = !!lockedDates[existingEntry.tanggal]?.locked;
         if (isOrigDateLocked && !isMasterAdmin) {
-          triggerToast(`Data pada tanggal asli (${existingEntry.tanggal}) telah dikunci & diverifikasi.`, "er");
+          triggerToast(`Data pada tanggal asli (${formatDateDisplay(existingEntry.tanggal)}) berstatus Verified.`, "er");
           return;
         }
       }
@@ -589,7 +632,7 @@ export default function App() {
     if (item) {
       const isDateLocked = !!lockedDates[item.tanggal]?.locked;
       if (isDateLocked && !isMasterAdmin) {
-        triggerToast(`Laporan pada tanggal ${item.tanggal} telah dikunci & diverifikasi oleh Admin Utama. Tidak dapat dihapus.`, "er");
+        triggerToast(`Laporan pada tanggal ${formatDateDisplay(item.tanggal)} berstatus Verified (Terkunci) oleh Admin Utama. Tidak dapat dihapus.`, "er");
         return;
       }
     }
@@ -614,12 +657,12 @@ export default function App() {
   const handleToggleLockDate = async () => {
     if (!isMasterAdmin) return;
     const isCurrentlyLocked = !!lockedDates[selectedDate]?.locked;
-    const actionText = isCurrentlyLocked ? "membuka kunci" : "mengunci & memverifikasi";
+    const actionText = isCurrentlyLocked ? "menjadi Unverified (buka kunci)" : "menjadi Verified (kunci)";
     
     setConfirmModal({
       isOpen: true,
-      title: isCurrentlyLocked ? "Buka Kunci Laporan" : "Kunci & Verifikasi Laporan",
-      message: `Apakah Anda yakin ingin ${actionText} seluruh data laporan pada tanggal ${selectedDate}?`,
+      title: isCurrentlyLocked ? "Setel Status ke Unverified" : "Setel Status ke Verified",
+      message: `Apakah Anda yakin ingin mengubah status laporan pada tanggal ${formatDateDisplay(selectedDate)} ${actionText}?`,
       onConfirm: async () => {
         try {
           const docRef = doc(db, "locked_dates", selectedDate);
@@ -629,18 +672,18 @@ export default function App() {
               unlockedBy: currentUser?.email || "",
               unlockedAt: new Date().toISOString()
             }, { merge: true });
-            triggerToast(`Kunci tanggal ${selectedDate} berhasil dibuka.`, "ok");
+            triggerToast(`Status tanggal ${formatDateDisplay(selectedDate)} diubah menjadi Unverified.`, "ok");
           } else {
             await setDoc(docRef, {
               locked: true,
               lockedBy: currentUser?.email || "",
               lockedAt: new Date().toISOString()
             }, { merge: true });
-            triggerToast(`Laporan tanggal ${selectedDate} telah diverifikasi & dikunci.`, "ok");
+            triggerToast(`Status tanggal ${formatDateDisplay(selectedDate)} diubah menjadi Verified.`, "ok");
           }
         } catch (err) {
           console.error("Toggle date lock failed:", err);
-          triggerToast(`Gagal ${actionText} tanggal`, "er");
+          triggerToast(`Gagal mengubah status tanggal`, "er");
           handleFirestoreError(err, OperationType.WRITE, `locked_dates/${selectedDate}`);
         }
       }
@@ -694,7 +737,7 @@ export default function App() {
     const metadata = [
       "LAPORAN PEMAKAIAN KANTONG",
       "PACKAGING MANAGEMENT SYSTEM",
-      `Tanggal Laporan,${selectedDate}`,
+      `Tanggal Laporan,${formatDateDisplay(selectedDate)}`,
       `Diunduh Oleh,${currentUser?.email || "Sistem"}`,
       `Waktu Unduh,${new Date().toLocaleString("id-ID")}`,
       ""
@@ -813,7 +856,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Laporan_Pemakaian_Kantong_${selectedDate}.csv`);
+    link.setAttribute("download", `Laporan_Pemakaian_Kantong_${formatDateDisplay(selectedDate)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -910,7 +953,7 @@ export default function App() {
                     <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
                     <span>{authError}</span>
                   </div>
-                  {authError.includes("belum diaktifkan") && (
+                  {authError.includes("belum diaktifkan") && !authError.includes("Tamu") && (
                     <div className="mt-2 pt-2 border-t border-rose-200/50 flex flex-col gap-2 font-normal text-rose-900 leading-relaxed text-left">
                       <p className="font-bold">Cara Mengaktifkan di Firebase Console:</p>
                       <ol className="list-decimal list-inside space-y-1">
@@ -920,7 +963,26 @@ export default function App() {
                         <li>Aktifkan opsi pertama (Email/password) lalu klik <strong>Save</strong>.</li>
                       </ol>
                       <a
-                        href="https://console.firebase.google.com/project/gen-lang-client-0065314458/authentication/providers"
+                        href={`https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/providers`}
+                        target="_blank"
+                        referrerPolicy="no-referrer"
+                        className="mt-1.5 self-start inline-flex items-center gap-1 bg-brand-green hover:bg-brand-green-hover text-white px-3.5 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer"
+                      >
+                        🔑 Buka Firebase Authentication Console
+                      </a>
+                    </div>
+                  )}
+                  {authError.includes("Tamu") && authError.includes("belum diaktifkan") && (
+                    <div className="mt-2 pt-2 border-t border-rose-200/50 flex flex-col gap-2 font-normal text-rose-900 leading-relaxed text-left">
+                      <p className="font-bold">Cara Mengaktifkan Login Tamu di Firebase Console:</p>
+                      <ol className="list-decimal list-inside space-y-1">
+                        <li>Buka halaman autentikasi proyek Firebase Anda.</li>
+                        <li>Pilih tab <strong>Sign-in method</strong>.</li>
+                        <li>Klik tombol <strong>Add new provider</strong> dan pilih <strong>Anonymous</strong>.</li>
+                        <li>Aktifkan sakelar <strong>Enable</strong> lalu klik <strong>Save</strong>.</li>
+                      </ol>
+                      <a
+                        href={`https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/providers`}
                         target="_blank"
                         referrerPolicy="no-referrer"
                         className="mt-1.5 self-start inline-flex items-center gap-1 bg-brand-green hover:bg-brand-green-hover text-white px-3.5 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer"
@@ -970,12 +1032,28 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={authLoading}
-                  className="w-full bg-brand-green hover:bg-brand-green-hover text-white py-3.5 px-6 rounded-xl font-bold text-sm tracking-wide shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-2"
+                  className="w-full bg-brand-green hover:bg-brand-green-hover text-white py-3.5 px-6 rounded-xl font-bold text-sm tracking-wide shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <LogIn className="w-4.5 h-4.5" />
                   Masuk Ke Aplikasi
                 </button>
               </form>
+
+              <div className="flex items-center my-5">
+                <div className="flex-1 border-t border-[#e8e4de]" />
+                <span className="px-3 text-[10px] text-[#9e9892] font-bold uppercase tracking-wider">Atau</span>
+                <div className="flex-1 border-t border-[#e8e4de]" />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGuestLogin}
+                disabled={authLoading}
+                className="w-full border-2 border-brand-green/30 hover:border-brand-green/70 bg-white hover:bg-brand-green-light/20 text-brand-green py-3 px-6 rounded-xl font-bold text-sm tracking-wide shadow-xs hover:shadow-sm active:translate-y-0 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <UserPlus className="w-4.5 h-4.5" />
+                Masuk sebagai Tamu (Login as Guest)
+              </button>
             </motion.div>
           </div>
         ) : isAllowed === false ? (
@@ -1046,10 +1124,18 @@ export default function App() {
                     LAPORAN <span className="text-brand-green">PEMAKAIAN KANTONG</span>
                   </h1>
                   <div className="text-[9px] sm:text-[10px] text-[#9e9892] font-semibold flex items-center justify-center gap-1 w-full min-w-0 mt-0.5">
-                    <UserCheck className="w-3 h-3 text-emerald-600 shrink-0" />
-                    <span className="truncate max-w-[100px] xs:max-w-[140px] sm:max-w-none">{currentUser.email}</span>
+                    <UserCheck className={`w-3 h-3 shrink-0 ${isGuest ? "text-blue-600" : "text-emerald-600"}`} />
+                    <span className="truncate max-w-[100px] xs:max-w-[140px] sm:max-w-none">
+                      {isGuest ? "Tamu (Guest)" : currentUser?.email}
+                    </span>
                     <span className="text-[#c4bfb7] shrink-0">•</span>
-                    <span className="text-emerald-700 bg-emerald-50 px-1 rounded-sm text-[8px] sm:text-[9px] uppercase font-bold tracking-wider shrink-0">Authorized</span>
+                    <span className={`px-1 rounded-sm text-[8px] sm:text-[9px] uppercase font-bold tracking-wider shrink-0 ${
+                      isGuest
+                        ? "text-blue-700 bg-blue-50"
+                        : "text-emerald-700 bg-emerald-50"
+                    }`}>
+                      {isGuest ? "Guest Mode" : "Authorized"}
+                    </span>
                   </div>
                 </div>
 
@@ -1059,7 +1145,7 @@ export default function App() {
                   <div className="hidden md:flex items-center gap-1 mr-4 border-r border-[#e8e4de] pr-4">
                     <button
                       onClick={() => setActiveTab("dash")}
-                      className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
+                      className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${
                         activeTab === "dash"
                           ? "bg-brand-green text-white shadow-sm"
                           : "text-[#6b6560] hover:bg-[#faf9f6] hover:text-[#1a1814]"
@@ -1068,17 +1154,19 @@ export default function App() {
                       <BarChart3 className="w-4.5 h-4.5" />
                       Dashboard
                     </button>
-                    <button
-                      onClick={() => setActiveTab("input")}
-                      className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                        activeTab === "input"
-                          ? "bg-brand-green text-white shadow-sm"
-                          : "text-[#6b6560] hover:bg-[#faf9f6] hover:text-[#1a1814]"
-                      }`}
-                    >
-                      <FileText className="w-4.5 h-4.5" />
-                      Pelaporan
-                    </button>
+                    {!isGuest && (
+                      <button
+                        onClick={() => setActiveTab("input")}
+                        className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${
+                          activeTab === "input"
+                            ? "bg-brand-green text-white shadow-sm"
+                            : "text-[#6b6560] hover:bg-[#faf9f6] hover:text-[#1a1814]"
+                        }`}
+                      >
+                        <FileText className="w-4.5 h-4.5" />
+                        Pelaporan
+                      </button>
+                    )}
                     {currentUser?.email?.toLowerCase() === "managementpackaging@gmail.com" && (
                       <button
                         onClick={() => setActiveTab("users")}
@@ -1118,14 +1206,20 @@ export default function App() {
                     <ChevronLeft className="w-5 h-5" />
                   </button>
 
-                  <div className="flex-1 flex items-center justify-center">
-                    <div className="flex items-center bg-white border-2 border-brand-green/30 shadow-sm rounded-lg p-0.5 cursor-pointer hover:shadow-md transition-shadow w-[7.5rem]">
-                      <input
-                        type="date"
-                        value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
-                        className="bg-transparent border-none text-sm font-bold text-[#1a1814] focus:outline-none cursor-pointer text-center w-full"
-                      />
+                  <div className="flex-1 flex items-center justify-center min-w-[160px]">
+                    <div className="flex items-center bg-white border-2 border-brand-green/30 shadow-xs rounded-xl p-1 px-3 cursor-pointer hover:shadow-md transition-all hover:border-brand-green/60 gap-2 relative">
+                      <div className="text-[11px] text-brand-green font-black uppercase tracking-wider pr-2 border-r border-slate-200 leading-none shrink-0">
+                        {formatDateDisplay(selectedDate).split(",")[0]}
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <CalendarIcon className="w-3.5 h-3.5 text-[#9e9892]" />
+                        <input
+                          type="date"
+                          value={selectedDate}
+                          onChange={(e) => setSelectedDate(e.target.value)}
+                          className="bg-transparent border-none text-[13px] font-black text-[#1a1814] focus:outline-none cursor-pointer w-full"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -1170,12 +1264,12 @@ export default function App() {
                       {isSelectedDateLocked ? (
                         <>
                           <Lock className="w-3.5 h-3.5 text-rose-600" />
-                          <span>Kunci Aktif (Buka)</span>
+                          <span>Verified (Buka)</span>
                         </>
                       ) : (
                         <>
                           <Unlock className="w-3.5 h-3.5 text-amber-600" />
-                          <span>Kunci & Verifikasi</span>
+                          <span>Unverified (Kunci)</span>
                         </>
                       )}
                     </button>
@@ -1184,18 +1278,18 @@ export default function App() {
                       className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold border-2 select-none ${
                         isSelectedDateLocked
                           ? "border-rose-200 bg-rose-50/50 text-rose-700"
-                          : "border-emerald-200 bg-emerald-50/50 text-emerald-700"
+                          : "border-amber-200 bg-amber-50/50 text-amber-700"
                       }`}
                     >
                       {isSelectedDateLocked ? (
                         <>
                           <Lock className="w-3.5 h-3.5 text-rose-600" />
-                          <span>Terverifikasi & Terkunci</span>
+                          <span>Verified</span>
                         </>
                       ) : (
                         <>
-                          <Unlock className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Terbuka (Dapat Diubah)</span>
+                          <Unlock className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Unverified</span>
                         </>
                       )}
                     </div>
@@ -1211,9 +1305,11 @@ export default function App() {
                 <div className="bg-rose-50 border-2 border-rose-200 text-rose-800 rounded-2xl p-4 mb-6 flex items-start gap-3 shadow-xs">
                   <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
                   <div className="text-xs">
-                    <p className="font-extrabold text-[#1a1814] mb-0.5">Laporan Tanggal Ini Terkunci & Terverifikasi</p>
+                    <p className="font-extrabold text-[#1a1814] mb-0.5">
+                      Status Laporan: Verified
+                    </p>
                     <p className="text-rose-700">
-                      Seluruh data laporan pada tanggal <span className="font-extrabold">{selectedDate}</span> telah diverifikasi & dikunci oleh Admin Utama. {isMasterAdmin ? "Sebagai Admin Utama, Anda dapat mengubah data ini jika diperlukan, namun disarankan untuk membuka kunci terlebih dahulu." : "Data tidak dapat ditambahkan, diubah, atau dihapus."}
+                      Seluruh data laporan pada tanggal <span className="font-extrabold">{formatDateDisplay(selectedDate)}</span> telah diverifikasi (Verified) oleh Admin Utama. {isMasterAdmin ? "Sebagai Admin Utama, Anda dapat mengubah data ini jika diperlukan, namun disarankan untuk mengubah status menjadi Unverified terlebih dahulu." : "Data tidak dapat ditambahkan, diubah, atau dihapus."}
                     </p>
                   </div>
                 </div>
@@ -1241,10 +1337,16 @@ export default function App() {
                   >
                     {filteredReports.length === 0 ? (
                       <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-12 text-center shadow-xs">
-                        <div className="text-4xl mb-3">📭</div>
+                        <div className="flex justify-center mb-4 animate-pulse">
+                          <div className="p-4 bg-[#e8f0e6]/40 text-brand-green border-2 border-brand-green/20 rounded-2xl">
+                            <FileText className="w-8 h-8" />
+                          </div>
+                        </div>
                         <h4 className="text-sm font-extrabold text-[#1a1814]">Belum Ada Laporan Pemakaian</h4>
                         <p className="text-xs text-[#9e9892] mt-1 max-w-sm mx-auto">
-                          Tidak ada laporan pemakaian kantong untuk tanggal {selectedDate}. Silakan buka tab <span className="font-bold text-brand-green">Pelaporan</span> untuk menambahkan data baru.
+                          {isGuest
+                            ? `Tidak ada laporan pemakaian kantong untuk tanggal ${formatDateDisplay(selectedDate)}.`
+                            : `Tidak ada laporan pemakaian kantong untuk tanggal ${formatDateDisplay(selectedDate)}. Silakan buka tab Pelaporan untuk menambahkan data baru.`}
                         </p>
                       </div>
                     ) : (
@@ -1481,34 +1583,40 @@ export default function App() {
                   >
                     <div className="flex items-center justify-between gap-4">
                       <h2 className="text-sm font-extrabold text-[#6b6560] tracking-wide uppercase">
-                        Daftar Laporan Tanggal: {selectedDate}
+                        Daftar Laporan Tanggal: {formatDateDisplay(selectedDate)}
                       </h2>
-                      <button
-                        onClick={handleOpenAddForm}
-                        disabled={isSelectedDateLocked && !isMasterAdmin}
-                        className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all ${
-                          isSelectedDateLocked && !isMasterAdmin
-                            ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200 shadow-none"
-                            : "bg-brand-green hover:bg-brand-green-hover text-white"
-                        }`}
-                      >
-                        {isSelectedDateLocked && !isMasterAdmin ? (
-                          <>
-                            <Lock className="w-4 h-4 text-slate-400" />
-                            Terkunci
-                          </>
-                        ) : (
-                          <>
-                            <Plus className="w-4 h-4" />
-                            Tambah Data Baru
-                          </>
-                        )}
-                      </button>
+                      {!isGuest && (
+                        <button
+                          onClick={handleOpenAddForm}
+                          disabled={isSelectedDateLocked && !isMasterAdmin}
+                          className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer ${
+                            isSelectedDateLocked && !isMasterAdmin
+                              ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200 shadow-none"
+                              : "bg-brand-green hover:bg-brand-green-hover text-white"
+                          }`}
+                        >
+                          {isSelectedDateLocked && !isMasterAdmin ? (
+                            <>
+                              <Lock className="w-4 h-4 text-slate-400" />
+                              Verified
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="w-4 h-4" />
+                              Tambah Data Baru
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
 
                     {filteredReports.length === 0 ? (
                       <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-12 text-center shadow-xs">
-                        <div className="text-4xl mb-3">📝</div>
+                        <div className="flex justify-center mb-4 animate-pulse">
+                          <div className="p-4 bg-[#e8f0e6]/40 text-brand-green border-2 border-brand-green/20 rounded-2xl">
+                            <FileText className="w-8 h-8" />
+                          </div>
+                        </div>
                         <h4 className="text-sm font-extrabold text-[#1a1814]">Belum Ada Data</h4>
                         <p className="text-xs text-[#9e9892] mt-1 max-w-sm mx-auto">
                           Belum ada laporan pemakaian kantong untuk tanggal ini. Klik tombol <span className="font-bold text-brand-green">Tambah Data Baru</span> di atas untuk menginput laporan.
@@ -1546,7 +1654,7 @@ export default function App() {
                                         <th className="py-3 px-4 text-center text-rose-600">Pecah</th>
                                         <th className="py-3 px-4 text-center text-amber-600">Sortir</th>
                                         <th className="py-3 px-4 text-center font-extrabold">Total</th>
-                                        <th className="py-3 px-4 text-center w-28">Aksi</th>
+                                        {!isGuest && <th className="py-3 px-4 text-center w-28">Aksi</th>}
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-[#e8e4de]">
@@ -1577,34 +1685,36 @@ export default function App() {
                                           <td className="py-2.5 px-4 text-center font-extrabold bg-[#e8f0e6]/20 text-[#1a1814]">
                                             {item.total}
                                           </td>
-                                          <td className="py-2.5 px-4 text-center">
-                                            <div className="flex items-center justify-center gap-1.5">
-                                              <button
-                                                onClick={() => handleOpenEditForm(item)}
-                                                disabled={isSelectedDateLocked && !isMasterAdmin}
-                                                className={`p-1.5 border rounded-lg transition-all ${
-                                                  isSelectedDateLocked && !isMasterAdmin
-                                                    ? "border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed"
-                                                    : "border-[#e8e4de] hover:border-brand-green hover:bg-brand-green-light text-[#6b6560] hover:text-brand-green"
-                                                }`}
-                                                title={isSelectedDateLocked && !isMasterAdmin ? "Data Terkunci" : "Edit Baris"}
-                                              >
-                                                <Edit2 className="w-3.5 h-3.5" />
-                                              </button>
-                                              <button
-                                                onClick={() => handleDeleteEntry(item.id)}
-                                                disabled={isSelectedDateLocked && !isMasterAdmin}
-                                                className={`p-1.5 border rounded-lg transition-all ${
-                                                  isSelectedDateLocked && !isMasterAdmin
-                                                    ? "border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed"
-                                                    : "border-[#e8e4de] hover:border-rose-200 hover:bg-rose-50 text-[#6b6560] hover:text-rose-600"
-                                                }`}
-                                                title={isSelectedDateLocked && !isMasterAdmin ? "Data Terkunci" : "Hapus Baris"}
-                                              >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                              </button>
-                                            </div>
-                                          </td>
+                                          {!isGuest && (
+                                            <td className="py-2.5 px-4 text-center">
+                                              <div className="flex items-center justify-center gap-1.5">
+                                                <button
+                                                  onClick={() => handleOpenEditForm(item)}
+                                                  disabled={isSelectedDateLocked && !isMasterAdmin}
+                                                  className={`p-1.5 border rounded-lg transition-all cursor-pointer ${
+                                                    isSelectedDateLocked && !isMasterAdmin
+                                                      ? "border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed"
+                                                      : "border-[#e8e4de] hover:border-brand-green hover:bg-brand-green-light text-[#6b6560] hover:text-brand-green"
+                                                  }`}
+                                                  title={isSelectedDateLocked && !isMasterAdmin ? "Data Verified (Terkunci)" : "Edit Baris"}
+                                                >
+                                                  <Edit2 className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                  onClick={() => handleDeleteEntry(item.id)}
+                                                  disabled={isSelectedDateLocked && !isMasterAdmin}
+                                                  className={`p-1.5 border rounded-lg transition-all cursor-pointer ${
+                                                    isSelectedDateLocked && !isMasterAdmin
+                                                      ? "border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed"
+                                                      : "border-[#e8e4de] hover:border-rose-200 hover:bg-rose-50 text-[#6b6560] hover:text-rose-600"
+                                                  }`}
+                                                  title={isSelectedDateLocked && !isMasterAdmin ? "Data Verified (Terkunci)" : "Hapus Baris"}
+                                                >
+                                                  <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                              </div>
+                                            </td>
+                                          )}
                                         </tr>
                                       ))}
                                     </tbody>
@@ -1615,7 +1725,7 @@ export default function App() {
                                         <td className="py-3 px-4 text-center font-extrabold text-rose-600 bg-[#e8f0e6]/15">{pbrStats.pecah}</td>
                                         <td className="py-3 px-4 text-center font-extrabold text-amber-600 bg-[#e8f0e6]/15">{pbrStats.sortir}</td>
                                         <td className="py-3 px-4 text-center font-extrabold text-brand-green bg-[#e8f0e6]/30">{pbrStats.total}</td>
-                                        <td></td>
+                                        {!isGuest && <td></td>}
                                       </tr>
                                     </tfoot>
                                   </table>
@@ -1681,32 +1791,34 @@ export default function App() {
                                       <div className="text-[9px] text-[#9e9892] font-semibold break-all max-w-[50%]">
                                         Oleh: {item.createdBy?.split("@")[0] || "Sistem"}
                                       </div>
-                                      <div className="flex items-center gap-1.5">
-                                        <button
-                                          onClick={() => handleOpenEditForm(item)}
-                                          disabled={isSelectedDateLocked && !isMasterAdmin}
-                                          className={`px-2.5 py-1.5 border rounded-lg transition-all text-[11px] font-bold flex items-center gap-1 ${
-                                            isSelectedDateLocked && !isMasterAdmin
-                                              ? "border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed"
-                                              : "border-[#e8e4de] bg-white hover:border-brand-green hover:bg-brand-green-light text-[#6b6560] hover:text-brand-green"
-                                          }`}
-                                        >
-                                          <Edit2 className="w-3 h-3" />
-                                          Edit
-                                        </button>
-                                        <button
-                                          onClick={() => handleDeleteEntry(item.id)}
-                                          disabled={isSelectedDateLocked && !isMasterAdmin}
-                                          className={`px-2.5 py-1.5 border rounded-lg transition-all text-[11px] font-bold flex items-center gap-1 ${
-                                            isSelectedDateLocked && !isMasterAdmin
-                                              ? "border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed"
-                                              : "border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700"
-                                          }`}
-                                        >
-                                          <Trash2 className="w-3 h-3" />
-                                          Hapus
-                                        </button>
-                                      </div>
+                                      {!isGuest && (
+                                        <div className="flex items-center gap-1.5">
+                                          <button
+                                            onClick={() => handleOpenEditForm(item)}
+                                            disabled={isSelectedDateLocked && !isMasterAdmin}
+                                            className={`px-2.5 py-1.5 border rounded-lg transition-all text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
+                                              isSelectedDateLocked && !isMasterAdmin
+                                                ? "border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed"
+                                                : "border-[#e8e4de] bg-white hover:border-brand-green hover:bg-brand-green-light text-[#6b6560] hover:text-brand-green"
+                                            }`}
+                                          >
+                                            <Edit2 className="w-3 h-3" />
+                                            Edit
+                                          </button>
+                                          <button
+                                            onClick={() => handleDeleteEntry(item.id)}
+                                            disabled={isSelectedDateLocked && !isMasterAdmin}
+                                            className={`px-2.5 py-1.5 border rounded-lg transition-all text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
+                                              isSelectedDateLocked && !isMasterAdmin
+                                                ? "border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed"
+                                                : "border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700"
+                                            }`}
+                                          >
+                                            <Trash2 className="w-3 h-3" />
+                                            Hapus
+                                          </button>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 ))}
@@ -1906,15 +2018,17 @@ export default function App() {
                 <span className="text-[10px]">Dashboard</span>
               </button>
 
-              <button
-                onClick={() => setActiveTab("input")}
-                className={`flex-1 flex flex-col items-center gap-1 py-1 px-2 rounded-xl transition-all ${
-                  activeTab === "input" ? "text-brand-green bg-brand-green-light/60 font-bold" : "text-[#9e9892]"
-                }`}
-              >
-                <FileText className="w-5 h-5" />
-                <span className="text-[10px]">Pelaporan</span>
-              </button>
+              {!isGuest && (
+                <button
+                  onClick={() => setActiveTab("input")}
+                  className={`flex-1 flex flex-col items-center gap-1 py-1 px-2 rounded-xl transition-all ${
+                    activeTab === "input" ? "text-brand-green bg-brand-green-light/60 font-bold" : "text-[#9e9892]"
+                  }`}
+                >
+                  <FileText className="w-5 h-5" />
+                  <span className="text-[10px]">Pelaporan</span>
+                </button>
+              )}
 
               {currentUser?.email?.toLowerCase() === "managementpackaging@gmail.com" && (
                 <button

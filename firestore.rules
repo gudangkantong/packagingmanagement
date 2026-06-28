@@ -4,12 +4,16 @@ service cloud.firestore {
     
     // Helper to check if user is authenticated and has an email
     function isAuthenticated() {
-      return request.auth != null && request.auth.token.email != null;
+      return request.auth != null && 
+             request.auth.token != null && 
+             request.auth.token.email != null;
     }
     
     // Helper to check if the user is the master admin
     function isMasterAdmin() {
-      return isAuthenticated() && request.auth.token.email == "managementpackaging@gmail.com";
+      return request.auth != null && 
+             request.auth.token != null && 
+             request.auth.token.email == "managementpackaging@gmail.com";
     }
     
     // Helper to check if the user's email exists in allowed_users collection
@@ -32,12 +36,12 @@ service cloud.firestore {
     }
 
     match /locked_dates/{date} {
-      allow read: if isAllowedUser();
+      allow read: if request.auth != null;
       allow write: if isMasterAdmin();
     }
 
     match /laporan_kantong/{id} {
-      allow read: if isAllowedUser();
+      allow read: if request.auth != null;
       
       // Allow create only if user is allowed and date is not locked (or is master admin)
       allow create: if isAllowedUser() && (

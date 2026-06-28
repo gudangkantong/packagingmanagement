@@ -682,12 +682,7 @@ export default function App() {
       return;
     }
 
-    const clientId = (import.meta as any).env.VITE_GOOGLE_CLIENT_ID;
-    console.log("DEBUG: VITE_GOOGLE_CLIENT_ID =", clientId);
-    if (!clientId) {
-      triggerToast("Konfigurasi Google Client ID belum diatur di Settings.", "er");
-      return;
-    }
+    const clientId = (import.meta as any).env.VITE_GOOGLE_CLIENT_ID || "780987725360-4k7qen9j0mh4epbo1u98tlf2eftik1n8.apps.googleusercontent.com";
 
     const client = (window as any).google.accounts.oauth2.initTokenClient({
       client_id: clientId,

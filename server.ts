@@ -13,7 +13,7 @@ app.use(express.json({ limit: "50mb" }));
 
 // Helper to get OAuth2 client
 function getOAuth2Client(accessToken: string) {
-  const clientId = process.env.VITE_GOOGLE_CLIENT_ID;
+  const clientId = process.env.VITE_GOOGLE_CLIENT_ID || "780987725360-4k7qen9j0mh4epbo1u98tlf2eftik1n8.apps.googleusercontent.com";
   const oauth2Client = new google.auth.OAuth2(clientId);
   oauth2Client.setCredentials({ access_token: accessToken });
   return oauth2Client;
@@ -29,9 +29,6 @@ app.post("/api/drive/upload", async (req, res) => {
     }
 
     const auth = getOAuth2Client(accessToken);
-    if (!process.env.VITE_GOOGLE_CLIENT_ID) {
-      console.error("VITE_GOOGLE_CLIENT_ID is missing in server environment");
-    }
     const drive = google.drive({ version: "v3", auth });
 
     // 1. Ensure folder "Arsip Laporan Pemakaian Kantong" exists or create it

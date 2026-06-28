@@ -683,6 +683,7 @@ export default function App() {
     }
 
     const clientId = (import.meta as any).env.VITE_GOOGLE_CLIENT_ID;
+    console.log("DEBUG: VITE_GOOGLE_CLIENT_ID =", clientId);
     if (!clientId) {
       triggerToast("Konfigurasi Google Client ID belum diatur di Settings.", "er");
       return;

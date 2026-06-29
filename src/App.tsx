@@ -1180,7 +1180,7 @@ export default function App() {
 
                     <div className="flex-1 flex items-center justify-center min-w-[160px]">
                       <div className="flex items-center bg-white border border-brand-green/30 shadow-xs rounded-xl p-1 px-3 cursor-pointer hover:shadow-md transition-all hover:border-brand-green/60 gap-2 relative">
-                        <div className="text-[11px] text-brand-green font-black uppercase tracking-wider pr-2 border-r border-slate-200 leading-none shrink-0">
+                        <div className="text-[11px] text-brand-green font-extrabold uppercase tracking-wider pr-2 border-r border-slate-200 leading-none shrink-0 font-sans">
                           {formatDateDisplay(selectedDate).split(",")[0]}
                         </div>
                         <div className="flex items-center gap-1.5 flex-1">
@@ -1189,7 +1189,7 @@ export default function App() {
                             type="date"
                             value={selectedDate}
                             onChange={(e) => setSelectedDate(e.target.value)}
-                            className="bg-transparent border-none text-[13px] font-black text-[#1a1814] focus:outline-none cursor-pointer w-full"
+                            className="bg-transparent border-none text-[13px] font-extrabold text-[#1a1814] focus:outline-none cursor-pointer w-full font-sans"
                           />
                         </div>
                       </div>

@@ -1286,7 +1286,7 @@ export default function App() {
             )}
 
             {/* Main viewports */}
-            <main className="flex-1 max-w-7xl mx-auto px-4 md:px-6 py-6 w-full">
+            <main className="flex-1 max-w-7xl mx-auto px-4 md:px-6 pt-3 pb-10 w-full">
               {/* Locked/Verified Banner */}
               <AnimatePresence>
                 {showLockedAlert && isSelectedDateLocked && (
@@ -1474,9 +1474,9 @@ export default function App() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -15 }}
                     transition={{ duration: 0.2 }}
-                    className="space-y-4"
+                    className="space-y-1"
                   >
-                    <div className="flex items-center justify-between gap-4 py-2">
+                    <div className="flex items-center justify-between gap-4 pt-0 pb-2">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
                         <h2 className="text-[11px] font-bold text-[#6b6560] tracking-widest uppercase">
                           Daftar Laporan

@@ -828,10 +828,18 @@ export default function App() {
 
             // Auto-upload to Drive for Admin Utama
             if (isMasterAdmin && driveToken) {
-              const wb = await generateExcelReport(filteredReports, selectedDate, currentUser?.email, true);
-              const buffer = await wb.xlsx.writeBuffer();
-              const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-              uploadToDrive(driveToken, blob, selectedDate);
+              try {
+                triggerToast("Membuat laporan Excel...", "inf");
+                const wb = await generateExcelReport(filteredReports, selectedDate, currentUser?.email, true);
+                const buffer = await wb.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+                console.log("Excel blob size:", blob.size, "bytes");
+                triggerToast("Mengirim ke Google Drive...", "inf");
+                await uploadToDrive(driveToken, blob, selectedDate);
+              } catch (uploadErr: any) {
+                console.error("Drive upload error detail:", uploadErr);
+                triggerToast(`Gagal upload: ${uploadErr.message}`, "er");
+              }
             }
           }
         } catch (err) {

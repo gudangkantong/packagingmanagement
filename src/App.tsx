@@ -1090,7 +1090,7 @@ export default function App() {
                 </div>
 
                 {/* Centered Title & User Info */}
-                <div className="flex-1 min-w-0 flex flex-col items-center justify-center text-center px-1 sm:px-2">
+                <div className="flex-1 min-w-0 flex flex-col items-center md:items-start justify-center text-center md:text-left px-1 sm:px-2">
                   <h1 className="text-sm sm:text-lg md:text-xl font-extrabold leading-tight tracking-tight text-[#1a1814] uppercase">
                     LAPORAN <span className="text-brand-green">PEMAKAIAN KANTONG</span>
                   </h1>

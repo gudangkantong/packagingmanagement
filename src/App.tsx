@@ -1450,6 +1450,111 @@ export default function App() {
                                 </div>
                               </div>
                             </div>
+
+                            {/* Shift Report Section */}
+                            {(() => {
+                              const shiftData = SHIFT_INFO.map(shift => {
+                                const shiftReports = factoryReports.filter(r => r.shift === shift.id);
+                                if (shiftReports.length === 0) return null;
+
+                                const shiftAgg = JENIS_KANTONG.reduce((acc, name) => {
+                                  acc[name] = { utuh: 0, pecah: 0, sortir: 0, total: 0, vendors: {} };
+                                  return acc;
+                                }, {} as Record<string, { utuh: number; pecah: number; sortir: number; total: number; vendors: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> }>);
+
+                                shiftReports.forEach(r => {
+                                  if (shiftAgg[r.nama]) {
+                                    shiftAgg[r.nama].utuh += r.utuh;
+                                    shiftAgg[r.nama].pecah += r.pecah;
+                                    shiftAgg[r.nama].sortir += r.sortir;
+                                    shiftAgg[r.nama].total += r.total;
+                                    if (!shiftAgg[r.nama].vendors[r.vendor]) {
+                                      shiftAgg[r.nama].vendors[r.vendor] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
+                                    }
+                                    shiftAgg[r.nama].vendors[r.vendor].utuh += r.utuh;
+                                    shiftAgg[r.nama].vendors[r.vendor].pecah += r.pecah;
+                                    shiftAgg[r.nama].vendors[r.vendor].sortir += r.sortir;
+                                    shiftAgg[r.nama].vendors[r.vendor].total += r.total;
+                                  }
+                                });
+
+                                return { shift, reports: shiftReports, agg: shiftAgg };
+                              }).filter(Boolean);
+
+                              if (shiftData.length === 0) return null;
+
+                              return (
+                                <div className="space-y-2 -mt-2">
+                                  <h3 className="text-sm font-extrabold text-[#6b6560] tracking-wide uppercase mb-2 text-center [text-shadow:0_1px_0_rgba(255,255,255,0.8)]">LAPORAN PER SHIFT</h3>
+                                  {shiftData.map(({ shift, reports: sReports, agg: shiftAgg }) => {
+                                    const shiftKey = `${pabrikName}-${shift!.id}`;
+                                    const isShiftExpanded = expandedShifts[shiftKey];
+                                    return (
+                                      <div key={shift!.id} className="border border-amber-200/60 rounded-2xl overflow-hidden bg-[#fffdf5]">
+                                        <div 
+                                          className="flex items-center gap-2 px-4 py-2.5 bg-amber-50/80 cursor-pointer hover:bg-amber-50 transition-colors"
+                                          onClick={() => setExpandedShifts(prev => ({ ...prev, [shiftKey]: !prev[shiftKey] }))}
+                                        >
+                                          <span className="text-sm">⏰</span>
+                                          <span className="text-xs font-bold text-amber-800">{shift!.label} ({shift!.time})</span>
+                                          <span className="ml-auto text-[10px] bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded-full">{sReports.length} laporan</span>
+                                          <span className="text-xs text-amber-600">{isShiftExpanded ? '▼' : '▶'}</span>
+                                        </div>
+                                        {isShiftExpanded && (
+                                          <div className="overflow-x-auto">
+                                            <table className="w-full text-left text-xs border-collapse">
+                                              <thead>
+                                                <tr className="bg-[#faf9f7] text-[#6b6560] uppercase text-[10px] sm:text-xs font-semibold border-b border-[#e8e4de]">
+                                                  <th className="py-2 px-2 sm:px-4 font-semibold text-[#1a1814]">Jenis Kantong</th>
+                                                  <th className="py-2 px-2 sm:px-4 font-semibold text-brand-green text-center">Utuh</th>
+                                                  <th className="py-2 px-2 sm:px-4 font-semibold text-rose-600 text-center">Pecah</th>
+                                                  <th className="py-2 px-2 sm:px-4 font-semibold text-amber-600 text-center">Sortir</th>
+                                                  <th className="py-2 px-2 sm:px-4 font-semibold text-[#1a1814] text-center">Total</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody className="divide-y divide-[#e8e4de]">
+                                                {JENIS_KANTONG.map((name, idx) => {
+                                                  const stat = shiftAgg[name];
+                                                  const isZero = stat.total === 0;
+                                                  const isShiftBagExpanded = expandedBagTypes[`shift-${shiftKey}-${name}`];
+                                                  if (isZero) return null;
+                                                  return (
+                                                    <React.Fragment key={name}>
+                                                      <tr 
+                                                        className="hover:bg-[#faf9f7]/50 transition-colors cursor-pointer"
+                                                        onClick={() => setExpandedBagTypes(prev => ({ ...prev, [`shift-${shiftKey}-${name}`]: !prev[`shift-${shiftKey}-${name}`] }))}
+                                                      >
+                                                        <td className="py-1.5 px-2 sm:px-4 font-bold text-[#1a1814] text-xs">
+                                                          {JENIS_KANTONG_SHORT[idx]}
+                                                          <span className="ml-2 text-[10px] text-[#9e9892]">{isShiftBagExpanded ? '▼' : '▶'}</span>
+                                                        </td>
+                                                        <td className="py-1.5 px-2 sm:px-4 text-center font-semibold text-xs text-[#1a1814]">{stat.utuh.toLocaleString()}</td>
+                                                        <td className="py-1.5 px-2 sm:px-4 text-center font-semibold text-xs text-rose-600">{stat.pecah.toLocaleString()}</td>
+                                                        <td className="py-1.5 px-2 sm:px-4 text-center font-semibold text-xs text-amber-600">{stat.sortir.toLocaleString()}</td>
+                                                        <td className="py-1.5 px-2 sm:px-4 text-center font-extrabold text-xs text-brand-green">{stat.total.toLocaleString()}</td>
+                                                      </tr>
+                                                      {isShiftBagExpanded && Object.entries(stat.vendors).map(([vendorName, vStat]) => (
+                                                        <tr key={`${name}-${vendorName}`} className="bg-[#fdfcfb]">
+                                                          <td className="py-1 px-4 sm:px-6 text-[10px] text-[#9e9892] italic pl-8">↳ {vendorName}</td>
+                                                          <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#9e9892]">{vStat.utuh.toLocaleString()}</td>
+                                                          <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#9e9892]">{vStat.pecah.toLocaleString()}</td>
+                                                          <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#9e9892]">{vStat.sortir.toLocaleString()}</td>
+                                                          <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#9e9892] font-semibold">{vStat.total.toLocaleString()}</td>
+                                                        </tr>
+                                                      ))}
+                                                    </React.Fragment>
+                                                  );
+                                                })}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })

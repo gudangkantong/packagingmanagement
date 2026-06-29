@@ -52,7 +52,7 @@ import { auth, db, firebaseConfig } from "./firebase";
 import { LaporanKantong, AllowedUser, LockedDate } from "./types";
 import { getDateString, formatDateDisplay } from "./utils";
 import { generateCSVContent, JENIS_KANTONG, JENIS_KANTONG_SHORT } from "./csvUtils";
-import { downloadExcelReport, getExcelBase64 } from "./excelUtils";
+import { downloadExcelReport, getExcelBlob } from "./excelUtils";
 import logo from "./assets/logo.jpg";
 enum OperationType {
   CREATE = "create",
@@ -699,18 +699,17 @@ export default function App() {
     client.requestAccessToken();
   };
 
-  const uploadToDrive = async (token: string, excelBase64: string, date: string) => {
+  const uploadToDrive = async (token: string, excelBlob: Blob, date: string) => {
     setIsDriveUploading(true);
     try {
       const fileName = `Laporan_Kantong_${date}.xlsx`;
+      const formData = new FormData();
+      formData.append('file', excelBlob, fileName);
+      formData.append('fileName', fileName);
+      formData.append('accessToken', token);
       const response = await fetch("/api/drive/upload", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          excelContent: excelBase64,
-          fileName,
-          accessToken: token,
-        }),
+        body: formData,
       });
 
       const result = await response.json();
@@ -768,8 +767,8 @@ export default function App() {
 
             // Auto-upload to Drive for Admin Utama
             if (isMasterAdmin && driveToken) {
-              const excelBase64 = await getExcelBase64(filteredReports, selectedDate, currentUser?.email, true);
-              uploadToDrive(driveToken, excelBase64, selectedDate);
+              const excelBlob = await getExcelBlob(filteredReports, selectedDate, currentUser?.email, true);
+              uploadToDrive(driveToken, excelBlob, selectedDate);
             }
           }
         } catch (err) {

@@ -240,21 +240,14 @@ export const downloadExcelReport = async (
   URL.revokeObjectURL(url);
 };
 
-// Get Excel as base64 (for Drive upload)
-export const getExcelBase64 = async (
+// Get Excel as Blob (for Drive upload)
+export const getExcelBlob = async (
   filteredReports: LaporanKantong[],
   selectedDate: string,
   currentUserEmail: string | null | undefined,
   lockedStatus: boolean
-): Promise<string> => {
+): Promise<Blob> => {
   const wb = await generateExcelReport(filteredReports, selectedDate, currentUserEmail, lockedStatus);
   const buffer = await wb.xlsx.writeBuffer();
-  // Convert to base64 using array approach (most reliable)
-  const bytes = new Uint8Array(buffer);
-  const chunks: string[] = [];
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    chunks.push(String.fromCharCode(...bytes.subarray(i, i + chunkSize)));
-  }
-  return btoa(chunks.join(''));
+  return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 };

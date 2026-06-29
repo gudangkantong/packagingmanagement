@@ -3,6 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { google } from "googleapis";
 import { Readable } from "stream";
+import multer from "multer";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -11,6 +12,10 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+
+// Multer for file upload (memory storage)
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 // Helper to get OAuth2 client
 function getOAuth2Client(accessToken: string) {
@@ -21,18 +26,20 @@ function getOAuth2Client(accessToken: string) {
 }
 
 // API Routes
-app.post("/api/drive/upload", async (req, res) => {
+app.post("/api/drive/upload", upload.single('file'), async (req, res) => {
   try {
-    const { excelContent, fileName, accessToken } = req.body;
+    const file = req.file;
+    const fileName = req.body.fileName;
+    const accessToken = req.body.accessToken;
 
-    console.log(`[Drive Upload] Received: fileName=${fileName}, base64Length=${excelContent?.length || 0}, hasToken=${!!accessToken}`);
+    console.log(`[Drive Upload] Received: fileName=${fileName}, fileSize=${file?.size || 0}, hasToken=${!!accessToken}`);
 
     if (!accessToken) {
       return res.status(401).json({ error: "Access token is required" });
     }
 
-    if (!excelContent || excelContent.length === 0) {
-      return res.status(400).json({ error: "Excel content is empty" });
+    if (!file || file.size === 0) {
+      return res.status(400).json({ error: "Excel file is empty" });
     }
 
     const auth = getOAuth2Client(accessToken);
@@ -61,11 +68,10 @@ app.post("/api/drive/upload", async (req, res) => {
       folderId = newFolder.data.id!;
     }
 
-    // 2. Convert base64 to Buffer and create Readable stream
-    const fileBuffer = Buffer.from(excelContent, 'base64');
+    // 2. Create Readable stream from file buffer
     const excelMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     const bufferStream = new Readable();
-    bufferStream.push(fileBuffer);
+    bufferStream.push(file.buffer);
     bufferStream.push(null);
 
     // 3. Check if file already exists in this folder
@@ -75,11 +81,11 @@ app.post("/api/drive/upload", async (req, res) => {
       spaces: "drive",
     });
 
-    let file;
+    let result;
     if (existingFileRes.data.files && existingFileRes.data.files.length > 0) {
       // Update existing file
       const fileId = existingFileRes.data.files[0].id!;
-      file = await drive.files.update({
+      result = await drive.files.update({
         fileId: fileId,
         media: {
           mimeType: excelMime,
@@ -98,14 +104,15 @@ app.post("/api/drive/upload", async (req, res) => {
         body: bufferStream,
       };
 
-      file = await drive.files.create({
+      result = await drive.files.create({
         requestBody: fileMetadata,
         media: media,
         fields: "id, webViewLink",
       });
     }
 
-    res.json({ success: true, fileId: file.data.id, link: file.data.webViewLink });
+    console.log(`[Drive Upload] Success: fileId=${result.data.id}`);
+    res.json({ success: true, fileId: result.data.id, link: result.data.webViewLink });
   } catch (error: any) {
     console.error("Drive upload error:", error);
     res.status(500).json({ error: error.message || "Internal Server Error" });

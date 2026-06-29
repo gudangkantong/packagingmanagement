@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { google } from "googleapis";
+import { Readable } from "stream";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -24,8 +25,14 @@ app.post("/api/drive/upload", async (req, res) => {
   try {
     const { excelContent, fileName, accessToken } = req.body;
 
+    console.log(`[Drive Upload] Received: fileName=${fileName}, base64Length=${excelContent?.length || 0}, hasToken=${!!accessToken}`);
+
     if (!accessToken) {
       return res.status(401).json({ error: "Access token is required" });
+    }
+
+    if (!excelContent || excelContent.length === 0) {
+      return res.status(400).json({ error: "Excel content is empty" });
     }
 
     const auth = getOAuth2Client(accessToken);
@@ -54,9 +61,12 @@ app.post("/api/drive/upload", async (req, res) => {
       folderId = newFolder.data.id!;
     }
 
-    // 2. Convert base64 to Buffer
+    // 2. Convert base64 to Buffer and create Readable stream
     const fileBuffer = Buffer.from(excelContent, 'base64');
     const excelMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    const bufferStream = new Readable();
+    bufferStream.push(fileBuffer);
+    bufferStream.push(null);
 
     // 3. Check if file already exists in this folder
     const existingFileRes = await drive.files.list({
@@ -73,7 +83,7 @@ app.post("/api/drive/upload", async (req, res) => {
         fileId: fileId,
         media: {
           mimeType: excelMime,
-          body: Buffer.from(fileBuffer),
+          body: bufferStream,
         },
         fields: "id, webViewLink",
       });
@@ -85,7 +95,7 @@ app.post("/api/drive/upload", async (req, res) => {
       };
       const media = {
         mimeType: excelMime,
-        body: Buffer.from(fileBuffer),
+        body: bufferStream,
       };
 
       file = await drive.files.create({

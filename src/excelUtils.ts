@@ -249,17 +249,12 @@ export const getExcelBase64 = async (
 ): Promise<string> => {
   const wb = await generateExcelReport(filteredReports, selectedDate, currentUserEmail, lockedStatus);
   const buffer = await wb.xlsx.writeBuffer();
-  // Convert ArrayBuffer to base64 using FileReader (reliable for binary data)
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result as string;
-      // Remove data:...base64, prefix
-      const base64 = dataUrl.split(',')[1];
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+  // Convert to base64 using array approach (most reliable)
+  const bytes = new Uint8Array(buffer);
+  const chunks: string[] = [];
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    chunks.push(String.fromCharCode(...bytes.subarray(i, i + chunkSize)));
+  }
+  return btoa(chunks.join(''));
 };

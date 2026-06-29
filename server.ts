@@ -22,7 +22,7 @@ function getOAuth2Client(accessToken: string) {
 // API Routes
 app.post("/api/drive/upload", async (req, res) => {
   try {
-    const { csvContent, fileName, accessToken } = req.body;
+    const { excelContent, fileName, accessToken } = req.body;
 
     if (!accessToken) {
       return res.status(401).json({ error: "Access token is required" });
@@ -54,7 +54,11 @@ app.post("/api/drive/upload", async (req, res) => {
       folderId = newFolder.data.id!;
     }
 
-    // 2. Check if file already exists in this folder
+    // 2. Convert base64 to Buffer
+    const fileBuffer = Buffer.from(excelContent, 'base64');
+    const excelMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+    // 3. Check if file already exists in this folder
     const existingFileRes = await drive.files.list({
       q: `name='${fileName}' and '${folderId}' in parents and trashed=false`,
       fields: "files(id)",
@@ -68,8 +72,8 @@ app.post("/api/drive/upload", async (req, res) => {
       file = await drive.files.update({
         fileId: fileId,
         media: {
-          mimeType: "text/csv",
-          body: csvContent,
+          mimeType: excelMime,
+          body: Buffer.from(fileBuffer),
         },
         fields: "id, webViewLink",
       });
@@ -80,8 +84,8 @@ app.post("/api/drive/upload", async (req, res) => {
         parents: [folderId],
       };
       const media = {
-        mimeType: "text/csv",
-        body: csvContent,
+        mimeType: excelMime,
+        body: Buffer.from(fileBuffer),
       };
 
       file = await drive.files.create({

@@ -219,7 +219,17 @@ export const generateExcelReport = async (
   writeShiftReport('PBR 1', 'Pabrik Baturaja 1 (PBR 1)');
   writeShiftReport('PBR 2', 'Pabrik Baturaja 2 (PBR 2)');
 
-  // === DOWNLOAD ===
+  return wb;
+};
+
+// Download Excel file (for Export button)
+export const downloadExcelReport = async (
+  filteredReports: LaporanKantong[],
+  selectedDate: string,
+  currentUserEmail: string | null | undefined,
+  lockedStatus: boolean
+): Promise<void> => {
+  const wb = await generateExcelReport(filteredReports, selectedDate, currentUserEmail, lockedStatus);
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
@@ -228,4 +238,21 @@ export const generateExcelReport = async (
   a.download = `Laporan_Kantong_${selectedDate}.xlsx`;
   a.click();
   URL.revokeObjectURL(url);
+};
+
+// Get Excel as base64 (for Drive upload)
+export const getExcelBase64 = async (
+  filteredReports: LaporanKantong[],
+  selectedDate: string,
+  currentUserEmail: string | null | undefined,
+  lockedStatus: boolean
+): Promise<string> => {
+  const wb = await generateExcelReport(filteredReports, selectedDate, currentUserEmail, lockedStatus);
+  const buffer = await wb.xlsx.writeBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 };

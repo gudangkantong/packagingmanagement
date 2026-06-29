@@ -52,7 +52,7 @@ import { auth, db, firebaseConfig } from "./firebase";
 import { LaporanKantong, AllowedUser, LockedDate } from "./types";
 import { getDateString, formatDateDisplay } from "./utils";
 import { generateCSVContent, JENIS_KANTONG, JENIS_KANTONG_SHORT } from "./csvUtils";
-import { generateExcelReport } from "./excelUtils";
+import { downloadExcelReport, getExcelBase64 } from "./excelUtils";
 import logo from "./assets/logo.jpg";
 enum OperationType {
   CREATE = "create",
@@ -699,15 +699,15 @@ export default function App() {
     client.requestAccessToken();
   };
 
-  const uploadToDrive = async (token: string, csv: string, date: string) => {
+  const uploadToDrive = async (token: string, excelBase64: string, date: string) => {
     setIsDriveUploading(true);
     try {
-      const fileName = `Laporan_Pemakaian_Kantong_${date}.csv`;
+      const fileName = `Laporan_Kantong_${date}.xlsx`;
       const response = await fetch("/api/drive/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          csvContent: csv,
+          excelContent: excelBase64,
           fileName,
           accessToken: token,
         }),
@@ -768,8 +768,8 @@ export default function App() {
 
             // Auto-upload to Drive for Admin Utama
             if (isMasterAdmin && driveToken) {
-              const csv = generateCSVContent(filteredReports, selectedDate, currentUser?.email);
-              uploadToDrive(driveToken, csv, selectedDate);
+              const excelBase64 = await getExcelBase64(filteredReports, selectedDate, currentUser?.email, true);
+              uploadToDrive(driveToken, excelBase64, selectedDate);
             }
           }
         } catch (err) {
@@ -822,7 +822,7 @@ export default function App() {
       triggerToast("Tidak ada data untuk diekspor pada tanggal ini", "er");
       return;
     }
-    generateExcelReport(filteredReports, selectedDate, currentUser?.email, isSelectedDateLocked);
+    downloadExcelReport(filteredReports, selectedDate, currentUser?.email, isSelectedDateLocked);
   };
 
   return (

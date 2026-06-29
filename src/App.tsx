@@ -52,7 +52,7 @@ import { auth, db, firebaseConfig } from "./firebase";
 import { LaporanKantong, AllowedUser, LockedDate } from "./types";
 import { getDateString, formatDateDisplay } from "./utils";
 import { generateCSVContent, JENIS_KANTONG, JENIS_KANTONG_SHORT } from "./csvUtils";
-import { downloadExcelReport, getExcelBase64 } from "./excelUtils";
+import { downloadExcelReport, generateExcelReport } from "./excelUtils";
 import logo from "./assets/logo.jpg";
 enum OperationType {
   CREATE = "create",
@@ -699,41 +699,100 @@ export default function App() {
     client.requestAccessToken();
   };
 
-  const uploadToDrive = async (token: string, base64: string, date: string) => {
+  const uploadToDrive = async (token: string, excelBlob: Blob, date: string) => {
     setIsDriveUploading(true);
     try {
       const fileName = `Laporan_Kantong_${date}.xlsx`;
-      const response = await fetch("/api/drive/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileContent: base64,
-          fileName,
-          accessToken: token,
-          mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        }),
-      });
 
-      const result = await response.json();
-      if (result.success) {
+      // 1. Find or create folder
+      const folderName = "Arsip Laporan Pemakaian Kantong";
+      const folderSearch = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name)`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const folderData = await folderSearch.json();
+
+      let folderId = "";
+      if (folderData.files && folderData.files.length > 0) {
+        folderId = folderData.files[0].id;
+      } else {
+        // Create folder
+        const createFolder = await fetch("https://www.googleapis.com/drive/v3/files", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: folderName,
+            mimeType: "application/vnd.google-apps.folder",
+          }),
+        });
+        const folderResult = await createFolder.json();
+        folderId = folderResult.id;
+      }
+
+      // 2. Check if file exists
+      const fileSearch = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=name='${fileName}' and '${folderId}' in parents and trashed=false&fields=files(id)`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const fileData = await fileSearch.json();
+
+      // 3. Upload file (create or update)
+      const metadata = {
+        name: fileName,
+        parents: fileData.files?.length > 0 ? undefined : [folderId],
+        mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      };
+
+      const form = new FormData();
+      form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+      form.append("file", excelBlob);
+
+      let uploadRes;
+      if (fileData.files && fileData.files.length > 0) {
+        // Update existing file
+        uploadRes = await fetch(
+          `https://www.googleapis.com/upload/drive/v3/files/${fileData.files[0].id}?uploadType=multipart`,
+          {
+            method: "PATCH",
+            headers: { Authorization: `Bearer ${token}` },
+            body: form,
+          }
+        );
+      } else {
+        // Create new file
+        uploadRes = await fetch(
+          "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: form,
+          }
+        );
+      }
+
+      if (uploadRes.ok) {
         triggerToast("Laporan berhasil dikirim ke Google Drive!", "ok");
       } else {
-        throw new Error(result.error);
+        const errData = await uploadRes.json();
+        throw new Error(errData.error?.message || "Upload failed");
       }
     } catch (err: any) {
       console.error("Drive upload failed:", err);
       const errMsg = err.message || "";
       if (
-        errMsg.includes("invalid_grant") || 
-        errMsg.includes("expired") || 
-        errMsg.includes("invalid authentication") || 
+        errMsg.includes("invalid_grant") ||
+        errMsg.includes("expired") ||
+        errMsg.includes("invalid authentication") ||
         errMsg.includes("401")
       ) {
         setDriveToken(null);
         localStorage.removeItem("smbr_drive_token");
         triggerToast("Sesi Google Drive berakhir, silakan hubungkan kembali.", "er");
       } else {
-        triggerToast("Gagal mengirim laporan ke Google Drive.", "er");
+        triggerToast(`Gagal mengirim laporan ke Google Drive: ${errMsg}`, "er");
       }
     } finally {
       setIsDriveUploading(false);
@@ -769,8 +828,10 @@ export default function App() {
 
             // Auto-upload to Drive for Admin Utama
             if (isMasterAdmin && driveToken) {
-              const base64 = await getExcelBase64(filteredReports, selectedDate, currentUser?.email, true);
-              uploadToDrive(driveToken, base64, selectedDate);
+              const wb = await generateExcelReport(filteredReports, selectedDate, currentUser?.email, true);
+              const buffer = await wb.xlsx.writeBuffer();
+              const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+              uploadToDrive(driveToken, blob, selectedDate);
             }
           }
         } catch (err) {

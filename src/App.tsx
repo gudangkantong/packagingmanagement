@@ -1094,7 +1094,7 @@ export default function App() {
                   <h1 className="text-sm sm:text-lg md:text-xl font-extrabold leading-tight tracking-tight text-[#1a1814] uppercase">
                     LAPORAN <span className="text-brand-green">PEMAKAIAN KANTONG</span>
                   </h1>
-                  <div className="text-[9px] sm:text-[10px] text-[#9e9892] font-semibold flex items-center justify-center gap-1 w-full min-w-0 mt-0.5">
+                  <div className="text-[9px] sm:text-[10px] text-[#9e9892] font-semibold flex items-center justify-center md:justify-start gap-1 w-full min-w-0 mt-0.5">
                     <UserCheck className={`w-3 h-3 shrink-0 ${isGuest ? "text-blue-600" : "text-emerald-600"}`} />
                     <span className="truncate max-w-[100px] xs:max-w-[140px] sm:max-w-none">
                       {isGuest ? "Tamu (Guest)" : currentUser?.email}

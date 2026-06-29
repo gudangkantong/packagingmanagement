@@ -1340,10 +1340,16 @@ export default function App() {
                           </div>
                         </div>
                         <h4 className="text-sm font-extrabold text-[#1a1814]">Belum Ada Laporan Pemakaian</h4>
-                        <p className="text-xs text-[#9e9892] mt-1 max-w-sm mx-auto">
-                          {isGuest
-                            ? `Tidak ada laporan pemakaian kantong untuk tanggal ${formatDateDisplay(selectedDate)}.`
-                            : `Tidak ada laporan pemakaian kantong untuk tanggal ${formatDateDisplay(selectedDate)}. Silakan buka tab Pelaporan untuk menambahkan data baru.`}
+                        <p className="text-xs text-[#5c554f] mt-1.5 max-w-sm mx-auto leading-relaxed">
+                          Tidak ada laporan pemakaian kantong untuk tanggal{" "}
+                          <span className="font-extrabold text-[#1a1814] bg-[#e8f0e6] px-1.5 py-0.5 rounded-md inline-block">
+                            {formatDateDisplay(selectedDate)}
+                          </span>.
+                          {!isGuest && (
+                            <span className="block mt-1.5 text-[#9e9892] text-[11px] font-medium">
+                              Silakan buka tab <span className="font-bold text-brand-green">Pelaporan</span> untuk menambahkan data baru.
+                            </span>
+                          )}
                         </p>
                       </div>
                     ) : (

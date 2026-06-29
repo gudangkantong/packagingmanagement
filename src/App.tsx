@@ -1476,29 +1476,38 @@ export default function App() {
                     transition={{ duration: 0.2 }}
                     className="space-y-4"
                   >
-                    <div className="flex items-center justify-between gap-4">
-                      <h2 className="text-sm font-extrabold text-[#6b6560] tracking-wide uppercase">
-                        Daftar Laporan Tanggal: {formatDateDisplay(selectedDate)}
-                      </h2>
+                    <div className="flex items-center justify-between gap-4 py-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                        <h2 className="text-[11px] font-bold text-[#6b6560] tracking-widest uppercase">
+                          Daftar Laporan
+                        </h2>
+                        <div className="h-4 w-[1px] bg-[#e8e4de] hidden sm:block"></div>
+                        <div className="text-sm font-extrabold text-[#1a1814] flex items-center gap-1.5">
+                          <CalendarIcon className="w-3.5 h-3.5 text-brand-green" />
+                          {formatDateDisplay(selectedDate)}
+                        </div>
+                      </div>
                       {!isGuest && (
                         <button
                           onClick={handleOpenAddForm}
                           disabled={isSelectedDateLocked && !isMasterAdmin}
-                          className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer ${
+                          className={`h-10 px-5 rounded-xl font-bold text-[13px] flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 ${
                             isSelectedDateLocked && !isMasterAdmin
                               ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200 shadow-none"
-                              : "bg-brand-green hover:bg-brand-green-hover text-white"
+                              : "bg-brand-green hover:bg-brand-green-hover text-white hover:shadow-md"
                           }`}
                         >
                           {isSelectedDateLocked && !isMasterAdmin ? (
                             <>
                               <Lock className="w-4 h-4 text-slate-400" />
-                              Verified
+                              <span>Verified</span>
                             </>
                           ) : (
                             <>
-                              <Plus className="w-4 h-4" />
-                              Tambah Data Baru
+                              <div className="bg-white/20 p-0.5 rounded-md">
+                                <Plus className="w-4 h-4" />
+                              </div>
+                              <span>Tambah Data Baru</span>
                             </>
                           )}
                         </button>

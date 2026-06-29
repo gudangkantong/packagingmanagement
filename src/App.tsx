@@ -1543,6 +1543,7 @@ export default function App() {
                                         <th className="py-3 px-4 text-center text-rose-600">Pecah</th>
                                         <th className="py-3 px-4 text-center text-amber-600">Sortir</th>
                                         <th className="py-3 px-4 text-center font-extrabold">Total</th>
+                                        <th className="py-3 px-4">Oleh</th>
                                         {!isGuest && <th className="py-3 px-4 text-center w-28">Aksi</th>}
                                       </tr>
                                     </thead>
@@ -1573,6 +1574,9 @@ export default function App() {
                                           <td className="py-2.5 px-4 text-center font-bold text-amber-600">{item.sortir}</td>
                                           <td className="py-2.5 px-4 text-center font-extrabold bg-[#e8f0e6]/20 text-[#1a1814]">
                                             {item.total}
+                                          </td>
+                                          <td className="py-2.5 px-4 text-[11px] text-[#6b6560] font-medium max-w-[120px] truncate" title={item.createdBy || "Sistem"}>
+                                            {item.createdBy?.split("@")[0] || "Sistem"}
                                           </td>
                                           {!isGuest && (
                                             <td className="py-2.5 px-4 text-center">
@@ -1614,6 +1618,7 @@ export default function App() {
                                         <td className="py-3 px-4 text-center font-extrabold text-rose-600 bg-[#e8f0e6]/15">{pbrStats.pecah}</td>
                                         <td className="py-3 px-4 text-center font-extrabold text-amber-600 bg-[#e8f0e6]/15">{pbrStats.sortir}</td>
                                         <td className="py-3 px-4 text-center font-extrabold text-brand-green bg-[#e8f0e6]/30">{pbrStats.total}</td>
+                                        <td></td>
                                         {!isGuest && <td></td>}
                                       </tr>
                                     </tfoot>
@@ -1677,8 +1682,9 @@ export default function App() {
 
                                     {/* Actions footer */}
                                     <div className="flex items-center justify-between pt-2 border-t border-[#faf9f6]">
-                                      <div className="text-[9px] text-[#9e9892] font-semibold break-all max-w-[50%]">
-                                        Oleh: {item.createdBy?.split("@")[0] || "Sistem"}
+                                      <div className="text-[9px] text-[#6b6560] font-bold flex items-center gap-1 bg-[#faf9f7] px-2 py-1 rounded-md border border-[#e8e4de]/60 max-w-[50%] truncate" title={item.createdBy || "Sistem"}>
+                                        <UserCheck className="w-3 h-3 text-[#9e9892]" />
+                                        <span className="truncate">Oleh: {item.createdBy?.split("@")[0] || "Sistem"}</span>
                                       </div>
                                       {!isGuest && (
                                         <div className="flex items-center gap-1.5">

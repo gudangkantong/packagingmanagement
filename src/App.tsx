@@ -1085,13 +1085,13 @@ export default function App() {
                   <h1 className="text-sm sm:text-lg md:text-xl font-extrabold leading-tight tracking-tight text-[#1a1814] uppercase">
                     LAPORAN <span className="text-brand-green">PEMAKAIAN KANTONG</span>
                   </h1>
-                  <div className="text-[9px] sm:text-[10px] text-[#9e9892] font-semibold flex items-center justify-center md:justify-start gap-1 w-full min-w-0 mt-0.5">
+                  <div className="text-[11px] sm:text-xs text-[#9e9892] font-semibold flex items-center justify-center md:justify-start gap-1 w-full min-w-0 mt-0.5">
                     <UserCheck className={`w-3 h-3 shrink-0 ${isGuest ? "text-blue-600" : "text-emerald-600"}`} />
                     <span className="truncate max-w-[100px] xs:max-w-[140px] sm:max-w-none">
                       {isGuest ? "Tamu (Guest)" : currentUser?.email}
                     </span>
                     <span className="text-[#c4bfb7] shrink-0">•</span>
-                    <span className={`px-1 rounded-sm text-[8px] sm:text-[9px] uppercase font-bold tracking-wider shrink-0 ${
+                    <span className={`px-1 rounded-sm text-[10px] sm:text-[11px] uppercase font-bold tracking-wider shrink-0 ${
                       isGuest
                         ? "text-blue-700 bg-blue-50"
                         : "text-emerald-700 bg-emerald-50"
@@ -1171,7 +1171,7 @@ export default function App() {
 
                     <div className="flex-1 flex items-center justify-center min-w-[160px]">
                       <div className="flex items-center bg-white border border-brand-green/30 shadow-xs rounded-xl p-1 px-3 cursor-pointer hover:shadow-md transition-all hover:border-brand-green/60 gap-2 relative">
-                        <div className="text-[11px] text-brand-green font-extrabold uppercase tracking-wider pr-2 border-r border-slate-200 leading-none shrink-0 font-sans">
+                        <div className="text-xs text-brand-green font-bold uppercase tracking-wider pr-2 border-r border-slate-200 leading-none shrink-0 font-sans">
                           {formatDateDisplay(selectedDate).split(",")[0]}
                         </div>
                         <div className="flex items-center gap-1.5 flex-1">
@@ -1378,7 +1378,7 @@ export default function App() {
                             <div className="flex items-center gap-2 pb-3 border-b-2 border-[#faf9f6]">
                               <span className="text-lg">🏭</span>
                               <h2 className="text-base font-extrabold text-[#1a1814]">{pabrikName}</h2>
-                              <span className="ml-auto text-[10px] bg-brand-green-light text-brand-green font-bold px-2 py-0.5 rounded-full">
+                              <span className="ml-auto text-xs bg-brand-green-light text-brand-green font-semibold px-2 py-0.5 rounded-full">
                                 {factoryReports.length} laporan
                               </span>
                             </div>
@@ -1391,12 +1391,12 @@ export default function App() {
                                 <div className="overflow-x-auto">
                                   <table className="w-full text-left text-xs border-collapse">
                                     <thead>
-                                      <tr className="bg-[#faf9f7] text-[#6b6560] uppercase text-[9px] sm:text-[10px] font-bold border-b border-[#e8e4de]">
-                                        <th className="py-2.5 px-2 sm:px-4 font-bold text-[#1a1814]">Jenis Kantong</th>
-                                        <th className="py-2.5 px-2 sm:px-4 font-bold text-brand-green text-center">Utuh</th>
-                                        <th className="py-2.5 px-2 sm:px-4 font-bold text-rose-600 text-center">Pecah</th>
-                                        <th className="py-2.5 px-2 sm:px-4 font-bold text-amber-600 text-center">Sortir</th>
-                                        <th className="py-2.5 px-2 sm:px-4 font-bold text-[#1a1814] text-center">Total</th>
+                                      <tr className="bg-[#faf9f7] text-[#6b6560] uppercase text-[10px] sm:text-xs font-semibold border-b border-[#e8e4de]">
+                                        <th className="py-2.5 px-2 sm:px-4 font-semibold text-[#1a1814]">Jenis Kantong</th>
+                                        <th className="py-2.5 px-2 sm:px-4 font-semibold text-brand-green text-center">Utuh</th>
+                                        <th className="py-2.5 px-2 sm:px-4 font-semibold text-rose-600 text-center">Pecah</th>
+                                        <th className="py-2.5 px-2 sm:px-4 font-semibold text-amber-600 text-center">Sortir</th>
+                                        <th className="py-2.5 px-2 sm:px-4 font-semibold text-[#1a1814] text-center">Total</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-[#e8e4de]">
@@ -1417,7 +1417,7 @@ export default function App() {
                                               <td className="py-2 px-2 sm:px-4 font-bold text-[#1a1814] text-xs sm:text-sm">
                                                 {JENIS_KANTONG_SHORT[idx]}
                                                 {!isZero && (
-                                                  <span className="ml-2 text-[10px] text-[#9e9892]">{isExpanded ? '▼' : '▶'}</span>
+                                                  <span className="ml-2 text-xs text-[#9e9892]">{isExpanded ? '▼' : '▶'}</span>
                                                 )}
                                               </td>
                                               <td className={`py-2 px-2 sm:px-4 text-center font-semibold text-xs sm:text-sm ${isZero ? "text-[#c4bfb7]" : "text-[#1a1814]"}`}>
@@ -1435,11 +1435,11 @@ export default function App() {
                                             </tr>
                                             {isExpanded && Object.entries(stat.vendors).map(([vendorName, vStat]) => (
                                               <tr key={`${name}-${vendorName}`} className="bg-[#fdfcfb]">
-                                                <td className="py-1 px-4 sm:px-6 text-[10px] text-[#6b6560] italic pl-8">↳ {vendorName}</td>
-                                                <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#6b6560]">{vStat.utuh.toLocaleString()}</td>
-                                                <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#6b6560]">{vStat.pecah.toLocaleString()}</td>
-                                                <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#6b6560]">{vStat.sortir.toLocaleString()}</td>
-                                                <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#6b6560] font-bold">{vStat.total.toLocaleString()}</td>
+                                                <td className="py-1 px-4 sm:px-6 text-[10px] text-[#9e9892] italic pl-8">↳ {vendorName}</td>
+                                                <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#9e9892]">{vStat.utuh.toLocaleString()}</td>
+                                                <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#9e9892]">{vStat.pecah.toLocaleString()}</td>
+                                                <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#9e9892]">{vStat.sortir.toLocaleString()}</td>
+                                                <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#9e9892] font-semibold">{vStat.total.toLocaleString()}</td>
                                               </tr>
                                             ))}
                                           </React.Fragment>
@@ -1469,7 +1469,7 @@ export default function App() {
                   >
                     <div className="flex items-center justify-between gap-4 pt-0 pb-2">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-                        <h2 className="text-[11px] font-bold text-[#6b6560] tracking-widest uppercase">
+                        <h2 className="text-xs font-bold text-[#6b6560] tracking-widest uppercase">
                           Daftar Laporan
                         </h2>
                         <div className="h-4 w-[1px] bg-[#e8e4de] hidden sm:block"></div>
@@ -1539,7 +1539,7 @@ export default function App() {
                                 <div className="overflow-x-auto">
                                   <table className="w-full text-left text-xs border-collapse">
                                     <thead>
-                                      <tr className="bg-[#faf9f7] border-b border-[#e8e4de] text-[#6b6560] font-bold uppercase text-[9px] tracking-wider">
+                                      <tr className="bg-[#faf9f7] border-b border-[#e8e4de] text-[#6b6560] font-semibold uppercase text-[10px] tracking-wider">
                                         <th className="py-3 px-4 text-center w-12">No</th>
                                         <th className="py-3 px-4">Vendor</th>
                                         <th className="py-3 px-4">Jenis Kantong</th>
@@ -1559,12 +1559,12 @@ export default function App() {
                                           <td className="py-2.5 px-4 text-center font-bold text-[#9e9892]">{index + 1}</td>
                                           <td className="py-2.5 px-4 font-extrabold text-brand-green text-[13px]">{item.vendor}</td>
                                           <td className="py-2.5 px-4 font-bold text-[#1a1814]">{item.nama}</td>
-                                          <td className="py-2.5 px-4 font-semibold text-[#6b6560] text-[11px]">
+                                          <td className="py-2.5 px-4 font-medium text-[#6b6560] text-xs">
                                             {item.pabrik.includes("1") ? "PBR 1" : "PBR 2"}
                                           </td>
                                           <td className="py-2.5 px-4 text-center">
                                             <span
-                                              className={`inline-block px-2 py-0.5 rounded-md font-bold text-[10px] border ${
+                                              className={`inline-block px-2 py-0.5 rounded-md font-semibold text-xs border ${
                                                 item.shift === 1
                                                   ? "text-blue-600 bg-blue-50 border-blue-200"
                                                   : item.shift === 2
@@ -1581,7 +1581,7 @@ export default function App() {
                                           <td className="py-2.5 px-4 text-center font-extrabold bg-[#e8f0e6]/20 text-[#1a1814]">
                                             {item.total}
                                           </td>
-                                          <td className="py-2.5 px-4 text-[11px] text-[#6b6560] font-medium max-w-[120px] truncate" title={item.createdBy || "Sistem"}>
+                                          <td className="py-2.5 px-4 text-xs text-[#6b6560] font-medium max-w-[120px] truncate" title={item.createdBy || "Sistem"}>
                                             {item.createdBy?.split("@")[0] || "Sistem"}
                                           </td>
                                           {!isGuest && (
@@ -1639,17 +1639,17 @@ export default function App() {
                                     <div className="absolute top-0 left-0 w-1.5 h-full bg-brand-green" />
                                     <div className="flex items-center justify-between pl-1">
                                       <div className="flex items-center gap-1.5">
-                                        <span className="text-[10px] font-black text-[#9e9892] bg-[#faf9f7] px-1.5 py-0.5 rounded-md border border-[#e8e4de]">
+                                        <span className="text-xs font-bold text-[#9e9892] bg-[#faf9f7] px-1.5 py-0.5 rounded-md border border-[#e8e4de]">
                                           #{index + 1}
                                         </span>
                                         <span className="font-extrabold text-brand-green text-sm tracking-tight">{item.vendor}</span>
                                       </div>
                                       <div className="flex items-center gap-1">
-                                        <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[#6b6560] font-bold text-[9px] uppercase">
+                                        <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[#6b6560] font-semibold text-[10px] uppercase">
                                           {item.pabrik.includes("1") ? "PBR 1" : "PBR 2"}
                                         </span>
                                         <span
-                                          className={`px-1.5 py-0.5 rounded font-bold text-[9px] border ${
+                                          className={`px-1.5 py-0.5 rounded font-semibold text-[10px] border ${
                                             item.shift === 1
                                               ? "text-blue-600 bg-blue-50 border-blue-200"
                                               : item.shift === 2
@@ -1669,26 +1669,26 @@ export default function App() {
                                     {/* Bag counts grid */}
                                     <div className="grid grid-cols-4 gap-1.5 bg-[#faf9f7] p-2 rounded-xl border border-[#e8e4de] text-center">
                                       <div>
-                                        <div className="text-[9px] font-bold text-brand-green uppercase tracking-wider">Utuh</div>
+                                        <div className="text-[10px] font-semibold text-brand-green uppercase tracking-wider">Utuh</div>
                                         <div className="text-xs font-extrabold text-[#1a1814] mt-0.5">{item.utuh}</div>
                                       </div>
                                       <div>
-                                        <div className="text-[9px] font-bold text-rose-600 uppercase tracking-wider">Pecah</div>
+                                        <div className="text-[10px] font-semibold text-rose-600 uppercase tracking-wider">Pecah</div>
                                         <div className="text-xs font-extrabold text-rose-600 mt-0.5">{item.pecah}</div>
                                       </div>
                                       <div>
-                                        <div className="text-[9px] font-bold text-amber-600 uppercase tracking-wider">Sortir</div>
+                                        <div className="text-[10px] font-semibold text-amber-600 uppercase tracking-wider">Sortir</div>
                                         <div className="text-xs font-extrabold text-amber-600 mt-0.5">{item.sortir}</div>
                                       </div>
                                       <div className="bg-[#e8f0e6]/40 rounded-lg py-0.5 border border-brand-green/10">
-                                        <div className="text-[9px] font-bold text-brand-green uppercase tracking-wider">Total</div>
+                                        <div className="text-[10px] font-semibold text-brand-green uppercase tracking-wider">Total</div>
                                         <div className="text-xs font-black text-brand-green mt-0.5">{item.total}</div>
                                       </div>
                                     </div>
 
                                     {/* Actions footer */}
                                     <div className="flex items-center justify-between pt-2 border-t border-[#faf9f6]">
-                                      <div className="text-[9px] text-[#6b6560] font-bold flex items-center gap-1 bg-[#faf9f7] px-2 py-1 rounded-md border border-[#e8e4de]/60 max-w-[50%] truncate" title={item.createdBy || "Sistem"}>
+                                      <div className="text-[10px] text-[#6b6560] font-medium flex items-center gap-1 bg-[#faf9f7] px-2 py-1 rounded-md border border-[#e8e4de]/60 max-w-[50%] truncate" title={item.createdBy || "Sistem"}>
                                         <UserCheck className="w-3 h-3 text-[#9e9892]" />
                                         <span className="truncate">Oleh: {item.createdBy?.split("@")[0] || "Sistem"}</span>
                                       </div>
@@ -1697,7 +1697,7 @@ export default function App() {
                                           <button
                                             onClick={() => handleOpenEditForm(item)}
                                             disabled={isSelectedDateLocked && !isMasterAdmin}
-                                            className={`px-2.5 py-1.5 border rounded-lg transition-all text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
+                                            className={`px-2.5 py-1.5 border rounded-lg transition-all text-xs font-semibold flex items-center gap-1 cursor-pointer ${
                                               isSelectedDateLocked && !isMasterAdmin
                                                 ? "border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed"
                                                 : "border-[#e8e4de] bg-white hover:border-brand-green hover:bg-brand-green-light text-[#6b6560] hover:text-brand-green"
@@ -1709,7 +1709,7 @@ export default function App() {
                                           <button
                                             onClick={() => handleDeleteEntry(item.id)}
                                             disabled={isSelectedDateLocked && !isMasterAdmin}
-                                            className={`px-2.5 py-1.5 border rounded-lg transition-all text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
+                                            className={`px-2.5 py-1.5 border rounded-lg transition-all text-xs font-semibold flex items-center gap-1 cursor-pointer ${
                                               isSelectedDateLocked && !isMasterAdmin
                                                 ? "border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed"
                                                 : "border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700"
@@ -1824,7 +1824,7 @@ export default function App() {
                       <div className="hidden md:block border border-[#e8e4de] rounded-2xl overflow-hidden">
                         <table className="w-full text-left text-xs border-collapse">
                           <thead>
-                            <tr className="bg-[#faf9f7] border-b border-[#e8e4de] text-[#6b6560] font-bold uppercase text-[9px] tracking-wider">
+                            <tr className="bg-[#faf9f7] border-b border-[#e8e4de] text-[#6b6560] font-semibold uppercase text-[10px] tracking-wider">
                               <th className="py-2.5 px-4">Alamat Email</th>
                               <th className="py-2.5 px-4">Ditambahkan Pada</th>
                               <th className="py-2.5 px-4 text-center w-24">Aksi</th>
@@ -1916,7 +1916,7 @@ export default function App() {
                 }`}
               >
                 <BarChart3 className="w-5 h-5" />
-                <span className="text-[10px]">Dashboard</span>
+                <span className="text-[11px]">Dashboard</span>
               </button>
 
               {!isGuest && (
@@ -1927,7 +1927,7 @@ export default function App() {
                   }`}
                 >
                   <FileText className="w-5 h-5" />
-                  <span className="text-[10px]">Pelaporan</span>
+                  <span className="text-[11px]">Pelaporan</span>
                 </button>
               )}
 
@@ -1939,7 +1939,7 @@ export default function App() {
                   }`}
                 >
                   <Users className="w-5 h-5" />
-                  <span className="text-[10px]">Users</span>
+                  <span className="text-[11px]">Users</span>
                 </button>
               )}
             </div>

@@ -2,8 +2,6 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { google } from "googleapis";
-import { Readable } from "stream";
-import multer from "multer";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -12,10 +10,6 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
-
-// Multer for file upload (memory storage)
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 // Helper to get OAuth2 client
 function getOAuth2Client(accessToken: string) {
@@ -26,26 +20,22 @@ function getOAuth2Client(accessToken: string) {
 }
 
 // API Routes
-app.post("/api/drive/upload", upload.single('file'), async (req, res) => {
+app.post("/api/drive/upload", async (req, res) => {
   try {
-    const file = req.file;
-    const fileName = req.body.fileName;
-    const accessToken = req.body.accessToken;
-
-    console.log(`[Drive Upload] Received: fileName=${fileName}, fileSize=${file?.size || 0}, hasToken=${!!accessToken}`);
+    const { fileContent, fileName, accessToken, mimeType } = req.body;
 
     if (!accessToken) {
       return res.status(401).json({ error: "Access token is required" });
     }
 
-    if (!file || file.size === 0) {
-      return res.status(400).json({ error: "Excel file is empty" });
+    if (!fileContent) {
+      return res.status(400).json({ error: "File content is required" });
     }
 
     const auth = getOAuth2Client(accessToken);
     const drive = google.drive({ version: "v3", auth });
 
-    // 1. Ensure folder "Arsip Laporan Pemakaian Kantong" exists or create it
+    // 1. Ensure folder exists or create it
     let folderId = "";
     const folderRes = await drive.files.list({
       q: "name='Arsip Laporan Pemakaian Kantong' and mimeType='application/vnd.google-apps.folder' and trashed=false",
@@ -53,9 +43,9 @@ app.post("/api/drive/upload", upload.single('file'), async (req, res) => {
       spaces: "drive",
     });
 
-    const files = folderRes.data.files;
-    if (files && files.length > 0) {
-      folderId = files[0].id!;
+    const folderFiles = folderRes.data.files;
+    if (folderFiles && folderFiles.length > 0) {
+      folderId = folderFiles[0].id!;
     } else {
       const folderMeta = {
         name: "Arsip Laporan Pemakaian Kantong",
@@ -68,13 +58,13 @@ app.post("/api/drive/upload", upload.single('file'), async (req, res) => {
       folderId = newFolder.data.id!;
     }
 
-    // 2. Create Readable stream from file buffer
-    const excelMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-    const bufferStream = new Readable();
-    bufferStream.push(file.buffer);
-    bufferStream.push(null);
+    // 2. Convert base64 to Buffer
+    const fileBuffer = Buffer.from(fileContent, "base64");
+    const mime = mimeType || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-    // 3. Check if file already exists in this folder
+    console.log(`[Drive Upload] fileName=${fileName}, bufferSize=${fileBuffer.length}, mime=${mime}`);
+
+    // 3. Check if file already exists
     const existingFileRes = await drive.files.list({
       q: `name='${fileName}' and '${folderId}' in parents and trashed=false`,
       fields: "files(id)",
@@ -88,25 +78,22 @@ app.post("/api/drive/upload", upload.single('file'), async (req, res) => {
       result = await drive.files.update({
         fileId: fileId,
         media: {
-          mimeType: excelMime,
-          body: bufferStream,
+          mimeType: mime,
+          body: fileBuffer,
         },
         fields: "id, webViewLink",
       });
     } else {
       // Create new file
-      const fileMetadata = {
-        name: fileName,
-        parents: [folderId],
-      };
-      const media = {
-        mimeType: excelMime,
-        body: bufferStream,
-      };
-
       result = await drive.files.create({
-        requestBody: fileMetadata,
-        media: media,
+        requestBody: {
+          name: fileName,
+          parents: [folderId],
+        },
+        media: {
+          mimeType: mime,
+          body: fileBuffer,
+        },
         fields: "id, webViewLink",
       });
     }

@@ -52,6 +52,7 @@ import { auth, db, firebaseConfig } from "./firebase";
 import { LaporanKantong, AllowedUser, LockedDate } from "./types";
 import { getDateString, formatDateDisplay } from "./utils";
 import { generateCSVContent, JENIS_KANTONG, JENIS_KANTONG_SHORT } from "./csvUtils";
+import { generateExcelReport } from "./excelUtils";
 import logo from "./assets/logo.jpg";
 enum OperationType {
   CREATE = "create",
@@ -815,23 +816,13 @@ export default function App() {
     { utuh: 0, pecah: 0, sortir: 0, total: 0 }
   );
 
-  // CSV Export function
+  // Excel Export function
   const handleExportCSV = () => {
     if (filteredReports.length === 0) {
       triggerToast("Tidak ada data untuk diekspor pada tanggal ini", "er");
       return;
     }
-
-    const csvContent = generateCSVContent(filteredReports, selectedDate, currentUser?.email);
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Laporan_Pemakaian_Kantong_${formatDateDisplay(selectedDate)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    generateExcelReport(filteredReports, selectedDate, currentUser?.email, isSelectedDateLocked);
   };
 
   return (
@@ -1234,7 +1225,7 @@ export default function App() {
                       className="border border-[#e8e4de] bg-[#e8f0e6] hover:bg-brand-green-light text-brand-green px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
                     >
                       <Download className="w-4 h-4" />
-                      Export CSV
+                      Export Excel
                     </button>
 
                     {/* Verification status badge or action */}

@@ -48,7 +48,7 @@ import {
   X
 } from "lucide-react";
 import { auth, db, firebaseConfig } from "./firebase";
-import { LaporanKantong, AllowedUser, LockedDate, ROLE_MAP } from "./types";
+import { LaporanKantong, AllowedUser, LockedDate, ROLE_MAP, PABRIK_ROLE_MAP } from "./types";
 import { getDateString, formatDateDisplay } from "./utils";
 import { JENIS_KANTONG, JENIS_KANTONG_SHORT } from "./csvUtils";
 import { downloadExcelReport, generateExcelReport } from "./excelUtils";
@@ -109,9 +109,16 @@ export default function App() {
   // Role-based check (dari Firestore allowed_users collection)
   const currentUserData = allowedUsers.find(u => u.email === currentUser?.email?.toLowerCase());
   const userRole = currentUserData?.role || (currentUser?.isAnonymous ? 'guest' : null);
+  const userPabrikRole = currentUserData?.pabrikRole || null;
   const isMasterAdmin = userRole === 'super_admin';
   const isAdmin = userRole === 'super_admin' || userRole === 'admin';
   const isGuest = userRole === 'guest' || currentUser?.isAnonymous === true || (currentUser?.email?.startsWith('guest_') ?? false);
+  // Effective pabrik list filtered by user's pabrikRole
+  const userAllowedPabrik = userPabrikRole === 'pbr1'
+    ? effectivePabrikList.filter(p => p.includes('PBR 1'))
+    : userPabrikRole === 'pbr2'
+      ? effectivePabrikList.filter(p => p.includes('PBR 2'))
+      : effectivePabrikList; // 'both' or null = all
 
   // Active page state
   const [activeTab, setActiveTab] = useState<"dash" | "input" | "users">("dash");
@@ -171,6 +178,7 @@ export default function App() {
   const [newAllowedEmail, setNewAllowedEmail] = useState("");
   const [newAllowedPassword, setNewAllowedPassword] = useState("");
   const newUserRole = "admin" as const;
+  const [newPabrikRole, setNewPabrikRole] = useState<"" | "pbr1" | "pbr2" | "both">("");
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [userActionError, setUserActionError] = useState("");
 
@@ -589,15 +597,21 @@ export default function App() {
       }
 
       const userDocRef = doc(db, "allowed_users", targetEmail);
-      await setDoc(userDocRef, {
+      const userData: any = {
         email: targetEmail,
         allowed: true,
         role: "admin",
         addedAt: new Date().toISOString()
-      });
+      };
+      // Only set pabrikRole if one is selected
+      if (newPabrikRole) {
+        userData.pabrikRole = newPabrikRole;
+      }
+      await setDoc(userDocRef, userData);
 
       setNewAllowedEmail("");
       setNewAllowedPassword("");
+      setNewPabrikRole("");
       
       if (targetPassword) {
         triggerToast(`Akun berhasil dibuat & izin akses diberikan untuk ${targetEmail}`, "ok");
@@ -751,7 +765,9 @@ export default function App() {
     setEditingId(null);
     setFormVendor(effectiveVendors[0]);
     setFormJenis(effectiveJenisKantong[0]);
-    setFormPabrik(effectivePabrikList[0]);
+    // Auto-select pabrik based on user's pabrikRole
+    const defaultPabrik = userAllowedPabrik.length > 0 ? userAllowedPabrik[0] : effectivePabrikList[0];
+    setFormPabrik(defaultPabrik);
     const currentHour = new Date().getHours();
     setFormShift(currentHour < 8 ? 1 : currentHour < 16 ? 2 : 3);
     setFormTanggal(getDateString(new Date()));
@@ -766,6 +782,15 @@ export default function App() {
     if (isDateLocked && !isMasterAdmin) {
       triggerToast(`Laporan pada tanggal ${formatDateDisplay(item.tanggal)} berstatus Verified (Terkunci) oleh Admin Utama.`, "er");
       return;
+    }
+
+    // Check if user can edit this pabrik
+    if (!isMasterAdmin && userPabrikRole && userAllowedPabrik.length > 0) {
+      const canEdit = userAllowedPabrik.some(p => p === item.pabrik);
+      if (!canEdit) {
+        triggerToast(`Anda tidak memiliki akses untuk mengedit data pabrik ${item.pabrik}.`, "er");
+        return;
+      }
     }
 
     setEditingId(item.id);
@@ -812,6 +837,15 @@ export default function App() {
       return;
     }
 
+    // Check if user can write to this pabrik
+    if (!isMasterAdmin && userPabrikRole && userAllowedPabrik.length > 0) {
+      const canWrite = userAllowedPabrik.some(p => p === formPabrik);
+      if (!canWrite) {
+        triggerToast(`Anda tidak memiliki akses untuk menulis data pabrik ${formPabrik}.`, "er");
+        return;
+      }
+    }
+
     const docId = editingId || `report_${Date.now()}`;
     const entryData = {
       id: docId,
@@ -846,6 +880,15 @@ export default function App() {
       if (isDateLocked && !isMasterAdmin) {
         triggerToast(`Laporan pada tanggal ${formatDateDisplay(item.tanggal)} berstatus Verified (Terkunci) oleh Admin Utama. Tidak dapat dihapus.`, "er");
         return;
+      }
+
+      // Check if user can delete this pabrik
+      if (!isMasterAdmin && userPabrikRole && userAllowedPabrik.length > 0) {
+        const canDelete = userAllowedPabrik.some(p => p === item.pabrik);
+        if (!canDelete) {
+          triggerToast(`Anda tidak memiliki akses untuk menghapus data pabrik ${item.pabrik}.`, "er");
+          return;
+        }
       }
     }
 
@@ -1062,6 +1105,11 @@ export default function App() {
 
   // Filter current reports by selected date
   const filteredReports = reports.filter((r) => r.tanggal === selectedDate);
+  // Reports filtered by date AND user's pabrikRole (for input tab)
+  const inputFilteredReports = filteredReports.filter((r) => {
+    if (!userPabrikRole || isMasterAdmin) return true;
+    return userAllowedPabrik.some(p => p === r.pabrik);
+  });
   const isToday = selectedDate === getDateString(new Date());
 
   // Statistics calculation for the selected date
@@ -1360,10 +1408,15 @@ export default function App() {
                     }`}>
                       {ROLE_MAP[userRole || 'guest'] || 'Tamu'}
                     </span>
+                    {userPabrikRole && PABRIK_ROLE_MAP[userPabrikRole] && (
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold tracking-wider shrink-0 border ${PABRIK_ROLE_MAP[userPabrikRole].color} ${PABRIK_ROLE_MAP[userPabrikRole].bgColor} ${PABRIK_ROLE_MAP[userPabrikRole].borderColor}`}>
+                        {PABRIK_ROLE_MAP[userPabrikRole].label}
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                {/* Navigation and Date filter controls */}
+                {/* Navigation and Date filter controls */
                 <div className="flex items-center gap-2 shrink-0">
                   {/* Desktop navigation tabs */}
                   <div className="hidden md:flex items-center gap-1 mr-4 border-r border-[#e8e4de] pr-4">
@@ -1872,7 +1925,7 @@ export default function App() {
                       )}
                     </div>
 
-                    {filteredReports.length === 0 ? (
+                    {inputFilteredReports.length === 0 ? (
                       <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-12 text-center shadow-xs">
                         <div className="flex justify-center mb-4 animate-pulse">
                           <div className="p-4 bg-[#e8f0e6]/40 text-brand-green border-2 border-brand-green/20 rounded-2xl">
@@ -1881,13 +1934,13 @@ export default function App() {
                         </div>
                         <h4 className="text-sm font-extrabold text-[#1a1814]">Belum Ada Data</h4>
                         <p className="text-xs text-[#9e9892] mt-1 max-w-sm mx-auto">
-                          Belum ada laporan pemakaian kantong untuk tanggal ini. Klik tombol <span className="font-bold text-brand-green">Tambah Data Baru</span> di atas untuk menginput laporan.
+                          Belum ada laporan pemakaian kantong untuk tanggal ini{userPabrikRole ? ` untuk pabrik Anda` : ''}. Klik tombol <span className="font-bold text-brand-green">Tambah Data Baru</span> di atas untuk menginput laporan.
                         </p>
                       </div>
                     ) : (
                       <>
-                        {["PBR 1", "PBR 2"].map((pbr) => {
-                          const pbrReports = filteredReports.filter(r => pbr === "PBR 1" ? r.pabrik.includes("1") : r.pabrik.includes("2"));
+                        {(userPabrikRole ? userAllowedPabrik.map(p => p.includes('PBR 1') ? 'PBR 1' : 'PBR 2') : ['PBR 1', 'PBR 2']).filter((v, i, a) => a.indexOf(v) === i).map((pbr) => {
+                          const pbrReports = inputFilteredReports.filter(r => pbr === "PBR 1" ? r.pabrik.includes("1") : r.pabrik.includes("2"));
                           const pbrStats = pbrReports.reduce((acc, r) => ({
                             utuh: acc.utuh + r.utuh,
                             pecah: acc.pecah + r.pecah,
@@ -2148,7 +2201,49 @@ export default function App() {
                           </p>
                         </div>
 
-
+                        <div>
+                          <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1">
+                            Badge Pabrik (Opsional)
+                          </label>
+                          <div className="grid grid-cols-3 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setNewPabrikRole(newPabrikRole === "pbr1" ? "" : "pbr1")}
+                              className={`px-2 py-2 rounded-xl text-[11px] font-bold border-2 transition-all cursor-pointer ${
+                                newPabrikRole === "pbr1"
+                                  ? "border-indigo-400 bg-indigo-50 text-indigo-700 shadow-sm"
+                                  : "border-[#e8e4de] bg-[#faf9f7] text-[#6b6560] hover:border-indigo-300"
+                              }`}
+                            >
+                              🏭 PBR 1
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setNewPabrikRole(newPabrikRole === "pbr2" ? "" : "pbr2")}
+                              className={`px-2 py-2 rounded-xl text-[11px] font-bold border-2 transition-all cursor-pointer ${
+                                newPabrikRole === "pbr2"
+                                  ? "border-teal-400 bg-teal-50 text-teal-700 shadow-sm"
+                                  : "border-[#e8e4de] bg-[#faf9f7] text-[#6b6560] hover:border-teal-300"
+                              }`}
+                            >
+                              🏭 PBR 2
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setNewPabrikRole(newPabrikRole === "both" ? "" : "both")}
+                              className={`px-2 py-2 rounded-xl text-[11px] font-bold border-2 transition-all cursor-pointer ${
+                                newPabrikRole === "both"
+                                  ? "border-violet-400 bg-violet-50 text-violet-700 shadow-sm"
+                                  : "border-[#e8e4de] bg-[#faf9f7] text-[#6b6560] hover:border-violet-300"
+                              }`}
+                            >
+                              🏭 PBR 1 & 2
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-[#9e9892] mt-1 leading-normal">
+                            Tentukan pabrik yang dikelola user. Kosongkan jika tidak perlu pembatasan.
+                          </p>
+                        </div>
 
                         <button
                           type="submit"
@@ -2208,6 +2303,11 @@ export default function App() {
                                       Admin
                                     </span>
                                   )}
+                                  {usr.pabrikRole && PABRIK_ROLE_MAP[usr.pabrikRole] && (
+                                    <span className={`${PABRIK_ROLE_MAP[usr.pabrikRole].bgColor} ${PABRIK_ROLE_MAP[usr.pabrikRole].color} text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider border ${PABRIK_ROLE_MAP[usr.pabrikRole].borderColor}`}>
+                                      {PABRIK_ROLE_MAP[usr.pabrikRole].label}
+                                    </span>
+                                  )}
 
                                 </td>
                                 <td className="py-3 px-4 text-[#9e9892] font-semibold text-[11px]">
@@ -2249,6 +2349,11 @@ export default function App() {
                                   {usr.role === "admin" && usr.email.toLowerCase() !== "managementpackaging@gmail.com" && (
                                     <span className="bg-sky-100 text-sky-800 text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-wider">
                                       Admin
+                                    </span>
+                                  )}
+                                  {usr.pabrikRole && PABRIK_ROLE_MAP[usr.pabrikRole] && (
+                                    <span className={`${PABRIK_ROLE_MAP[usr.pabrikRole].bgColor} ${PABRIK_ROLE_MAP[usr.pabrikRole].color} text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-wider border ${PABRIK_ROLE_MAP[usr.pabrikRole].borderColor}`}>
+                                      {PABRIK_ROLE_MAP[usr.pabrikRole].label}
                                     </span>
                                   )}
 
@@ -2645,13 +2750,21 @@ export default function App() {
                   <div>
                     <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">
                       Pabrik
+                      {userPabrikRole && (
+                        <span className="ml-1.5 text-[9px] text-indigo-600 font-bold">
+                          (Sesuai Badge Anda)
+                        </span>
+                      )}
                     </label>
                     <select
                       value={formPabrik}
                       onChange={(e) => setFormPabrik(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white"
+                      disabled={!!userPabrikRole && userAllowedPabrik.length <= 1}
+                      className={`w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white ${
+                        !!userPabrikRole && userAllowedPabrik.length <= 1 ? 'opacity-70 cursor-not-allowed' : ''
+                      }`}
                     >
-                      {effectivePabrikList.map((pb) => (
+                      {userAllowedPabrik.map((pb) => (
                         <option key={pb} value={pb}>
                           {pb}
                         </option>

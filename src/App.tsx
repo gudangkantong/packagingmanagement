@@ -49,7 +49,7 @@ import {
   X
 } from "lucide-react";
 import { auth, db, firebaseConfig } from "./firebase";
-import { LaporanKantong, AllowedUser, LockedDate } from "./types";
+import { LaporanKantong, AllowedUser, LockedDate, ROLE_MAP } from "./types";
 import { getDateString, formatDateDisplay } from "./utils";
 import { generateCSVContent, JENIS_KANTONG, JENIS_KANTONG_SHORT } from "./csvUtils";
 import { downloadExcelReport, generateExcelReport } from "./excelUtils";
@@ -109,8 +109,12 @@ export default function App() {
   const [lockedDates, setLockedDates] = useState<Record<string, LockedDate>>({});
   const [dataLoading, setDataLoading] = useState<boolean>(true);
 
-  const isMasterAdmin = currentUser?.email?.toLowerCase() === "managementpackaging@gmail.com";
-  const isGuest = currentUser?.isAnonymous === true || currentUser?.email?.toLowerCase().includes("guest");
+  // Role-based check (dari Firestore allowed_users collection)
+  const currentUserData = allowedUsers.find(u => u.email === currentUser?.email?.toLowerCase());
+  const userRole = currentUserData?.role || (currentUser?.isAnonymous ? 'guest' : null);
+  const isMasterAdmin = userRole === 'super_admin';
+  const isAdmin = userRole === 'super_admin' || userRole === 'admin';
+  const isGuest = userRole === 'guest' || currentUser?.isAnonymous === true;
 
   // Active page state
   const [activeTab, setActiveTab] = useState<"dash" | "input" | "users">("dash");
@@ -169,6 +173,7 @@ export default function App() {
   // User management state
   const [newAllowedEmail, setNewAllowedEmail] = useState("");
   const [newAllowedPassword, setNewAllowedPassword] = useState("");
+  const [newUserRole, setNewUserRole] = useState<"admin" | "guest">("admin");
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [userActionError, setUserActionError] = useState("");
 
@@ -212,6 +217,7 @@ export default function App() {
               await setDoc(userDocRef, {
                 email: userEmail,
                 allowed: true,
+                role: 'super_admin',
                 addedAt: new Date().toISOString()
               });
               triggerToast("Admin account bootstrapped successfully", "ok");
@@ -311,6 +317,7 @@ export default function App() {
         items.push({
           email: data.email || docSnap.id,
           allowed: data.allowed === true,
+          role: data.role || "admin",
           addedAt: data.addedAt || ""
         });
       });
@@ -354,7 +361,7 @@ export default function App() {
 
   // Prevent unauthorized access to "users" tab
   useEffect(() => {
-    if (activeTab === "users" && currentUser?.email?.toLowerCase() !== "managementpackaging@gmail.com") {
+    if (activeTab === "users" && !isMasterAdmin) {
       setActiveTab("dash");
     }
   }, [activeTab, currentUser]);
@@ -495,11 +502,13 @@ export default function App() {
       await setDoc(userDocRef, {
         email: targetEmail,
         allowed: true,
+        role: newUserRole,
         addedAt: new Date().toISOString()
       });
 
       setNewAllowedEmail("");
       setNewAllowedPassword("");
+      setNewUserRole("admin");
       
       if (targetPassword) {
         triggerToast(`Akun berhasil dibuat & izin akses diberikan untuk ${targetEmail}`, "ok");
@@ -1156,17 +1165,19 @@ export default function App() {
                     LAPORAN <span className="text-brand-green">PEMAKAIAN KANTONG</span>
                   </h1>
                   <div className="text-[11px] sm:text-xs text-[#9e9892] font-semibold flex items-center justify-center md:justify-start gap-1 w-full min-w-0 mt-0.5">
-                    <UserCheck className={`w-3 h-3 shrink-0 ${isGuest ? "text-blue-600" : "text-emerald-600"}`} />
+                    <UserCheck className={`w-3 h-3 shrink-0 ${isGuest ? "text-blue-600" : isMasterAdmin ? "text-emerald-600" : "text-sky-600"}`} />
                     <span className="truncate max-w-[100px] xs:max-w-[140px] sm:max-w-none">
                       {isGuest ? "Tamu (Guest)" : currentUser?.email}
                     </span>
                     <span className="text-[#c4bfb7] shrink-0">•</span>
-                    <span className={`px-1 rounded-sm text-[10px] sm:text-[11px] uppercase font-bold tracking-wider shrink-0 ${
-                      isGuest
-                        ? "text-blue-700 bg-blue-50"
-                        : "text-emerald-700 bg-emerald-50"
+                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold tracking-wider shrink-0 border ${
+                      isMasterAdmin
+                        ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                        : isAdmin
+                          ? "text-sky-700 bg-sky-50 border-sky-200"
+                          : "text-blue-700 bg-blue-50 border-blue-200"
                     }`}>
-                      {isGuest ? "Guest Mode" : "Authorized"}
+                      {ROLE_MAP[userRole || 'guest'] || 'Tamu'}
                     </span>
                   </div>
                 </div>
@@ -1199,7 +1210,7 @@ export default function App() {
                         Pelaporan
                       </button>
                     )}
-                    {currentUser?.email?.toLowerCase() === "managementpackaging@gmail.com" && (
+                    {isMasterAdmin && (
                       <button
                         onClick={() => setActiveTab("users")}
                         className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
@@ -1908,7 +1919,7 @@ export default function App() {
                 )}
 
                 {/* VIEWPORT: USER MANAGEMENT */}
-                {activeTab === "users" && currentUser?.email?.toLowerCase() === "managementpackaging@gmail.com" && (
+                {activeTab === "users" && isMasterAdmin && (
                   <motion.div
                     key="users"
                     initial={{ opacity: 0, y: 15 }}
@@ -1967,6 +1978,21 @@ export default function App() {
                           </p>
                         </div>
 
+                        <div>
+                          <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1">
+                            Role Pengguna
+                          </label>
+                          <select
+                            disabled={isCreatingAccount}
+                            value={newUserRole}
+                            onChange={(e) => setNewUserRole(e.target.value as "admin" | "guest")}
+                            className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-medium focus:outline-none focus:border-brand-green focus:bg-white transition-colors disabled:opacity-50 cursor-pointer"
+                          >
+                            <option value="admin">Admin — Akses Pelaporan & Input Data</option>
+                            <option value="guest">Tamu — Hanya Lihat Dashboard</option>
+                          </select>
+                        </div>
+
                         <button
                           type="submit"
                           disabled={isCreatingAccount}
@@ -2001,6 +2027,7 @@ export default function App() {
                           <thead>
                             <tr className="bg-[#faf9f7] border-b border-[#e8e4de] text-[#6b6560] font-semibold uppercase text-[10px] tracking-wider">
                               <th className="py-2.5 px-4">Alamat Email</th>
+                              <th className="py-2.5 px-4">Role</th>
                               <th className="py-2.5 px-4">Ditambahkan Pada</th>
                               <th className="py-2.5 px-4 text-center w-24">Aksi</th>
                             </tr>
@@ -2011,12 +2038,24 @@ export default function App() {
                                 <td className="py-3 px-4">
                                   <div className="flex items-center gap-2">
                                     <span className="font-bold text-[#1a1814]">{usr.email}</span>
-                                    {usr.email.toLowerCase() === "managementpackaging@gmail.com" && (
-                                      <span className="bg-amber-100 text-amber-800 text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider">
-                                        Super Admin
-                                      </span>
-                                    )}
                                   </div>
+                                </td>
+                                <td className="py-3 px-4">
+                                  {usr.email.toLowerCase() === "managementpackaging@gmail.com" && (
+                                    <span className="bg-amber-100 text-amber-800 text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider">
+                                      Admin Utama
+                                    </span>
+                                  )}
+                                  {usr.role === "admin" && usr.email.toLowerCase() !== "managementpackaging@gmail.com" && (
+                                    <span className="bg-sky-100 text-sky-800 text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider">
+                                      Admin
+                                    </span>
+                                  )}
+                                  {usr.role === "guest" && (
+                                    <span className="bg-gray-100 text-gray-600 text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider">
+                                      Tamu
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="py-3 px-4 text-[#9e9892] font-semibold text-[11px]">
                                   {usr.addedAt ? new Date(usr.addedAt).toLocaleString("id-ID") : "-"}
@@ -2052,6 +2091,16 @@ export default function App() {
                                   {usr.email.toLowerCase() === "managementpackaging@gmail.com" && (
                                     <span className="bg-amber-100 text-amber-800 text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-wider">
                                       Super Admin
+                                    </span>
+                                  )}
+                                  {usr.role === "admin" && usr.email.toLowerCase() !== "managementpackaging@gmail.com" && (
+                                    <span className="bg-sky-100 text-sky-800 text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-wider">
+                                      Admin
+                                    </span>
+                                  )}
+                                  {usr.role === "guest" && (
+                                    <span className="bg-gray-100 text-gray-600 text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-wider">
+                                      Tamu
                                     </span>
                                   )}
                                 </div>
@@ -2106,7 +2155,7 @@ export default function App() {
                 </button>
               )}
 
-              {currentUser?.email?.toLowerCase() === "managementpackaging@gmail.com" && (
+              {isMasterAdmin && (
                 <button
                   onClick={() => setActiveTab("users")}
                   className={`flex-1 flex flex-col items-center gap-1 py-1 px-2 rounded-xl transition-all ${

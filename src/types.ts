@@ -16,6 +16,7 @@ export interface LaporanKantong {
 export interface AllowedUser {
   email: string;
   allowed: boolean;
+  role: 'super_admin' | 'admin' | 'guest';  // ← tambah field role
   addedAt: string;
 }
 
@@ -24,3 +25,10 @@ export interface LockedDate {
   lockedBy?: string;
   lockedAt?: string;
 }
+
+// Role display mapping (kode DB → label Indonesia)
+export const ROLE_MAP: Record<string, string> = {
+  super_admin: 'Admin Utama',
+  admin: 'Admin',
+  guest: 'Tamu',
+};

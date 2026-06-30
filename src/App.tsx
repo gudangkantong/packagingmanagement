@@ -114,11 +114,17 @@ export default function App() {
   const isAdmin = userRole === 'super_admin' || userRole === 'admin';
   const isGuest = userRole === 'guest' || currentUser?.isAnonymous === true || (currentUser?.email?.startsWith('guest_') ?? false);
   // Effective pabrik list filtered by user's pabrikRole
-  const userAllowedPabrik = userPabrikRole === 'pbr1'
-    ? effectivePabrikList.filter(p => p.includes('PBR 1'))
-    : userPabrikRole === 'pbr2'
-      ? effectivePabrikList.filter(p => p.includes('PBR 2'))
-      : effectivePabrikList; // 'both' or null = all
+  const userAllowedPabrik = (() => {
+    if (!userPabrikRole || userPabrikRole === 'all') return effectivePabrikList;
+    const matchMap: Record<string, string> = {
+      pbr1: 'PBR 1',
+      pbr2: 'PBR 2',
+      ppg: 'PPG',
+      ppj: 'PPJ',
+    };
+    const keyword = matchMap[userPabrikRole];
+    return keyword ? effectivePabrikList.filter(p => p.includes(keyword)) : effectivePabrikList;
+  })();
 
   // Active page state
   const [activeTab, setActiveTab] = useState<"dash" | "input" | "users">("dash");
@@ -178,7 +184,7 @@ export default function App() {
   const [newAllowedEmail, setNewAllowedEmail] = useState("");
   const [newAllowedPassword, setNewAllowedPassword] = useState("");
   const newUserRole = "admin" as const;
-  const [newPabrikRole, setNewPabrikRole] = useState<"" | "pbr1" | "pbr2" | "both">("");
+  const [newPabrikRole, setNewPabrikRole] = useState<"" | "pbr1" | "pbr2" | "ppg" | "ppj" | "all">("");
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [userActionError, setUserActionError] = useState("");
 
@@ -1939,8 +1945,8 @@ export default function App() {
                       </div>
                     ) : (
                       <>
-                        {(userPabrikRole ? userAllowedPabrik.map(p => p.includes('PBR 1') ? 'PBR 1' : 'PBR 2') : ['PBR 1', 'PBR 2']).filter((v, i, a) => a.indexOf(v) === i).map((pbr) => {
-                          const pbrReports = inputFilteredReports.filter(r => pbr === "PBR 1" ? r.pabrik.includes("1") : r.pabrik.includes("2"));
+                        {(userPabrikRole ? userAllowedPabrik : effectivePabrikList).map((pabrikName) => {
+                          const pbrReports = inputFilteredReports.filter(r => r.pabrik === pabrikName);
                           const pbrStats = pbrReports.reduce((acc, r) => ({
                             utuh: acc.utuh + r.utuh,
                             pecah: acc.pecah + r.pecah,
@@ -1951,8 +1957,8 @@ export default function App() {
                           if (pbrReports.length === 0) return null;
 
                           return (
-                            <div key={pbr} className="space-y-2">
-                              <h3 className="text-center text-sm font-extrabold text-[#6b6560] tracking-wide uppercase">{pbr === "PBR 1" ? "Data Laporan Pabrik Baturaja 1 (PBR 1)" : "Data Laporan Pabrik Baturaja 2 (PBR 2)"}</h3>
+                            <div key={pabrikName} className="space-y-2">
+                              <h3 className="text-center text-sm font-extrabold text-[#6b6560] tracking-wide uppercase">Data Laporan {pabrikName}</h3>
                               
                               {/* Desktop Table View */}
                               <div className="hidden md:block bg-white border-2 border-[#e8e4de] rounded-3xl shadow-xs overflow-hidden">
@@ -1980,7 +1986,7 @@ export default function App() {
                                           <td className="py-2.5 px-4 font-extrabold text-brand-green text-[13px]">{item.vendor}</td>
                                           <td className="py-2.5 px-4 font-bold text-[#1a1814]">{item.nama}</td>
                                           <td className="py-2.5 px-4 font-medium text-[#6b6560] text-xs">
-                                            {item.pabrik.includes("1") ? "PBR 1" : "PBR 2"}
+                                            {item.pabrik.match(/\(([^)]+)\)/)?.[1] || item.pabrik}
                                           </td>
                                           <td className="py-2.5 px-4 text-center">
                                             <span
@@ -2055,7 +2061,7 @@ export default function App() {
                                       </div>
                                       <div className="flex items-center gap-1">
                                         <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[#6b6560] font-semibold text-[10px] uppercase">
-                                          {item.pabrik.includes("1") ? "PBR 1" : "PBR 2"}
+                                          {item.pabrik.match(/\(([^)]+)\)/)?.[1] || item.pabrik}
                                         </span>
                                         <span
                                           className={`px-1.5 py-0.5 rounded font-semibold text-[10px] border ${
@@ -2230,14 +2236,36 @@ export default function App() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => setNewPabrikRole(newPabrikRole === "both" ? "" : "both")}
+                              onClick={() => setNewPabrikRole(newPabrikRole === "ppg" ? "" : "ppg")}
                               className={`px-2 py-2 rounded-xl text-[11px] font-bold border-2 transition-all cursor-pointer ${
-                                newPabrikRole === "both"
+                                newPabrikRole === "ppg"
+                                  ? "border-amber-400 bg-amber-50 text-amber-700 shadow-sm"
+                                  : "border-[#e8e4de] bg-[#faf9f7] text-[#6b6560] hover:border-amber-300"
+                              }`}
+                            >
+                              🏭 PPG
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setNewPabrikRole(newPabrikRole === "ppj" ? "" : "ppj")}
+                              className={`px-2 py-2 rounded-xl text-[11px] font-bold border-2 transition-all cursor-pointer ${
+                                newPabrikRole === "ppj"
+                                  ? "border-rose-400 bg-rose-50 text-rose-700 shadow-sm"
+                                  : "border-[#e8e4de] bg-[#faf9f7] text-[#6b6560] hover:border-rose-300"
+                              }`}
+                            >
+                              🏭 PPJ
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setNewPabrikRole(newPabrikRole === "all" ? "" : "all")}
+                              className={`px-2 py-2 rounded-xl text-[11px] font-bold border-2 transition-all cursor-pointer col-span-2 ${
+                                newPabrikRole === "all"
                                   ? "border-violet-400 bg-violet-50 text-violet-700 shadow-sm"
                                   : "border-[#e8e4de] bg-[#faf9f7] text-[#6b6560] hover:border-violet-300"
                               }`}
                             >
-                              🏭 PBR 1 & 2
+                              🏭 Semua Pabrik
                             </button>
                           </div>
                           <p className="text-[10px] text-[#9e9892] mt-1 leading-normal">

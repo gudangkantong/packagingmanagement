@@ -42,11 +42,11 @@ service cloud.firestore {
       if (!isAdmin()) return false;
       let pabrikRole = getUserPabrikRole();
       if (pabrikRole == null || pabrikRole == "") return true; // no pabrik restriction
-      // Check if pabrikName matches the user's assigned pabrik
-      // PBR 1 = "Pabrik Baturaja 1 (PBR 1)", PBR 2 = "Pabrik Baturaja 2 (PBR 2)"
-      if (pabrikRole == "both") return true;
+      if (pabrikRole == "all") return true; // all pabrik
       if (pabrikRole == "pbr1" && pabrikName.matches(".*PBR 1.*")) return true;
       if (pabrikRole == "pbr2" && pabrikName.matches(".*PBR 2.*")) return true;
+      if (pabrikRole == "ppg" && pabrikName.matches(".*PPG.*")) return true;
+      if (pabrikRole == "ppj" && pabrikName.matches(".*PPJ.*")) return true;
       return false;
     }
 

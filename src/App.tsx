@@ -1684,6 +1684,8 @@ export default function App() {
                           }
                         });
 
+                        if (factoryReports.length === 0) return null;
+
                         return (
                           <div key={pabrikName} className="bg-white border-2 border-[#e8e4de] rounded-3xl p-4 md:p-6 shadow-xs space-y-6">
                             {/* Factory Header */}

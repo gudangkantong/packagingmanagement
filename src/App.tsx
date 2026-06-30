@@ -83,7 +83,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 const VENDORS = ["GEMAH", "YANA", "HARDO", "IKSG", "KRR", "SAMI", "TRI USAHA"];
-const PABRIK_LIST = ["Pabrik Baturaja 1 (PBR 1)", "Pabrik Baturaja 2 (PBR 2)"];
+const PABRIK_LIST = ["Pabrik Baturaja 1 (PBR 1)", "Pabrik Baturaja 2 (PBR 2)", "Pabrik Palembang (PPG)", "Pabrik Panjang (PPJ)"];
 const SHIFT_INFO = [
   { id: 1, label: "Shift 1", time: "00:00 – 08:00", color: "text-blue-600 bg-blue-50 border-blue-200" },
   { id: 2, label: "Shift 2", time: "08:00 – 16:00", color: "text-purple-600 bg-purple-50 border-purple-200" },

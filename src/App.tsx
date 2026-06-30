@@ -213,14 +213,18 @@ export default function App() {
           try {
             const userDocRef = doc(db, "allowed_users", userEmail);
             const docSnap = await getDoc(userDocRef);
-            if (!docSnap.exists() || !docSnap.data()?.allowed) {
+            if (!docSnap.exists() || !docSnap.data()?.allowed || docSnap.data()?.role !== 'super_admin') {
               await setDoc(userDocRef, {
                 email: userEmail,
                 allowed: true,
                 role: 'super_admin',
-                addedAt: new Date().toISOString()
-              });
-              triggerToast("Admin account bootstrapped successfully", "ok");
+                addedAt: docSnap.exists() ? (docSnap.data()?.addedAt || new Date().toISOString()) : new Date().toISOString()
+              }, { merge: true });
+              if (!docSnap.exists() || !docSnap.data()?.allowed) {
+                triggerToast("Admin account bootstrapped successfully", "ok");
+              } else {
+                triggerToast("Admin utama role restored", "ok");
+              }
             }
           } catch (e) {
             console.error("Autobootstrap failed:", e);

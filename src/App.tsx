@@ -18,8 +18,7 @@ import {
   onSnapshot,
   query,
   orderBy,
-  serverTimestamp,
-  writeBatch
+  serverTimestamp
 } from "firebase/firestore";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -96,8 +95,6 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAllowed, setIsAllowed] = useState<boolean | null>(null); // null means checking
   const [authLoading, setAuthLoading] = useState<boolean>(true);
-  const [isSignUp, setIsSignUp] = useState<boolean>(false);
-
   // Form inputs for Auth
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -173,7 +170,7 @@ export default function App() {
   // User management state
   const [newAllowedEmail, setNewAllowedEmail] = useState("");
   const [newAllowedPassword, setNewAllowedPassword] = useState("");
-  const [newUserRole] = useState<"admin">("admin");
+  const newUserRole = "admin" as const;
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [userActionError, setUserActionError] = useState("");
 
@@ -430,28 +427,19 @@ export default function App() {
     }
 
     try {
-      if (isSignUp) {
-        // Sign Up
-        await createUserWithEmailAndPassword(auth, email.trim(), password);
-        triggerToast("Pendaftaran berhasil!", "ok");
-      } else {
-        // Sign In
-        await signInWithEmailAndPassword(auth, email.trim(), password);
-        triggerToast("Berhasil masuk!", "ok");
-      }
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+      triggerToast("Berhasil masuk!", "ok");
     } catch (err: any) {
       console.error("Auth Error:", err);
       let errorMsg = "Terjadi kesalahan. Silakan coba lagi.";
-      if (err.code === "auth/email-already-in-use") {
-        errorMsg = "Email ini sudah terdaftar.";
-      } else if (err.code === "auth/invalid-email") {
+      if (err.code === "auth/invalid-email") {
         errorMsg = "Format email tidak valid.";
-      } else if (err.code === "auth/weak-password") {
-        errorMsg = "Password minimal harus 6 karakter.";
       } else if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password" || err.code === "auth/user-not-found") {
         errorMsg = "Email atau password salah.";
+      } else if (err.code === "auth/too-many-requests") {
+        errorMsg = "Terlalu banyak percobaan. Coba lagi nanti.";
       } else if (err.code === "auth/operation-not-allowed") {
-        errorMsg = "Metode masuk Email/Password belum diaktifkan di Firebase Console Anda. Silakan aktifkan terlebih dahulu agar pengguna dapat mendaftar dan masuk.";
+        errorMsg = "Metode masuk Email/Password belum diaktifkan di Firebase Console Anda. Silakan aktifkan terlebih dahulu.";
       }
       setAuthError(errorMsg);
     } finally {
@@ -509,13 +497,12 @@ export default function App() {
       await setDoc(userDocRef, {
         email: targetEmail,
         allowed: true,
-        role: newUserRole,
+        role: "admin",
         addedAt: new Date().toISOString()
       });
 
       setNewAllowedEmail("");
       setNewAllowedPassword("");
-      setNewUserRole("admin");
       
       if (targetPassword) {
         triggerToast(`Akun berhasil dibuat & izin akses diberikan untuk ${targetEmail}`, "ok");
@@ -2069,7 +2056,7 @@ export default function App() {
                                   <span className="font-bold text-xs text-[#1a1814] break-all">{usr.email}</span>
                                   {usr.email.toLowerCase() === "managementpackaging@gmail.com" && (
                                     <span className="bg-amber-100 text-amber-800 text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-wider">
-                                      Super Admin
+                                      Admin Utama
                                     </span>
                                   )}
                                   {usr.role === "admin" && usr.email.toLowerCase() !== "managementpackaging@gmail.com" && (

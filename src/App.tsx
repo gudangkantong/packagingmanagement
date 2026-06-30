@@ -50,7 +50,7 @@ import {
 import { auth, db, firebaseConfig } from "./firebase";
 import { LaporanKantong, AllowedUser, LockedDate, ROLE_MAP } from "./types";
 import { getDateString, formatDateDisplay } from "./utils";
-import { generateCSVContent, JENIS_KANTONG, JENIS_KANTONG_SHORT } from "./csvUtils";
+import { JENIS_KANTONG, JENIS_KANTONG_SHORT } from "./csvUtils";
 import { downloadExcelReport, generateExcelReport } from "./excelUtils";
 import logo from "./assets/logo.jpg";
 enum OperationType {
@@ -173,6 +173,19 @@ export default function App() {
   const newUserRole = "admin" as const;
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [userActionError, setUserActionError] = useState("");
+
+  // Master data lists (synced from Firestore)
+  const [dynamicVendors, setDynamicVendors] = useState<string[]>([]);
+  const [dynamicJenisKantong, setDynamicJenisKantong] = useState<string[]>([]);
+  const [dynamicPabrikList, setDynamicPabrikList] = useState<string[]>([]);
+  const [newVendor, setNewVendor] = useState("");
+  const [newJenisKantong, setNewJenisKantong] = useState("");
+  const [newPabrik, setNewPabrik] = useState("");
+
+  // Effective lists (dynamic from Firestore, fallback to hardcoded)
+  const effectiveVendors = dynamicVendors.length > 0 ? dynamicVendors : VENDORS;
+  const effectiveJenisKantong = dynamicJenisKantong.length > 0 ? dynamicJenisKantong : JENIS_KANTONG;
+  const effectivePabrikList = dynamicPabrikList.length > 0 ? dynamicPabrikList : PABRIK_LIST;
 
   // Toast triggering helper
   const triggerToast = (text: string, type: "ok" | "er" | "inf" = "inf") => {
@@ -358,6 +371,55 @@ export default function App() {
     });
 
     return () => unsubLocked();
+  }, [currentUser, isAllowed]);
+
+  // Listen to master data collections (vendors, jenis_kantong, pabrik)
+  useEffect(() => {
+    if (!currentUser || isAllowed !== true) {
+      setDynamicVendors([]);
+      setDynamicJenisKantong([]);
+      setDynamicPabrikList([]);
+      return;
+    }
+
+    const unsubVendors = onSnapshot(collection(db, "vendors"), (snap) => {
+      const items: string[] = [];
+      snap.forEach((d) => {
+        const name = d.data().name;
+        if (name) items.push(name);
+      });
+      setDynamicVendors(items);
+    }, (err) => {
+      console.error("Failed to sync vendors:", err);
+    });
+
+    const unsubJenis = onSnapshot(collection(db, "jenis_kantong"), (snap) => {
+      const items: string[] = [];
+      snap.forEach((d) => {
+        const name = d.data().name;
+        if (name) items.push(name);
+      });
+      setDynamicJenisKantong(items);
+    }, (err) => {
+      console.error("Failed to sync jenis_kantong:", err);
+    });
+
+    const unsubPabrik = onSnapshot(collection(db, "pabrik_list"), (snap) => {
+      const items: string[] = [];
+      snap.forEach((d) => {
+        const name = d.data().name;
+        if (name) items.push(name);
+      });
+      setDynamicPabrikList(items);
+    }, (err) => {
+      console.error("Failed to sync pabrik_list:", err);
+    });
+
+    return () => {
+      unsubVendors();
+      unsubJenis();
+      unsubPabrik();
+    };
   }, [currentUser, isAllowed]);
 
   // Prevent unauthorized access to "users" tab
@@ -559,12 +621,61 @@ export default function App() {
     });
   };
 
+  // Master data management handlers
+  const handleAddMasterData = async (
+    collectionName: string,
+    value: string,
+    setValue: (v: string) => void,
+    label: string
+  ) => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      triggerToast(`Nama ${label} tidak boleh kosong`, "er");
+      return;
+    }
+    try {
+      const docId = trimmed.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      await setDoc(doc(db, collectionName, docId), {
+        name: trimmed,
+        addedAt: new Date().toISOString(),
+        addedBy: currentUser?.email || "unknown"
+      });
+      setValue("");
+      triggerToast(`${label} "${trimmed}" berhasil ditambahkan`, "ok");
+    } catch (err) {
+      console.error(`Add ${label} failed:`, err);
+      triggerToast(`Gagal menambahkan ${label}`, "er");
+    }
+  };
+
+  const handleDeleteMasterData = async (
+    collectionName: string,
+    docId: string,
+    label: string,
+    displayName: string
+  ) => {
+    setConfirmModal({
+      isOpen: true,
+      title: `Hapus ${label}`,
+      message: `Apakah Anda yakin ingin menghapus "${displayName}" dari daftar ${label}?`,
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, collectionName, docId));
+          triggerToast(`${label} "${displayName}" berhasil dihapus`, "ok");
+        } catch (err) {
+          console.error(`Delete ${label} failed:`, err);
+          triggerToast(`Gagal menghapus ${label}`, "er");
+        }
+      }
+    });
+  };
+
   // Manage Report Records
   const handleOpenAddForm = () => {
     setEditingId(null);
-    setFormVendor(VENDORS[0]);
-    setFormJenis(JENIS_KANTONG[0]);
-    setFormPabrik(PABRIK_LIST[0]);
+    setFormVendor(effectiveVendors[0]);
+    setFormJenis(effectiveJenisKantong[0]);
+    setFormPabrik(effectivePabrikList[0]);
     const currentHour = new Date().getHours();
     setFormShift(currentHour < 8 ? 1 : currentHour < 16 ? 2 : 3);
     setFormTanggal(getDateString(new Date()));
@@ -890,7 +1001,7 @@ export default function App() {
   );
 
   // Excel Export function
-  const handleExportCSV = () => {
+  const handleExportExcel = () => {
     if (filteredReports.length === 0) {
       triggerToast("Tidak ada data untuk diekspor pada tanggal ini", "er");
       return;
@@ -1269,7 +1380,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  {/* Today shortcuts, CSV Export & Verification Lock */}
+                  {/* Today shortcuts, Excel Export & Verification Lock */}
                   <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-center sm:justify-end">
                     <button
                       onClick={handleGoToday}
@@ -1296,7 +1407,7 @@ export default function App() {
                       </button>
                     )}
                     <button
-                      onClick={handleExportCSV}
+                      onClick={handleExportExcel}
                       className="border border-[#e8e4de] bg-[#e8f0e6] hover:bg-brand-green-light text-brand-green px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
                     >
                       <Download className="w-4 h-4" />
@@ -1419,12 +1530,12 @@ export default function App() {
                         </p>
                       </div>
                     ) : (
-                      PABRIK_LIST.map((pabrikName) => {
+                      effectivePabrikList.map((pabrikName) => {
                         // Aggregate data per bag type for this factory
                         const factoryReports = filteredReports.filter((r) => r.pabrik === pabrikName);
 
                         // Global factory aggregation per bag type
-                        const grandFactoryAgg = JENIS_KANTONG.reduce((acc, name) => {
+                        const grandFactoryAgg = effectiveJenisKantong.reduce((acc, name) => {
                           acc[name] = { utuh: 0, pecah: 0, sortir: 0, total: 0, vendors: {} };
                           return acc;
                         }, {} as Record<string, { utuh: number; pecah: number; sortir: number; total: number, vendors: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> }>);
@@ -1475,7 +1586,7 @@ export default function App() {
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-[#e8e4de]">
-                                      {JENIS_KANTONG.map((name, idx) => {
+                                      {effectiveJenisKantong.map((name, idx) => {
                                         const stat = grandFactoryAgg[name];
                                         const isZero = stat.utuh === 0 && stat.pecah === 0 && stat.sortir === 0;
                                         const isExpanded = !isZero && expandedBagTypes[name];
@@ -1532,7 +1643,7 @@ export default function App() {
                                 const shiftReports = factoryReports.filter(r => r.shift === shift.id);
                                 if (shiftReports.length === 0) return null;
 
-                                const shiftAgg = JENIS_KANTONG.reduce((acc, name) => {
+                                const shiftAgg = effectiveJenisKantong.reduce((acc, name) => {
                                   acc[name] = { utuh: 0, pecah: 0, sortir: 0, total: 0, vendors: {} };
                                   return acc;
                                 }, {} as Record<string, { utuh: number; pecah: number; sortir: number; total: number; vendors: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> }>);
@@ -1588,7 +1699,7 @@ export default function App() {
                                                 </tr>
                                               </thead>
                                               <tbody className="divide-y divide-[#e8e4de]">
-                                                {JENIS_KANTONG.map((name, idx) => {
+                                                {effectiveJenisKantong.map((name, idx) => {
                                                   const stat = shiftAgg[name];
                                                   const isZero = stat.total === 0;
                                                   const isShiftBagExpanded = expandedBagTypes[`shift-${shiftKey}-${name}`];
@@ -2088,6 +2199,161 @@ export default function App() {
                         ))}
                       </div>
                     </div>
+
+                    {/* Master Data Management Section */}
+                    <div className="md:col-span-3 space-y-4">
+                      <div className="flex items-center gap-2 pt-2">
+                        <div className="h-[2px] flex-1 bg-[#e8e4de]" />
+                        <h2 className="text-xs font-extrabold text-[#6b6560] uppercase tracking-widest">Master Data</h2>
+                        <div className="h-[2px] flex-1 bg-[#e8e4de]" />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Vendors Card */}
+                        <div className="bg-white border-2 border-[#e8e4de] rounded-2xl p-5 shadow-xs">
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-base">🏷️</span>
+                            <h3 className="text-sm font-extrabold text-[#1a1814]">Vendor</h3>
+                            <span className="ml-auto text-[10px] bg-brand-green-light text-brand-green font-bold px-1.5 py-0.5 rounded-full">{effectiveVendors.length}</span>
+                          </div>
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              handleAddMasterData("vendors", newVendor, setNewVendor, "Vendor");
+                            }}
+                            className="flex gap-2 mb-3"
+                          >
+                            <input
+                              type="text"
+                              placeholder="Nama vendor baru"
+                              value={newVendor}
+                              onChange={(e) => setNewVendor(e.target.value)}
+                              className="flex-1 px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-medium focus:outline-none focus:border-brand-green focus:bg-white transition-colors"
+                            />
+                            <button
+                              type="submit"
+                              className="bg-brand-green hover:bg-brand-green-hover text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </form>
+                          <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                            {effectiveVendors.map((v) => {
+                              const docId = v.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                              return (
+                                <div key={v} className="flex items-center justify-between gap-2 bg-[#faf9f7] border border-[#e8e4de] rounded-lg px-3 py-1.5">
+                                  <span className="text-xs font-bold text-[#1a1814]">{v}</span>
+                                  {dynamicVendors.length > 0 && (
+                                    <button
+                                      onClick={() => handleDeleteMasterData("vendors", docId, "Vendor", v)}
+                                      className="p-1 text-[#9e9892] hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Jenis Kantong Card */}
+                        <div className="bg-white border-2 border-[#e8e4de] rounded-2xl p-5 shadow-xs">
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-base">👝</span>
+                            <h3 className="text-sm font-extrabold text-[#1a1814]">Jenis Kantong</h3>
+                            <span className="ml-auto text-[10px] bg-brand-green-light text-brand-green font-bold px-1.5 py-0.5 rounded-full">{effectiveJenisKantong.length}</span>
+                          </div>
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              handleAddMasterData("jenis_kantong", newJenisKantong, setNewJenisKantong, "Jenis Kantong");
+                            }}
+                            className="flex gap-2 mb-3"
+                          >
+                            <input
+                              type="text"
+                              placeholder="Nama jenis kantong baru"
+                              value={newJenisKantong}
+                              onChange={(e) => setNewJenisKantong(e.target.value)}
+                              className="flex-1 px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-medium focus:outline-none focus:border-brand-green focus:bg-white transition-colors"
+                            />
+                            <button
+                              type="submit"
+                              className="bg-brand-green hover:bg-brand-green-hover text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </form>
+                          <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                            {effectiveJenisKantong.map((jk) => {
+                              const docId = jk.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                              return (
+                                <div key={jk} className="flex items-center justify-between gap-2 bg-[#faf9f7] border border-[#e8e4de] rounded-lg px-3 py-1.5">
+                                  <span className="text-xs font-bold text-[#1a1814] truncate">{jk}</span>
+                                  {dynamicJenisKantong.length > 0 && (
+                                    <button
+                                      onClick={() => handleDeleteMasterData("jenis_kantong", docId, "Jenis Kantong", jk)}
+                                      className="p-1 text-[#9e9892] hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Pabrik Card */}
+                        <div className="bg-white border-2 border-[#e8e4de] rounded-2xl p-5 shadow-xs">
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-base">🏭</span>
+                            <h3 className="text-sm font-extrabold text-[#1a1814]">Pabrik</h3>
+                            <span className="ml-auto text-[10px] bg-brand-green-light text-brand-green font-bold px-1.5 py-0.5 rounded-full">{effectivePabrikList.length}</span>
+                          </div>
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              handleAddMasterData("pabrik_list", newPabrik, setNewPabrik, "Pabrik");
+                            }}
+                            className="flex gap-2 mb-3"
+                          >
+                            <input
+                              type="text"
+                              placeholder="Nama pabrik baru"
+                              value={newPabrik}
+                              onChange={(e) => setNewPabrik(e.target.value)}
+                              className="flex-1 px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-medium focus:outline-none focus:border-brand-green focus:bg-white transition-colors"
+                            />
+                            <button
+                              type="submit"
+                              className="bg-brand-green hover:bg-brand-green-hover text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </form>
+                          <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                            {effectivePabrikList.map((pb) => {
+                              const docId = pb.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                              return (
+                                <div key={pb} className="flex items-center justify-between gap-2 bg-[#faf9f7] border border-[#e8e4de] rounded-lg px-3 py-1.5">
+                                  <span className="text-xs font-bold text-[#1a1814] truncate">{pb}</span>
+                                  {dynamicPabrikList.length > 0 && (
+                                    <button
+                                      onClick={() => handleDeleteMasterData("pabrik_list", docId, "Pabrik", pb)}
+                                      className="p-1 text-[#9e9892] hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -2189,7 +2455,7 @@ export default function App() {
                       onChange={(e) => setFormVendor(e.target.value)}
                       className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white"
                     >
-                      {VENDORS.map((v) => (
+                      {effectiveVendors.map((v) => (
                         <option key={v} value={v}>
                           {v}
                         </option>
@@ -2207,7 +2473,7 @@ export default function App() {
                       onChange={(e) => setFormJenis(e.target.value)}
                       className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white"
                     >
-                      {JENIS_KANTONG.map((jk) => (
+                      {effectiveJenisKantong.map((jk) => (
                         <option key={jk} value={jk}>
                           {jk}
                         </option>
@@ -2225,7 +2491,7 @@ export default function App() {
                       onChange={(e) => setFormPabrik(e.target.value)}
                       className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white"
                     >
-                      {PABRIK_LIST.map((pb) => (
+                      {effectivePabrikList.map((pb) => (
                         <option key={pb} value={pb}>
                           {pb}
                         </option>

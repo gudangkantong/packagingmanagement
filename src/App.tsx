@@ -1803,17 +1803,6 @@ export default function App() {
                                         </tr>
                                       ))}
                                     </tbody>
-                                    <tfoot>
-                                      <tr className="bg-[#faf9f7]/80 font-bold border-t-2 border-[#e8e4de]">
-                                        <td colSpan={5} className="py-3 px-4 text-right font-extrabold text-[#1a1814]">Total Kumulatif {pbr}</td>
-                                        <td className="py-3 px-4 text-center font-extrabold text-brand-green bg-[#e8f0e6]/15">{pbrStats.utuh}</td>
-                                        <td className="py-3 px-4 text-center font-extrabold text-rose-600 bg-[#e8f0e6]/15">{pbrStats.pecah}</td>
-                                        <td className="py-3 px-4 text-center font-extrabold text-amber-600 bg-[#e8f0e6]/15">{pbrStats.sortir}</td>
-                                        <td className="py-3 px-4 text-center font-extrabold text-brand-green bg-[#e8f0e6]/30">{pbrStats.total}</td>
-                                        <td></td>
-                                        {!isGuest && <td></td>}
-                                      </tr>
-                                    </tfoot>
                                   </table>
                                 </div>
                               </div>

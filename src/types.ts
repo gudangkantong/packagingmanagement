@@ -16,8 +16,8 @@ export interface LaporanKantong {
 export interface AllowedUser {
   email: string;
   allowed: boolean;
-  role: 'super_admin' | 'admin' | 'guest';  // ← tambah field role
-  pabrikRole?: 'pbr1' | 'pbr2' | 'ppg' | 'ppj' | 'all' | null;  // ← badge/role admin pabrik
+  role: 'super_admin' | 'admin' | 'guest';
+  pabrikRole?: 'pbr1' | 'pbr2' | 'ppg' | 'ppj' | 'all' | null;
   addedAt: string;
 }
 
@@ -34,7 +34,6 @@ export const ROLE_MAP: Record<string, string> = {
   guest: 'Tamu',
 };
 
-// Pabrik Role display mapping
 export const PABRIK_ROLE_MAP: Record<string, { label: string; color: string; bgColor: string; borderColor: string }> = {
   pbr1: { label: 'Admin PBR 1', color: 'text-indigo-700', bgColor: 'bg-indigo-50', borderColor: 'border-indigo-200' },
   pbr2: { label: 'Admin PBR 2', color: 'text-teal-700', bgColor: 'bg-teal-50', borderColor: 'border-teal-200' },

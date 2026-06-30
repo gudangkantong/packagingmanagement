@@ -173,7 +173,7 @@ export default function App() {
   // User management state
   const [newAllowedEmail, setNewAllowedEmail] = useState("");
   const [newAllowedPassword, setNewAllowedPassword] = useState("");
-  const [newUserRole, setNewUserRole] = useState<"admin" | "guest">("admin");
+  const [newUserRole] = useState<"admin">("admin");
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [userActionError, setUserActionError] = useState("");
 
@@ -1971,20 +1971,7 @@ export default function App() {
                           </p>
                         </div>
 
-                        <div>
-                          <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1">
-                            Role Pengguna
-                          </label>
-                          <select
-                            disabled={isCreatingAccount}
-                            value={newUserRole}
-                            onChange={(e) => setNewUserRole(e.target.value as "admin" | "guest")}
-                            className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-medium focus:outline-none focus:border-brand-green focus:bg-white transition-colors disabled:opacity-50 cursor-pointer"
-                          >
-                            <option value="admin">Admin — Akses Pelaporan & Input Data</option>
-                            <option value="guest">Tamu — Hanya Lihat Dashboard</option>
-                          </select>
-                        </div>
+
 
                         <button
                           type="submit"
@@ -2010,7 +1997,7 @@ export default function App() {
                       <div className="flex items-center justify-between gap-4 mb-4">
                         <h2 className="text-base font-extrabold text-[#1a1814]">Daftar Email Diizinkan</h2>
                         <span className="text-xs bg-brand-green-light text-brand-green font-bold px-2 py-0.5 rounded-full">
-                          {allowedUsers.length} Terdaftar
+                          {allowedUsers.filter(u => u.role !== 'guest' && !u.email.startsWith('guest_')).length} Terdaftar
                         </span>
                       </div>
 
@@ -2026,7 +2013,7 @@ export default function App() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#e8e4de]">
-                            {allowedUsers.map((usr) => (
+                            {allowedUsers.filter(u => u.role !== 'guest' && !u.email.startsWith('guest_')).map((usr) => (
                               <tr key={usr.email} className="hover:bg-[#faf9f7]/50 transition-colors">
                                 <td className="py-3 px-4">
                                   <div className="flex items-center gap-2">
@@ -2044,11 +2031,7 @@ export default function App() {
                                       Admin
                                     </span>
                                   )}
-                                  {usr.role === "guest" && (
-                                    <span className="bg-gray-100 text-gray-600 text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider">
-                                      Tamu
-                                    </span>
-                                  )}
+
                                 </td>
                                 <td className="py-3 px-4 text-[#9e9892] font-semibold text-[11px]">
                                   {usr.addedAt ? new Date(usr.addedAt).toLocaleString("id-ID") : "-"}
@@ -2075,7 +2058,7 @@ export default function App() {
 
                       {/* Mobile Card List View (shown on mobile) */}
                       <div className="block md:hidden space-y-3">
-                        {allowedUsers.map((usr) => (
+                        {allowedUsers.filter(u => u.role !== 'guest' && !u.email.startsWith('guest_')).map((usr) => (
                           <div key={usr.email} className="bg-[#faf9f7] border-2 border-[#e8e4de] rounded-2xl p-4 flex flex-col gap-2 relative overflow-hidden">
                             <div className="flex items-start justify-between gap-3">
                               <div className="space-y-1">
@@ -2091,11 +2074,7 @@ export default function App() {
                                       Admin
                                     </span>
                                   )}
-                                  {usr.role === "guest" && (
-                                    <span className="bg-gray-100 text-gray-600 text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-wider">
-                                      Tamu
-                                    </span>
-                                  )}
+
                                 </div>
                                 <div className="text-[10px] text-[#9e9892] font-medium">
                                   Sejak: {usr.addedAt ? new Date(usr.addedAt).toLocaleString("id-ID") : "-"}

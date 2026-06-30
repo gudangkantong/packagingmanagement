@@ -35,9 +35,9 @@ export const ROLE_MAP: Record<string, string> = {
 };
 
 export const PABRIK_ROLE_MAP: Record<string, { label: string; color: string; bgColor: string; borderColor: string }> = {
-  pbr1: { label: 'Admin PBR 1', color: 'text-indigo-700', bgColor: 'bg-indigo-50', borderColor: 'border-indigo-200' },
-  pbr2: { label: 'Admin PBR 2', color: 'text-teal-700', bgColor: 'bg-teal-50', borderColor: 'border-teal-200' },
-  ppg: { label: 'Admin PPG', color: 'text-amber-700', bgColor: 'bg-amber-50', borderColor: 'border-amber-200' },
-  ppj: { label: 'Admin PPJ', color: 'text-rose-700', bgColor: 'bg-rose-50', borderColor: 'border-rose-200' },
-  all: { label: 'Admin Semua Pabrik', color: 'text-violet-700', bgColor: 'bg-violet-50', borderColor: 'border-violet-200' },
+  pbr1: { label: 'PBR 1', color: 'text-indigo-700', bgColor: 'bg-indigo-50', borderColor: 'border-indigo-200' },
+  pbr2: { label: 'PBR 2', color: 'text-teal-700', bgColor: 'bg-teal-50', borderColor: 'border-teal-200' },
+  ppg: { label: 'PPG', color: 'text-amber-700', bgColor: 'bg-amber-50', borderColor: 'border-amber-200' },
+  ppj: { label: 'PPJ', color: 'text-rose-700', bgColor: 'bg-rose-50', borderColor: 'border-rose-200' },
+  all: { label: 'All Pabrik', color: 'text-violet-700', bgColor: 'bg-violet-50', borderColor: 'border-violet-200' },
 };

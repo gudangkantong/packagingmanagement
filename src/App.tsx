@@ -349,6 +349,7 @@ export default function App() {
           email: data.email || docSnap.id,
           allowed: data.allowed === true,
           role: data.role || "admin",
+          pabrikRole: data.pabrikRole || null,
           addedAt: data.addedAt || ""
         });
       });
@@ -671,7 +672,12 @@ export default function App() {
   const handleSaveUserBadge = async (targetEmail: string) => {
     try {
       const userDocRef = doc(db, "allowed_users", targetEmail.toLowerCase());
-      await setDoc(userDocRef, { pabrikRole: editingBadgeValue || null }, { merge: true });
+      if (editingBadgeValue) {
+        await setDoc(userDocRef, { pabrikRole: editingBadgeValue }, { merge: true });
+      } else {
+        const { updateDoc } = await import("firebase/firestore");
+        await updateDoc(userDocRef, { pabrikRole: null });
+      }
       setEditingUserBadge(null);
       triggerToast(`Badge pabrik untuk ${targetEmail} berhasil diperbarui`, "ok");
     } catch (err) {

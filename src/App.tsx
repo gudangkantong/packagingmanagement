@@ -1928,7 +1928,7 @@ export default function App() {
                     <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-6 shadow-xs h-fit">
                       <div className="flex items-center gap-2 mb-4">
                         <Users className="w-5 h-5 text-brand-green" />
-                        <h2 className="text-base font-extrabold text-[#1a1814]">Buat Akun & Otorisasi</h2>
+                        <h2 className="text-base font-extrabold text-[#1a1814]">Tambah Akun & Otorisasi</h2>
                       </div>
                       <p className="text-xs text-[#6b6560] leading-relaxed mb-4">
                         Tambahkan pengguna baru di bawah ini. Jika Anda mengisi kolom <strong>Password</strong>, akun Firebase Authentication pengguna tersebut juga akan dibuat secara otomatis.

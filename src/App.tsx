@@ -114,7 +114,7 @@ export default function App() {
   const userRole = currentUserData?.role || (currentUser?.isAnonymous ? 'guest' : null);
   const isMasterAdmin = userRole === 'super_admin';
   const isAdmin = userRole === 'super_admin' || userRole === 'admin';
-  const isGuest = userRole === 'guest' || currentUser?.isAnonymous === true;
+  const isGuest = userRole === 'guest' || currentUser?.isAnonymous === true || (currentUser?.email?.startsWith('guest_') ?? false);
 
   // Active page state
   const [activeTab, setActiveTab] = useState<"dash" | "input" | "users">("dash");

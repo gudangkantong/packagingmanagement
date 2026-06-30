@@ -181,6 +181,12 @@ export default function App() {
   const [newVendor, setNewVendor] = useState("");
   const [newJenisKantong, setNewJenisKantong] = useState("");
   const [newPabrik, setNewPabrik] = useState("");
+  const [editingMasterData, setEditingMasterData] = useState<{
+    collection: string;
+    docId: string;
+    originalName: string;
+    editedName: string;
+  } | null>(null);
 
   // Effective lists (dynamic from Firestore, fallback to hardcoded)
   const effectiveVendors = dynamicVendors.length > 0 ? dynamicVendors : VENDORS;
@@ -381,6 +387,33 @@ export default function App() {
       setDynamicPabrikList([]);
       return;
     }
+
+    const bootstrapCollection = async (
+      collectionName: string,
+      defaults: string[]
+    ) => {
+      try {
+        const { getDocs } = await import("firebase/firestore");
+        const snap = await getDocs(collection(db, collectionName));
+        if (snap.empty) {
+          // Auto-populate with hardcoded defaults
+          for (const item of defaults) {
+            const docId = item.toLowerCase().replace(/[^a-z0-9]/g, '_');
+            await setDoc(doc(db, collectionName, docId), {
+              name: item,
+              addedAt: new Date().toISOString(),
+              addedBy: "system_bootstrap"
+            });
+          }
+        }
+      } catch (e) {
+        console.error(`Bootstrap ${collectionName} failed:`, e);
+      }
+    };
+
+    bootstrapCollection("vendors", VENDORS);
+    bootstrapCollection("jenis_kantong", JENIS_KANTONG);
+    bootstrapCollection("pabrik_list", PABRIK_LIST);
 
     const unsubVendors = onSnapshot(collection(db, "vendors"), (snap) => {
       const items: string[] = [];
@@ -668,6 +701,49 @@ export default function App() {
         }
       }
     });
+  };
+
+  const handleEditMasterData = (
+    collection: string,
+    docId: string,
+    currentName: string
+  ) => {
+    setEditingMasterData({
+      collection,
+      docId,
+      originalName: currentName,
+      editedName: currentName
+    });
+  };
+
+  const handleSaveEditMasterData = async () => {
+    if (!editingMasterData) return;
+    const { collection: coll, docId, originalName, editedName } = editingMasterData;
+    const trimmed = editedName.trim();
+    if (!trimmed) {
+      triggerToast("Nama tidak boleh kosong", "er");
+      return;
+    }
+    if (trimmed === originalName) {
+      setEditingMasterData(null);
+      return;
+    }
+    try {
+      await setDoc(doc(db, coll, docId), {
+        name: trimmed,
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUser?.email || "unknown"
+      }, { merge: true });
+      setEditingMasterData(null);
+      triggerToast(`Berhasil mengubah nama menjadi "${trimmed}"`, "ok");
+    } catch (err) {
+      console.error("Edit master data failed:", err);
+      triggerToast("Gagal mengubah data", "er");
+    }
+  };
+
+  const handleCancelEditMasterData = () => {
+    setEditingMasterData(null);
   };
 
   // Manage Report Records
@@ -2240,16 +2316,44 @@ export default function App() {
                           <div className="space-y-1.5 max-h-40 overflow-y-auto">
                             {effectiveVendors.map((v) => {
                               const docId = v.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                              const isEditing = editingMasterData?.collection === "vendors" && editingMasterData?.docId === docId;
                               return (
-                                <div key={v} className="flex items-center justify-between gap-2 bg-[#faf9f7] border border-[#e8e4de] rounded-lg px-3 py-1.5">
-                                  <span className="text-xs font-bold text-[#1a1814]">{v}</span>
-                                  {dynamicVendors.length > 0 && (
-                                    <button
-                                      onClick={() => handleDeleteMasterData("vendors", docId, "Vendor", v)}
-                                      className="p-1 text-[#9e9892] hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all cursor-pointer"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
+                                <div key={v} className={`flex items-center justify-between gap-2 border rounded-lg px-3 py-1.5 ${isEditing ? "bg-brand-green-light/30 border-brand-green/30" : "bg-[#faf9f7] border-[#e8e4de]"}`}>
+                                  {isEditing ? (
+                                    <>
+                                      <input
+                                        type="text"
+                                        value={editingMasterData.editedName}
+                                        onChange={(e) => setEditingMasterData({ ...editingMasterData, editedName: e.target.value })}
+                                        onKeyDown={(e) => { if (e.key === "Enter") handleSaveEditMasterData(); if (e.key === "Escape") handleCancelEditMasterData(); }}
+                                        className="flex-1 px-2 py-1 bg-white border border-brand-green rounded-md text-xs font-bold focus:outline-none"
+                                        autoFocus
+                                      />
+                                      <button onClick={handleSaveEditMasterData} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded-md transition-all cursor-pointer" title="Simpan">
+                                        <CheckCircle className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button onClick={handleCancelEditMasterData} className="p-1 text-[#9e9892] hover:bg-slate-100 rounded-md transition-all cursor-pointer" title="Batal">
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="text-xs font-bold text-[#1a1814] flex-1">{v}</span>
+                                      <button
+                                        onClick={() => handleEditMasterData("vendors", docId, v)}
+                                        className="p-1 text-[#9e9892] hover:text-sky-600 hover:bg-sky-50 rounded-md transition-all cursor-pointer"
+                                        title="Edit"
+                                      >
+                                        <Edit2 className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteMasterData("vendors", docId, "Vendor", v)}
+                                        className="p-1 text-[#9e9892] hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all cursor-pointer"
+                                        title="Hapus"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    </>
                                   )}
                                 </div>
                               );
@@ -2288,16 +2392,44 @@ export default function App() {
                           <div className="space-y-1.5 max-h-40 overflow-y-auto">
                             {effectiveJenisKantong.map((jk) => {
                               const docId = jk.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                              const isEditing = editingMasterData?.collection === "jenis_kantong" && editingMasterData?.docId === docId;
                               return (
-                                <div key={jk} className="flex items-center justify-between gap-2 bg-[#faf9f7] border border-[#e8e4de] rounded-lg px-3 py-1.5">
-                                  <span className="text-xs font-bold text-[#1a1814] truncate">{jk}</span>
-                                  {dynamicJenisKantong.length > 0 && (
-                                    <button
-                                      onClick={() => handleDeleteMasterData("jenis_kantong", docId, "Jenis Kantong", jk)}
-                                      className="p-1 text-[#9e9892] hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all cursor-pointer"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
+                                <div key={jk} className={`flex items-center justify-between gap-2 border rounded-lg px-3 py-1.5 ${isEditing ? "bg-brand-green-light/30 border-brand-green/30" : "bg-[#faf9f7] border-[#e8e4de]"}`}>
+                                  {isEditing ? (
+                                    <>
+                                      <input
+                                        type="text"
+                                        value={editingMasterData.editedName}
+                                        onChange={(e) => setEditingMasterData({ ...editingMasterData, editedName: e.target.value })}
+                                        onKeyDown={(e) => { if (e.key === "Enter") handleSaveEditMasterData(); if (e.key === "Escape") handleCancelEditMasterData(); }}
+                                        className="flex-1 px-2 py-1 bg-white border border-brand-green rounded-md text-xs font-bold focus:outline-none"
+                                        autoFocus
+                                      />
+                                      <button onClick={handleSaveEditMasterData} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded-md transition-all cursor-pointer" title="Simpan">
+                                        <CheckCircle className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button onClick={handleCancelEditMasterData} className="p-1 text-[#9e9892] hover:bg-slate-100 rounded-md transition-all cursor-pointer" title="Batal">
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="text-xs font-bold text-[#1a1814] truncate flex-1">{jk}</span>
+                                      <button
+                                        onClick={() => handleEditMasterData("jenis_kantong", docId, jk)}
+                                        className="p-1 text-[#9e9892] hover:text-sky-600 hover:bg-sky-50 rounded-md transition-all cursor-pointer"
+                                        title="Edit"
+                                      >
+                                        <Edit2 className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteMasterData("jenis_kantong", docId, "Jenis Kantong", jk)}
+                                        className="p-1 text-[#9e9892] hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all cursor-pointer"
+                                        title="Hapus"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    </>
                                   )}
                                 </div>
                               );
@@ -2336,16 +2468,44 @@ export default function App() {
                           <div className="space-y-1.5 max-h-40 overflow-y-auto">
                             {effectivePabrikList.map((pb) => {
                               const docId = pb.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                              const isEditing = editingMasterData?.collection === "pabrik_list" && editingMasterData?.docId === docId;
                               return (
-                                <div key={pb} className="flex items-center justify-between gap-2 bg-[#faf9f7] border border-[#e8e4de] rounded-lg px-3 py-1.5">
-                                  <span className="text-xs font-bold text-[#1a1814] truncate">{pb}</span>
-                                  {dynamicPabrikList.length > 0 && (
-                                    <button
-                                      onClick={() => handleDeleteMasterData("pabrik_list", docId, "Pabrik", pb)}
-                                      className="p-1 text-[#9e9892] hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all cursor-pointer"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
+                                <div key={pb} className={`flex items-center justify-between gap-2 border rounded-lg px-3 py-1.5 ${isEditing ? "bg-brand-green-light/30 border-brand-green/30" : "bg-[#faf9f7] border-[#e8e4de]"}`}>
+                                  {isEditing ? (
+                                    <>
+                                      <input
+                                        type="text"
+                                        value={editingMasterData.editedName}
+                                        onChange={(e) => setEditingMasterData({ ...editingMasterData, editedName: e.target.value })}
+                                        onKeyDown={(e) => { if (e.key === "Enter") handleSaveEditMasterData(); if (e.key === "Escape") handleCancelEditMasterData(); }}
+                                        className="flex-1 px-2 py-1 bg-white border border-brand-green rounded-md text-xs font-bold focus:outline-none"
+                                        autoFocus
+                                      />
+                                      <button onClick={handleSaveEditMasterData} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded-md transition-all cursor-pointer" title="Simpan">
+                                        <CheckCircle className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button onClick={handleCancelEditMasterData} className="p-1 text-[#9e9892] hover:bg-slate-100 rounded-md transition-all cursor-pointer" title="Batal">
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="text-xs font-bold text-[#1a1814] truncate flex-1">{pb}</span>
+                                      <button
+                                        onClick={() => handleEditMasterData("pabrik_list", docId, pb)}
+                                        className="p-1 text-[#9e9892] hover:text-sky-600 hover:bg-sky-50 rounded-md transition-all cursor-pointer"
+                                        title="Edit"
+                                      >
+                                        <Edit2 className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteMasterData("pabrik_list", docId, "Pabrik", pb)}
+                                        className="p-1 text-[#9e9892] hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all cursor-pointer"
+                                        title="Hapus"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    </>
                                   )}
                                 </div>
                               );

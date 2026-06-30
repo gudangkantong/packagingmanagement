@@ -175,6 +175,8 @@ export default function App() {
   const newUserRole = "admin" as const;
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [userActionError, setUserActionError] = useState("");
+  const [editingUserBadge, setEditingUserBadge] = useState<string | null>(null);
+  const [editingBadgeValue, setEditingBadgeValue] = useState<"" | "pbr1" | "pbr2" | "ppg" | "ppj" | "all">("");
 
   // Master data lists (synced from Firestore)
   const [dynamicVendors, setDynamicVendors] = useState<string[]>([]);
@@ -664,6 +666,18 @@ export default function App() {
         }
       }
     });
+  };
+
+  const handleSaveUserBadge = async (targetEmail: string) => {
+    try {
+      const userDocRef = doc(db, "allowed_users", targetEmail.toLowerCase());
+      await setDoc(userDocRef, { pabrikRole: editingBadgeValue || null }, { merge: true });
+      setEditingUserBadge(null);
+      triggerToast(`Badge pabrik untuk ${targetEmail} berhasil diperbarui`, "ok");
+    } catch (err) {
+      console.error("Update badge failed:", err);
+      triggerToast("Gagal memperbarui badge", "er");
+    }
   };
 
   // Master data management handlers
@@ -2284,18 +2298,52 @@ export default function App() {
                                   {usr.addedAt ? new Date(usr.addedAt).toLocaleString("id-ID") : "-"}
                                 </td>
                                 <td className="py-3 px-4 text-center">
-                                  <button
-                                    onClick={() => handleRemoveAllowedUser(usr.email)}
-                                    disabled={usr.email.toLowerCase() === "managementpackaging@gmail.com"}
-                                    className={`p-1.5 rounded-lg border transition-all ${
-                                      usr.email.toLowerCase() === "managementpackaging@gmail.com"
-                                        ? "text-[#c4bfb7] border-[#e8e4de] cursor-not-allowed"
-                                        : "border-[#e8e4de] hover:border-rose-200 hover:bg-rose-50 text-[#6b6560] hover:text-rose-600"
-                                    }`}
-                                    title="Cabut Izin Akses"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    {editingUserBadge === usr.email ? (
+                                      <div className="flex items-center gap-1">
+                                        <select
+                                          value={editingBadgeValue}
+                                          onChange={(e) => setEditingBadgeValue(e.target.value as any)}
+                                          className="text-[10px] px-1 py-0.5 border border-[#e8e4de] rounded-md bg-white font-bold"
+                                        >
+                                          <option value="">Tanpa Badge</option>
+                                          <option value="pbr1">PBR 1</option>
+                                          <option value="pbr2">PBR 2</option>
+                                          <option value="ppg">PPG</option>
+                                          <option value="ppj">PPJ</option>
+                                          <option value="all">Semua</option>
+                                        </select>
+                                        <button onClick={() => handleSaveUserBadge(usr.email)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded-md cursor-pointer" title="Simpan">
+                                          <CheckCircle className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button onClick={() => setEditingUserBadge(null)} className="p-1 text-[#9e9892] hover:bg-slate-100 rounded-md cursor-pointer" title="Batal">
+                                          <X className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <button
+                                          onClick={() => { setEditingUserBadge(usr.email); setEditingBadgeValue(usr.pabrikRole || ""); }}
+                                          className="p-1.5 rounded-lg border border-[#e8e4de] hover:border-sky-200 hover:bg-sky-50 text-[#6b6560] hover:text-sky-600 transition-all cursor-pointer"
+                                          title="Edit Badge Pabrik"
+                                        >
+                                          <Edit2 className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleRemoveAllowedUser(usr.email)}
+                                          disabled={usr.email.toLowerCase() === "managementpackaging@gmail.com"}
+                                          className={`p-1.5 rounded-lg border transition-all ${
+                                            usr.email.toLowerCase() === "managementpackaging@gmail.com"
+                                              ? "text-[#c4bfb7] border-[#e8e4de] cursor-not-allowed"
+                                              : "border-[#e8e4de] hover:border-rose-200 hover:bg-rose-50 text-[#6b6560] hover:text-rose-600"
+                                          }`}
+                                          title="Cabut Izin Akses"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             ))}
@@ -2333,18 +2381,52 @@ export default function App() {
                                 </div>
                               </div>
 
-                              <button
-                                onClick={() => handleRemoveAllowedUser(usr.email)}
-                                disabled={usr.email.toLowerCase() === "managementpackaging@gmail.com"}
-                                className={`p-2.5 rounded-xl border transition-all shrink-0 ${
-                                  usr.email.toLowerCase() === "managementpackaging@gmail.com"
-                                    ? "text-[#c4bfb7] border-slate-200 cursor-not-allowed bg-slate-50"
-                                    : "border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600"
-                                }`}
-                                title="Cabut Izin Akses"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {editingUserBadge === usr.email ? (
+                                  <div className="flex items-center gap-1">
+                                    <select
+                                      value={editingBadgeValue}
+                                      onChange={(e) => setEditingBadgeValue(e.target.value as any)}
+                                      className="text-[10px] px-1 py-0.5 border border-[#e8e4de] rounded-md bg-white font-bold"
+                                    >
+                                      <option value="">Tanpa Badge</option>
+                                      <option value="pbr1">PBR 1</option>
+                                      <option value="pbr2">PBR 2</option>
+                                      <option value="ppg">PPG</option>
+                                      <option value="ppj">PPJ</option>
+                                      <option value="all">Semua</option>
+                                    </select>
+                                    <button onClick={() => handleSaveUserBadge(usr.email)} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg cursor-pointer" title="Simpan">
+                                      <CheckCircle className="w-4 h-4" />
+                                    </button>
+                                    <button onClick={() => setEditingUserBadge(null)} className="p-1.5 text-[#9e9892] hover:bg-slate-100 rounded-lg cursor-pointer" title="Batal">
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => { setEditingUserBadge(usr.email); setEditingBadgeValue(usr.pabrikRole || ""); }}
+                                      className="p-2.5 rounded-xl border border-sky-200 bg-sky-50 hover:bg-sky-100 text-sky-600 transition-all cursor-pointer"
+                                      title="Edit Badge Pabrik"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleRemoveAllowedUser(usr.email)}
+                                      disabled={usr.email.toLowerCase() === "managementpackaging@gmail.com"}
+                                      className={`p-2.5 rounded-xl border transition-all ${
+                                        usr.email.toLowerCase() === "managementpackaging@gmail.com"
+                                          ? "text-[#c4bfb7] border-slate-200 cursor-not-allowed bg-slate-50"
+                                          : "border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600"
+                                      }`}
+                                      title="Cabut Izin Akses"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           </div>
                         ))}

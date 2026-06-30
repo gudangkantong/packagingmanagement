@@ -113,13 +113,6 @@ export default function App() {
   const isMasterAdmin = userRole === 'super_admin';
   const isAdmin = userRole === 'super_admin' || userRole === 'admin';
   const isGuest = userRole === 'guest' || currentUser?.isAnonymous === true || (currentUser?.email?.startsWith('guest_') ?? false);
-  const userAllowedPabrik = !userPabrikRole || userPabrikRole === 'all'
-    ? effectivePabrikList
-    : effectivePabrikList.filter(p => {
-        const m: Record<string, string> = { pbr1: 'PBR 1', pbr2: 'PBR 2', ppg: 'PPG', ppj: 'PPJ' };
-        const kw = m[userPabrikRole];
-        return kw ? p.includes(kw) : true;
-      });
 
   // Active page state
   const [activeTab, setActiveTab] = useState<"dash" | "input" | "users">("dash");
@@ -201,6 +194,13 @@ export default function App() {
   const effectiveVendors = dynamicVendors.length > 0 ? dynamicVendors : VENDORS;
   const effectiveJenisKantong = dynamicJenisKantong.length > 0 ? dynamicJenisKantong : JENIS_KANTONG;
   const effectivePabrikList = dynamicPabrikList.length > 0 ? dynamicPabrikList : PABRIK_LIST;
+  const userAllowedPabrik = !userPabrikRole || userPabrikRole === 'all'
+    ? effectivePabrikList
+    : effectivePabrikList.filter(p => {
+        const m: Record<string, string> = { pbr1: 'PBR 1', pbr2: 'PBR 2', ppg: 'PPG', ppj: 'PPJ' };
+        const kw = m[userPabrikRole];
+        return kw ? p.includes(kw) : true;
+      });
 
   // Toast triggering helper
   const triggerToast = (text: string, type: "ok" | "er" | "inf" = "inf") => {

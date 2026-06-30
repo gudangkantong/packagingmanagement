@@ -368,6 +368,9 @@ export default function App() {
     if (activeTab === "users" && !isMasterAdmin) {
       setActiveTab("dash");
     }
+    if (activeTab === "input" && isGuest) {
+      setActiveTab("dash");
+    }
   }, [activeTab, currentUser]);
 
   // Handle Guest Login
@@ -1648,7 +1651,7 @@ export default function App() {
                 )}
 
                 {/* VIEWPORT: PELAPORAN DATA LIST */}
-                {activeTab === "input" && (
+                {activeTab === "input" && !isGuest && (
                   <motion.div
                     key="input"
                     initial={{ opacity: 0, y: 15 }}

@@ -1787,7 +1787,10 @@ export default function App() {
                                               }}
                                             >
                                               <td className="py-2 px-2 sm:px-4 font-bold text-[#1a1814] text-xs sm:text-sm">
-                                                {JENIS_KANTONG_SHORT[idx]}
+                                                <span className="block sm:truncate max-w-[140px] sm:max-w-none overflow-hidden">
+                                                  <span className="hidden sm:inline">{name}</span>
+                                                  <span className="sm:hidden whitespace-nowrap animate-marquee inline-block">{name}</span>
+                                                </span>
                                                 {!isZero && (
                                                   <span className="ml-2 text-xs text-[#9e9892]">{isExpanded ? '▼' : '▶'}</span>
                                                 )}
@@ -1897,7 +1900,10 @@ export default function App() {
                                                         onClick={() => setExpandedBagTypes(prev => ({ ...prev, [`shift-${shiftKey}-${name}`]: !prev[`shift-${shiftKey}-${name}`] }))}
                                                       >
                                                         <td className="py-1.5 px-2 sm:px-4 font-bold text-[#1a1814] text-xs">
-                                                          {JENIS_KANTONG_SHORT[idx]}
+                                                          <span className="block sm:truncate max-w-[120px] sm:max-w-none overflow-hidden">
+                                                            <span className="hidden sm:inline">{name}</span>
+                                                            <span className="sm:hidden whitespace-nowrap animate-marquee inline-block">{name}</span>
+                                                          </span>
                                                           <span className="ml-2 text-[10px] text-[#9e9892]">{isShiftBagExpanded ? '▼' : '▶'}</span>
                                                         </td>
                                                         <td className="py-1.5 px-2 sm:px-4 text-center font-semibold text-xs text-[#1a1814]">{stat.utuh.toLocaleString()}</td>

@@ -236,10 +236,11 @@ export default function App() {
 
         // Admin bootstrapping check: automatically authorize managementpackaging@gmail.com
         if (userEmail === "managementpackaging@gmail.com") {
-          setIsAllowed(true);
+          let bootstrapSuccess = false;
           try {
             const userDocRef = doc(db, "allowed_users", userEmail);
             const docSnap = await getDoc(userDocRef);
+            // Always ensure admin document exists with correct fields
             if (!docSnap.exists() || !docSnap.data()?.allowed || docSnap.data()?.role !== 'super_admin') {
               await setDoc(userDocRef, {
                 email: userEmail,
@@ -253,9 +254,29 @@ export default function App() {
                 triggerToast("Admin utama role restored", "ok");
               }
             }
+            bootstrapSuccess = true;
           } catch (e) {
             console.error("Autobootstrap failed:", e);
             handleFirestoreError(e, OperationType.WRITE, `allowed_users/${userEmail}`);
+            // If bootstrap failed, try once more with a fresh write
+            try {
+              const userDocRef = doc(db, "allowed_users", userEmail);
+              await setDoc(userDocRef, {
+                email: userEmail,
+                allowed: true,
+                role: 'super_admin',
+                addedAt: new Date().toISOString()
+              }, { merge: true });
+              bootstrapSuccess = true;
+            } catch (retryErr) {
+              console.error("Bootstrap retry also failed:", retryErr);
+              handleFirestoreError(retryErr, OperationType.WRITE, `allowed_users/${userEmail}`);
+            }
+          }
+          // Only set isAllowed after bootstrap completes
+          setIsAllowed(bootstrapSuccess);
+          if (!bootstrapSuccess) {
+            triggerToast("Gagal menginisialisasi admin. Silakan refresh halaman.", "er");
           }
         }
 
@@ -675,8 +696,8 @@ export default function App() {
       if (editingBadgeValue) {
         await setDoc(userDocRef, { pabrikRole: editingBadgeValue }, { merge: true });
       } else {
-        const { updateDoc } = await import("firebase/firestore");
-        await updateDoc(userDocRef, { pabrikRole: null });
+        // Use setDoc with merge instead of updateDoc to avoid failure if doc doesn't exist
+        await setDoc(userDocRef, { pabrikRole: null }, { merge: true });
       }
       setEditingUserBadge(null);
       triggerToast(`Badge pabrik untuk ${targetEmail} berhasil diperbarui`, "ok");
@@ -707,9 +728,12 @@ export default function App() {
       });
       setValue("");
       triggerToast(`${label} "${trimmed}" berhasil ditambahkan`, "ok");
-    } catch (err) {
+    } catch (err: any) {
       console.error(`Add ${label} failed:`, err);
-      triggerToast(`Gagal menambahkan ${label}`, "er");
+      const errMsg = err?.code === 'permission-denied'
+        ? `Akses ditolak. Pastikan Anda memiliki izin Admin Utama.`
+        : `Gagal menambahkan ${label}: ${err?.message || 'Unknown error'}`;
+      triggerToast(errMsg, "er");
     }
   };
 
@@ -768,9 +792,12 @@ export default function App() {
       }, { merge: true });
       setEditingMasterData(null);
       triggerToast(`Berhasil mengubah nama menjadi "${trimmed}"`, "ok");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Edit master data failed:", err);
-      triggerToast("Gagal mengubah data", "er");
+      const errMsg = err?.code === 'permission-denied'
+        ? "Akses ditolak. Pastikan Anda memiliki izin Admin Utama."
+        : `Gagal mengubah data: ${err?.message || 'Unknown error'}`;
+      triggerToast(errMsg, "er");
     }
   };
 

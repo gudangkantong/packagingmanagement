@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper to check if user is authenticated and has an email
+    // Helper: check if user is authenticated with a verified email
     function isAuthenticated() {
       return request.auth != null && 
              request.auth.token != null && 
@@ -21,9 +21,15 @@ service cloud.firestore {
              get(/databases/$(database)/documents/allowed_users/$(request.auth.token.email)).data.allowed == true;
     }
 
+    // Helper: check if user is the primary admin email (for bootstrap)
+    function isPrimaryAdmin() {
+      return isAuthenticated() && request.auth.token.email == "managementpackaging@gmail.com";
+    }
+
     // Helper: check if user is Super Admin (role-based, bukan hardcoded email)
+    // Primary admin always qualifies even if document doesn't exist yet (bootstrap support)
     function isSuperAdmin() {
-      return isUserAllowed() && getUserRole() == "super_admin";
+      return isPrimaryAdmin() || (isUserAllowed() && getUserRole() == "super_admin");
     }
 
     // Helper: check if user is Admin atau Super Admin

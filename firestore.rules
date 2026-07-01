@@ -1,85 +1,65 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper: check if user is authenticated with a verified email
+
     function isAuthenticated() {
-      return request.auth != null && 
-             request.auth.token != null && 
-             request.auth.token.email != null;
+      return request.auth != null && request.auth.token != null && request.auth.token.email != null;
     }
-    
-    // Helper: get user role from allowed_users collection
+
+    function isMasterAdmin() {
+      return isAuthenticated() && request.auth.token.email == "managementpackaging@gmail.com";
+    }
+
     function getUserRole() {
       return get(/databases/$(database)/documents/allowed_users/$(request.auth.token.email)).data.role;
     }
 
-    // Helper: check if user doc exists and is allowed
     function isUserAllowed() {
-      return isAuthenticated() && 
+      return isAuthenticated() &&
              exists(/databases/$(database)/documents/allowed_users/$(request.auth.token.email)) &&
              get(/databases/$(database)/documents/allowed_users/$(request.auth.token.email)).data.allowed == true;
     }
 
-    // Helper: check if user is the primary admin email (for bootstrap)
-    function isPrimaryAdmin() {
-      return isAuthenticated() && request.auth.token.email == "managementpackaging@gmail.com";
-    }
-
-    // Helper: check if user is Super Admin (role-based, bukan hardcoded email)
-    // Primary admin always qualifies even if document doesn't exist yet (bootstrap support)
     function isSuperAdmin() {
-      return isPrimaryAdmin() || (isUserAllowed() && getUserRole() == "super_admin");
+      return isMasterAdmin() || (isUserAllowed() && getUserRole() == "super_admin");
     }
 
-    // Helper: check if user is Admin atau Super Admin
     function isAdmin() {
-      return isUserAllowed() && getUserRole() in ["super_admin", "admin"];
+      return isUserAllowed() && (getUserRole() == "super_admin" || getUserRole() == "admin");
     }
 
-    // Helper: get user's pabrik role (pbr1, pbr2, both, or null)
     function getUserPabrikRole() {
       return get(/databases/$(database)/documents/allowed_users/$(request.auth.token.email)).data.pabrikRole;
     }
 
-    // Helper: check if user can write to a specific pabrik
     function canWritePabrik(pabrikName) {
-      if (isSuperAdmin()) return true;
-      if (!isAdmin()) return false;
-      let pabrikRole = getUserPabrikRole();
-      if (pabrikRole == null || pabrikRole == "") return true; // no pabrik restriction
-      if (pabrikRole == "all") return true; // all pabrik
-      if (pabrikRole == "pbr1" && pabrikName.matches(".*PBR 1.*")) return true;
-      if (pabrikRole == "pbr2" && pabrikName.matches(".*PBR 2.*")) return true;
-      if (pabrikRole == "ppg" && pabrikName.matches(".*PPG.*")) return true;
-      if (pabrikRole == "ppj" && pabrikName.matches(".*PPJ.*")) return true;
-      return false;
+      return isSuperAdmin()
+        || (isAdmin() && (
+             getUserPabrikRole() == null
+             || getUserPabrikRole() == ""
+             || getUserPabrikRole() == "all"
+             || (getUserPabrikRole() == "pbr1" && pabrikName.matches(".*PBR 1.*"))
+             || (getUserPabrikRole() == "pbr2" && pabrikName.matches(".*PBR 2.*"))
+             || (getUserPabrikRole() == "ppg" && pabrikName.matches(".*PPG.*"))
+             || (getUserPabrikRole() == "ppj" && pabrikName.matches(".*PPJ.*"))
+           ));
     }
 
-    // Helper: check if a date's data is verified/locked by the admin
     function isDateLocked(dateStr) {
       return exists(/databases/$(database)/documents/locked_dates/$(dateStr)) &&
              get(/databases/$(database)/documents/locked_dates/$(dateStr)).data.locked == true;
     }
 
-    // === ALLOWED USERS COLLECTION ===
     match /allowed_users/{email} {
-      // Semua user terotentikasi bisa baca daftar user
       allow read: if isAuthenticated();
-      // Hanya Super Admin yang bisa tulis (tambah/hapus user)
       allow write: if isSuperAdmin();
     }
 
-    // === LOCKED DATES COLLECTION ===
     match /locked_dates/{date} {
-      // Semua user terotentikasi bisa baca status locked
       allow read: if isAuthenticated();
-      // Hanya Super Admin yang bisa lock/unlock tanggal
       allow write: if isSuperAdmin();
     }
 
-    // === MASTER DATA COLLECTIONS ===
-    // Semua user terotentikasi bisa baca, hanya Super Admin yang bisa tulis
     match /vendors/{docId} {
       allow read: if isAuthenticated();
       allow write: if isSuperAdmin();
@@ -95,26 +75,21 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
-    // === LAPORAN KANTONG COLLECTION ===
     match /laporan_kantong/{id} {
-      // Semua user terotentikasi bisa baca laporan
       allow read: if isAuthenticated();
-      
-      // Admin & Super Admin bisa create data, selama tanggal belum locked dan sesuai pabrik role
+
       allow create: if isAdmin() && (
-        isSuperAdmin() || 
+        isSuperAdmin() ||
         (!isDateLocked(request.resource.data.tanggal) && canWritePabrik(request.resource.data.pabrik))
       );
-      
-      // Admin & Super Admin bisa update data, selama tanggal belum locked dan sesuai pabrik role
+
       allow update: if isAdmin() && (
-        isSuperAdmin() || 
+        isSuperAdmin() ||
         (!isDateLocked(request.resource.data.tanggal) && canWritePabrik(request.resource.data.pabrik))
       );
-      
-      // Admin & Super Admin bisa delete data, selama tanggal belum locked dan sesuai pabrik role
+
       allow delete: if isAdmin() && (
-        isSuperAdmin() || 
+        isSuperAdmin() ||
         (!isDateLocked(resource.data.tanggal) && canWritePabrik(resource.data.pabrik))
       );
     }

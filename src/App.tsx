@@ -1786,11 +1786,8 @@ export default function App() {
                                                 }
                                               }}
                                             >
-                                              <td className="py-2 px-2 sm:px-4 font-bold text-[#1a1814] text-xs sm:text-sm">
-                                                <span className="block sm:truncate max-w-[140px] sm:max-w-none overflow-hidden">
-                                                  <span className="hidden sm:inline">{name}</span>
-                                                  <span className="sm:hidden whitespace-nowrap animate-marquee inline-block">{name}</span>
-                                                </span>
+                                              <td className="py-2 px-2 sm:px-4 font-bold text-[#1a1814] text-xs sm:text-sm whitespace-nowrap">
+                                                {name}
                                                 {!isZero && (
                                                   <span className="ml-2 text-xs text-[#9e9892]">{isExpanded ? '▼' : '▶'}</span>
                                                 )}
@@ -1899,11 +1896,8 @@ export default function App() {
                                                         className="hover:bg-[#faf9f7]/50 transition-colors cursor-pointer"
                                                         onClick={() => setExpandedBagTypes(prev => ({ ...prev, [`shift-${shiftKey}-${name}`]: !prev[`shift-${shiftKey}-${name}`] }))}
                                                       >
-                                                        <td className="py-1.5 px-2 sm:px-4 font-bold text-[#1a1814] text-xs">
-                                                          <span className="block sm:truncate max-w-[120px] sm:max-w-none overflow-hidden">
-                                                            <span className="hidden sm:inline">{name}</span>
-                                                            <span className="sm:hidden whitespace-nowrap animate-marquee inline-block">{name}</span>
-                                                          </span>
+                                                        <td className="py-1.5 px-2 sm:px-4 font-bold text-[#1a1814] text-xs whitespace-nowrap">
+                                                          {name}
                                                           <span className="ml-2 text-[10px] text-[#9e9892]">{isShiftBagExpanded ? '▼' : '▶'}</span>
                                                         </td>
                                                         <td className="py-1.5 px-2 sm:px-4 text-center font-semibold text-xs text-[#1a1814]">{stat.utuh.toLocaleString()}</td>

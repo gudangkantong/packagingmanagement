@@ -426,17 +426,35 @@ export default function App() {
       defaults: string[]
     ) => {
       try {
-        const { getDocs } = await import("firebase/firestore");
+        const { getDocs, deleteDoc } = await import("firebase/firestore");
         const snap = await getDocs(collection(db, collectionName));
-        if (snap.empty) {
-          // Auto-populate with hardcoded defaults
-          for (const item of defaults) {
+        const existingNames = new Set<string>();
+        const existingDocs: Record<string, string> = {};
+        snap.forEach((d) => {
+          const name = d.data().name;
+          if (name) {
+            existingNames.add(name);
+            existingDocs[name] = d.id;
+          }
+        });
+
+        // Add missing items from defaults
+        for (const item of defaults) {
+          if (!existingNames.has(item)) {
             const docId = item.toLowerCase().replace(/[^a-z0-9]/g, '_');
             await setDoc(doc(db, collectionName, docId), {
               name: item,
               addedAt: new Date().toISOString(),
-              addedBy: "system_bootstrap"
+              addedBy: "system_sync"
             });
+          }
+        }
+
+        // Remove items no longer in defaults
+        const defaultsSet = new Set(defaults);
+        for (const [name, docId] of Object.entries(existingDocs)) {
+          if (!defaultsSet.has(name)) {
+            await deleteDoc(doc(db, collectionName, docId));
           }
         }
       } catch (e) {

@@ -2,16 +2,18 @@ import { LaporanKantong } from "./types";
 import { formatDateDisplay } from "./utils";
 
 export const JENIS_KANTONG = [
-  "Semen Baturaja (SMBR)",
-  "Semen DYNAMIX (DYX)",
-  "Semen MERDEKA (MDK)",
-  "Semen PADANG (PDG)",
+  "1 PLY PCC SMBR",
+  "MERDEKA",
+  "PADANG",
+  "DYNAMIX",
   "BIGBAG OPC",
   "BIGBAG PCC",
-  "MACAN"
+  "MACAN",
+  "1 PLY OPC SMBR",
+  "2 PLY PCC SMBR"
 ];
 
-export const JENIS_KANTONG_SHORT = ["SMBR", "DYX", "MDK", "PDG", "BIGBAG OPC", "BIGBAG PCC", "MACAN"];
+export const JENIS_KANTONG_SHORT = ["1PLY PCC", "MDK", "PDG", "DYX", "BB OPC", "BB PCC", "MACAN", "1PLY OPC", "2PLY PCC"];
 
 export const generateCSVContent = (
   filteredReports: LaporanKantong[],

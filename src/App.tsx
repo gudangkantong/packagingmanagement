@@ -483,6 +483,9 @@ export default function App() {
         const name = d.data().name;
         if (name) items.push(name);
       });
+      // Sort based on JENIS_KANTONG order; unknown items go to end
+      const orderMap = new Map(JENIS_KANTONG.map((n, i) => [n, i]));
+      items.sort((a, b) => (orderMap.get(a) ?? 999) - (orderMap.get(b) ?? 999));
       setDynamicJenisKantong(items);
     }, (err) => {
       console.error("Failed to sync jenis_kantong:", err);

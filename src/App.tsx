@@ -472,6 +472,8 @@ export default function App() {
         const name = d.data().name;
         if (name) items.push(name);
       });
+      const orderMap = new Map(VENDORS.map((n, i) => [n, i]));
+      items.sort((a, b) => (orderMap.get(a) ?? 999) - (orderMap.get(b) ?? 999));
       setDynamicVendors(items);
     }, (err) => {
       console.error("Failed to sync vendors:", err);
@@ -497,6 +499,8 @@ export default function App() {
         const name = d.data().name;
         if (name) items.push(name);
       });
+      const orderMap = new Map(PABRIK_LIST.map((n, i) => [n, i]));
+      items.sort((a, b) => (orderMap.get(a) ?? 999) - (orderMap.get(b) ?? 999));
       setDynamicPabrikList(items);
     }, (err) => {
       console.error("Failed to sync pabrik_list:", err);

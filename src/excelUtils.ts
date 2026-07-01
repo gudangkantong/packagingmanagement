@@ -114,7 +114,7 @@ export const generateExcelReport = async (
       const hasData = stat.total > 0;
 
       // Main row
-      setCell(row, 1, hasData ? `${JENIS_KANTONG_SHORT[idx]} ▼` : JENIS_KANTONG_SHORT[idx], fontData, hasData ? fillData : undefined);
+      setCell(row, 1, hasData ? `${name} ▼` : name, fontData, hasData ? fillData : undefined);
       setCell(row, 2, stat.utuh, fontData, hasData ? fillData : undefined, 'right');
       setCell(row, 3, stat.pecah, fontData, hasData ? fillData : undefined, 'right');
       setCell(row, 4, stat.sortir, fontData, hasData ? fillData : undefined, 'right');
@@ -194,7 +194,7 @@ export const generateExcelReport = async (
         if (stat.total === 0) return;
 
         // Main row
-        setCell(row, 1, JENIS_KANTONG_SHORT[idx], fontData, fillData);
+        setCell(row, 1, name, fontData, fillData);
         setCell(row, 2, stat.utuh, fontData, fillData, 'right');
         setCell(row, 3, stat.pecah, fontData, fillData, 'right');
         setCell(row, 4, stat.sortir, fontData, fillData, 'right');

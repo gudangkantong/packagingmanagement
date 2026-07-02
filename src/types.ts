@@ -27,6 +27,21 @@ export interface LockedDate {
   lockedAt?: string;
 }
 
+// === NEW: Stock Harian Kantong ===
+export interface StockHarian {
+  id: string;            // format: {pabrik}_{nama}_{tanggal}
+  pabrik: string;        // full pabrik name e.g. "Pabrik Baturaja 1 (PBR 1)"
+  nama: string;          // jenis kantong e.g. "1 PLY PCC SMBR"
+  tanggal: string;       // YYYY-MM-DD
+  stockAwal: number;     // editable by super_admin (defaults to prev day's stockAkhir)
+  penerimaan: number;    // can be filled by admin
+  pengiriman: number;    // can be filled by admin
+  pemakaian: number;     // auto-calculated from laporan_kantong
+  stockAkhir: number;    // auto-calculated: stockAwal + penerimaan - pengiriman - pemakaian
+  createdBy: string;
+  updatedAt: string;
+}
+
 // Role display mapping (kode DB → label Indonesia)
 export const ROLE_MAP: Record<string, string> = {
   super_admin: 'Admin Utama',

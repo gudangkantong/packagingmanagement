@@ -45,10 +45,12 @@ import {
   Unlock,
   Mail,
   UserCheck,
-  X
+  X,
+  Package
 } from "lucide-react";
 import { auth, db, firebaseConfig } from "./firebase";
 import { LaporanKantong, AllowedUser, LockedDate, ROLE_MAP, PABRIK_ROLE_MAP } from "./types";
+import StockHarianPage from "./StockHarianPage";
 import { getDateString, formatDateDisplay } from "./utils";
 import { JENIS_KANTONG, JENIS_KANTONG_SHORT } from "./csvUtils";
 import { downloadExcelReport, generateExcelReport } from "./excelUtils";
@@ -115,7 +117,7 @@ export default function App() {
   const isGuest = userRole === 'guest' || currentUser?.isAnonymous === true || (currentUser?.email?.startsWith('guest_') ?? false);
 
   // Active page state
-  const [activeTab, setActiveTab] = useState<"dash" | "input" | "users">("dash");
+  const [activeTab, setActiveTab] = useState<"dash" | "stock" | "input" | "users">("dash");
 
   // Selected date state
   const [selectedDate, setSelectedDate] = useState<string>(getDateString(new Date()));
@@ -1486,6 +1488,17 @@ export default function App() {
                       <BarChart3 className="w-4.5 h-4.5" />
                       Dashboard
                     </button>
+                    <button
+                      onClick={() => setActiveTab("stock")}
+                      className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${
+                        activeTab === "stock"
+                          ? "bg-emerald-600 text-white shadow-sm"
+                          : "text-[#6b6560] hover:bg-[#faf9f6] hover:text-[#1a1814]"
+                      }`}
+                    >
+                      <Package className="w-4.5 h-4.5" />
+                      Stock Harian
+                    </button>
                     {!isGuest && (
                       <button
                         onClick={() => setActiveTab("input")}
@@ -1931,6 +1944,25 @@ export default function App() {
                         );
                       })
                     )}
+                  </motion.div>
+                )}
+
+                {/* VIEWPORT: STOCK HARIAN */}
+                {activeTab === "stock" && (
+                  <motion.div
+                    key="stock"
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -15 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <StockHarianPage
+                      currentUser={currentUser}
+                      isAllowed={isAllowed === true}
+                      reports={reports}
+                      allowedUsers={allowedUsers}
+                      triggerToast={triggerToast}
+                    />
                   </motion.div>
                 )}
 
@@ -2746,6 +2778,16 @@ export default function App() {
               >
                 <BarChart3 className="w-5 h-5" />
                 <span className="text-[11px]">Dashboard</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab("stock")}
+                className={`flex-1 flex flex-col items-center gap-1 py-1 px-2 rounded-xl transition-all ${
+                  activeTab === "stock" ? "text-emerald-600 bg-emerald-50 font-bold" : "text-[#9e9892]"
+                }`}
+              >
+                <Package className="w-5 h-5" />
+                <span className="text-[11px]">Stock</span>
               </button>
 
               {!isGuest && (

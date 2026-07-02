@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   collection, doc, setDoc, getDoc, onSnapshot, query, where,
 } from "firebase/firestore";
-import { Save, Loader2, AlertCircle, Package, RefreshCw } from "lucide-react";
+import { Save, Loader2, Package, RefreshCw } from "lucide-react";
 import { db } from "./firebase";
 import { StockHarian, LaporanKantong, AllowedUser } from "./types";
 import { formatDateDisplay } from "./utils";
@@ -241,7 +241,6 @@ export default function StockHarianPage({
 
   return (
     <div className="space-y-6">
-      {!isMasterAdmin && <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5"><AlertCircle className="w-3.5 h-3.5" /> Mode baca saja — Hanya Admin Utama yang bisa mengedit</div>}
       {renderOPTTable()}
       {PABRIK_LIST.map(p => renderPabrikTable(p))}
     </div>

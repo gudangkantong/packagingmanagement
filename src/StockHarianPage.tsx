@@ -61,6 +61,7 @@ export default function StockHarianPage({
   const userRole = currentUserData?.role || (currentUser?.isAnonymous ? "guest" : null);
   const isMasterAdmin = userRole === "super_admin";
   const isAdmin = userRole === "super_admin" || userRole === "admin";
+  // Only super_admin can edit stock data
 
   // Date state
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -209,7 +210,7 @@ export default function StockHarianPage({
     nama: string,
     docId: string
   ) => {
-    if (!currentUser || !isAdmin) return;
+    if (!currentUser || !isMasterAdmin) return;
 
     setSaving(docId);
     try {
@@ -251,7 +252,7 @@ export default function StockHarianPage({
 
   // Save all rows for a pabrik
   const handleSaveAllPabrik = async (pabrik: string) => {
-    if (!currentUser || !isAdmin) return;
+    if (!currentUser || !isMasterAdmin) return;
 
     setSaving(pabrik);
     try {
@@ -301,7 +302,7 @@ export default function StockHarianPage({
 
   // Auto-fill stock awal from previous day's stock akhir
   const handleAutoFillStockAwal = async (pabrik: string) => {
-    if (!currentUser || !isAdmin) return;
+    if (!currentUser || !isMasterAdmin) return;
 
     const pabrikLabel = PABRIK_SHORT[pabrik];
     const prevDate = getPrevDate(selectedDate);
@@ -428,7 +429,7 @@ export default function StockHarianPage({
             <h3 className="font-bold text-lg">🏭 {pabrik}</h3>
           </div>
           <div className="flex items-center gap-2">
-            {isAdmin && (
+            {isMasterAdmin && (
               <>
                 <button
                   onClick={() => handleAutoFillStockAwal(pabrik)}
@@ -508,7 +509,7 @@ export default function StockHarianPage({
 
                     {/* Stock Awal */}
                     <td className="px-3 py-2 text-right">
-                      {isAdmin ? (
+                      {isMasterAdmin ? (
                         <input
                           type="text"
                           inputMode="numeric"
@@ -526,7 +527,7 @@ export default function StockHarianPage({
 
                     {/* Penerimaan */}
                     <td className="px-3 py-2 text-right">
-                      {isAdmin ? (
+                      {isMasterAdmin ? (
                         <input
                           type="text"
                           inputMode="numeric"
@@ -544,7 +545,7 @@ export default function StockHarianPage({
 
                     {/* Pengiriman */}
                     <td className="px-3 py-2 text-right">
-                      {isAdmin ? (
+                      {isMasterAdmin ? (
                         <input
                           type="text"
                           inputMode="numeric"
@@ -589,7 +590,7 @@ export default function StockHarianPage({
                     </td>
 
                     {/* Save button per row */}
-                    {isAdmin && (
+                    {isMasterAdmin && (
                       <td className="px-3 py-2 text-center">
                         <button
                           onClick={() => handleSaveRow(pabrik, nama, docId)}
@@ -651,7 +652,7 @@ export default function StockHarianPage({
                     <td className="px-3 py-2.5 text-right border-t-2 border-gray-300 text-emerald-700">
                       {totals.stockAkhir}
                     </td>
-                    {isAdmin && (
+                    {isMasterAdmin && (
                       <td className="border-t-2 border-gray-300"></td>
                     )}
                   </tr>
@@ -748,10 +749,10 @@ export default function StockHarianPage({
             </button>
           </div>
 
-          {!isAdmin && (
+          {!isMasterAdmin && (
             <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
               <AlertCircle className="w-3.5 h-3.5" />
-              Mode baca saja
+              Mode baca saja — Hanya Admin Utama yang bisa mengedit
             </div>
           )}
         </div>

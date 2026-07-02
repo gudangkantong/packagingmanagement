@@ -94,23 +94,12 @@ service cloud.firestore {
       );
     }
 
-    // === NEW: Stock Harian Kantong ===
+    // === Stock Harian Kantong ===
+    // Only super_admin can read/write; others can only read
     match /stock_harian/{id} {
-      // Anyone authenticated can read stock data
       allow read: if isAuthenticated();
-
-      // Admin can create/update stock entries for their assigned pabrik
-      // Super admin can edit stockAwal (stock awal); regular admin can only edit penerimaan & pengiriman
-      allow create: if isAdmin() && (
-        isSuperAdmin() ||
-        canWritePabrik(request.resource.data.pabrik)
-      );
-
-      allow update: if isAdmin() && (
-        isSuperAdmin() ||
-        canWritePabrik(request.resource.data.pabrik)
-      );
-
+      allow create: if isSuperAdmin();
+      allow update: if isSuperAdmin();
       allow delete: if isSuperAdmin();
     }
   }

@@ -1962,6 +1962,7 @@ export default function App() {
                       reports={reports}
                       allowedUsers={allowedUsers}
                       triggerToast={triggerToast}
+                      selectedDate={selectedDate}
                     />
                   </motion.div>
                 )}

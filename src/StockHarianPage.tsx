@@ -1,39 +1,20 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import {
-  collection,
-  doc,
-  setDoc,
-  getDoc,
-  onSnapshot,
-  query,
-  where,
+  collection, doc, setDoc, getDoc, onSnapshot, query, where,
 } from "firebase/firestore";
-import {
-  Calendar as CalendarIcon,
-  ChevronLeft,
-  ChevronRight,
-  Save,
-  Loader2,
-  AlertCircle,
-  Package,
-  RefreshCw,
-} from "lucide-react";
+import { Save, Loader2, AlertCircle, Package, RefreshCw } from "lucide-react";
 import { db } from "./firebase";
 import { StockHarian, LaporanKantong, AllowedUser } from "./types";
-import { getDateString, formatDateDisplay } from "./utils";
+import { formatDateDisplay } from "./utils";
 import { JENIS_KANTONG } from "./csvUtils";
 
-// === OPT Gudang (independent warehouse) ===
 const OPT_GUDANG = "OPT Gudang";
-
-// === Pabrik list ===
 const PABRIK_LIST = [
   "Pabrik Baturaja 1 (PBR 1)",
   "Pabrik Baturaja 2 (PBR 2)",
   "Pabrik Palembang (PPG)",
   "Pabrik Panjang (PPJ)",
 ];
-
 const PABRIK_SHORT: Record<string, string> = {
   [OPT_GUDANG]: "OPT",
   "Pabrik Baturaja 1 (PBR 1)": "PBR 1",
@@ -48,784 +29,221 @@ interface StockHarianPageProps {
   reports: LaporanKantong[];
   allowedUsers: AllowedUser[];
   triggerToast: (text: string, type?: "ok" | "er" | "inf") => void;
+  selectedDate: string;
 }
 
 export default function StockHarianPage({
-  currentUser,
-  isAllowed,
-  reports,
-  allowedUsers,
-  triggerToast,
+  currentUser, isAllowed, reports, allowedUsers, triggerToast, selectedDate,
 }: StockHarianPageProps) {
-  // Role checks
-  const currentUserData = allowedUsers.find(
-    (u) => u.email === currentUser?.email?.toLowerCase()
-  );
+  const currentUserData = allowedUsers.find(u => u.email === currentUser?.email?.toLowerCase());
   const userRole = currentUserData?.role || (currentUser?.isAnonymous ? "guest" : null);
   const isMasterAdmin = userRole === "super_admin";
-  const isAdmin = userRole === "super_admin" || userRole === "admin";
 
-  // Date state
-  const [selectedDate, setSelectedDate] = useState<string>(
-    getDateString(new Date())
-  );
-
-  // Stock data state (keyed by docId)
   const [stockData, setStockData] = useState<Record<string, StockHarian>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
-  const [editBuffer, setEditBuffer] = useState<
-    Record<string, { penerimaan: string; pengiriman: string; stockAwal: string }>
-  >({});
+  const [editBuffer, setEditBuffer] = useState<Record<string, { penerimaan: string; pengiriman: string; stockAwal: string }>>({});
 
-  useEffect(() => {
-    setSelectedDate(getDateString(new Date()));
-  }, []);
+  const ALL_LOCATIONS = [OPT_GUDANG, ...PABRIK_LIST];
 
-  // Helper: generate docId
   const makeDocId = (pabrik: string, nama: string, tanggal: string) => {
     const pKey = PABRIK_SHORT[pabrik] || pabrik;
-    const nKey = nama.replace(/\s+/g, "_");
-    return `${pKey}_${nKey}_${tanggal}`;
+    return `${pKey}_${nama.replace(/\s+/g, "_")}_${tanggal}`;
   };
 
-  // Previous date string
   const getPrevDate = (dateStr: string): string => {
     const d = new Date(dateStr + "T00:00:00");
     d.setDate(d.getDate() - 1);
-    return getDateString(d);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
 
-  // Compute pemakaian for a specific pabrik + jenis kantong on a date
-  const computePemakaian = (
-    pabrikLabel: string,
-    nama: string,
-    tanggal: string
-  ): number => {
-    return reports
-      .filter(
-        (r) =>
-          r.tanggal === tanggal &&
-          r.nama === nama &&
-          r.pabrik.includes(pabrikLabel)
-      )
-      .reduce((sum, r) => sum + r.total, 0);
-  };
+  const computePemakaian = (pabrikLabel: string, nama: string, tanggal: string): number =>
+    reports.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik.includes(pabrikLabel)).reduce((s, r) => s + r.total, 0);
 
-  // All locations (OPT + Pabrik)
-  const ALL_LOCATIONS = [OPT_GUDANG, ...PABRIK_LIST];
-
-  // Listen to stock_harian collection for selected date
   useEffect(() => {
-    if (!currentUser || isAllowed !== true) {
-      setStockData({});
-      setLoading(false);
-      return;
-    }
-
+    if (!currentUser || isAllowed !== true) { setStockData({}); setLoading(false); return; }
     setLoading(true);
-
-    const q = query(
-      collection(db, "stock_harian"),
-      where("tanggal", "==", selectedDate)
-    );
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const data: Record<string, StockHarian> = {};
-        snap.forEach((docSnap) => {
-          const d = docSnap.data();
-          data[docSnap.id] = {
-            id: docSnap.id,
-            pabrik: d.pabrik || "",
-            nama: d.nama || "",
-            tanggal: d.tanggal || "",
-            stockAwal: Number(d.stockAwal) || 0,
-            penerimaan: Number(d.penerimaan) || 0,
-            pengiriman: Number(d.pengiriman) || 0,
-            pemakaian: Number(d.pemakaian) || 0,
-            stockAkhir: Number(d.stockAkhir) || 0,
-            createdBy: d.createdBy || "",
-            updatedAt: d.updatedAt || "",
-          };
-        });
-        setStockData(data);
-        setLoading(false);
-      },
-      (err) => {
-        console.error("Failed to sync stock_harian:", err);
-        triggerToast("Gagal menyinkronkan data stock harian", "er");
-        setLoading(false);
-      }
-    );
-
+    const q = query(collection(db, "stock_harian"), where("tanggal", "==", selectedDate));
+    const unsub = onSnapshot(q, snap => {
+      const data: Record<string, StockHarian> = {};
+      snap.forEach(d => {
+        const v = d.data();
+        data[d.id] = { id: d.id, pabrik: v.pabrik || "", nama: v.nama || "", tanggal: v.tanggal || "", stockAwal: Number(v.stockAwal) || 0, penerimaan: Number(v.penerimaan) || 0, pengiriman: Number(v.pengiriman) || 0, pemakaian: Number(v.pemakaian) || 0, stockAkhir: Number(v.stockAkhir) || 0, createdBy: v.createdBy || "", updatedAt: v.updatedAt || "" };
+      });
+      setStockData(data); setLoading(false);
+    }, err => { console.error(err); triggerToast("Gagal sync stock harian", "er"); setLoading(false); });
     return () => unsub();
   }, [currentUser, isAllowed, selectedDate]);
 
-  // Initialize edit buffer when stock data or date changes
   useEffect(() => {
-    const buffer: Record<
-      string,
-      { penerimaan: string; pengiriman: string; stockAwal: string }
-    > = {};
-
-    ALL_LOCATIONS.forEach((pabrik) => {
-      JENIS_KANTONG.forEach((nama) => {
-        const docId = makeDocId(pabrik, nama, selectedDate);
-        const existing = stockData[docId];
-        if (existing) {
-          buffer[docId] = {
-            penerimaan: String(existing.penerimaan),
-            pengiriman: String(existing.pengiriman),
-            stockAwal: String(existing.stockAwal),
-          };
-        } else {
-          buffer[docId] = {
-            penerimaan: "",
-            pengiriman: "",
-            stockAwal: "",
-          };
-        }
-      });
-    });
-
-    setEditBuffer(buffer);
+    const buf: Record<string, { penerimaan: string; pengiriman: string; stockAwal: string }> = {};
+    ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
+      const id = makeDocId(p, n, selectedDate);
+      const ex = stockData[id];
+      buf[id] = ex ? { penerimaan: String(ex.penerimaan), pengiriman: String(ex.pengiriman), stockAwal: String(ex.stockAwal) } : { penerimaan: "", pengiriman: "", stockAwal: "" };
+    }));
+    setEditBuffer(buf);
   }, [stockData, selectedDate]);
 
-  // Handle input change
-  const handleInputChange = (
-    docId: string,
-    field: "penerimaan" | "pengiriman" | "stockAwal",
-    value: string
-  ) => {
-    if (value === "" || /^\d*$/.test(value)) {
-      setEditBuffer((prev) => ({
-        ...prev,
-        [docId]: { ...prev[docId], [field]: value },
-      }));
-    }
+  const handleInputChange = (docId: string, field: "penerimaan" | "pengiriman" | "stockAwal", value: string) => {
+    if (value === "" || /^\d*$/.test(value)) setEditBuffer(p => ({ ...p, [docId]: { ...p[docId], [field]: value } }));
   };
 
-  // Save a single row
-  const handleSaveRow = async (
-    pabrik: string,
-    nama: string,
-    docId: string
-  ) => {
+  const handleSaveRow = async (pabrik: string, nama: string, docId: string) => {
     if (!currentUser || !isMasterAdmin) return;
-
     setSaving(docId);
     try {
-      const pabrikLabel = PABRIK_SHORT[pabrik];
-      const buf = editBuffer[docId] || {
-        penerimaan: "0",
-        pengiriman: "0",
-        stockAwal: "0",
-      };
-
-      const stockAwal = parseInt(buf.stockAwal) || 0;
-      const penerimaan = parseInt(buf.penerimaan) || 0;
-      const pengiriman = parseInt(buf.pengiriman) || 0;
-
+      const b = editBuffer[docId] || { penerimaan: "0", pengiriman: "0", stockAwal: "0" };
+      const sa = parseInt(b.stockAwal) || 0, pn = parseInt(b.penerimaan) || 0, pg = parseInt(b.pengiriman) || 0;
       const isOPT = pabrik === OPT_GUDANG;
-      const pemakaian = isOPT ? 0 : computePemakaian(pabrikLabel, nama, selectedDate);
-      const stockAkhir = isOPT
-        ? stockAwal + penerimaan - pengiriman
-        : stockAwal + penerimaan - pengiriman - pemakaian;
-
-      const docData = {
-        pabrik,
-        nama,
-        tanggal: selectedDate,
-        stockAwal,
-        penerimaan,
-        pengiriman,
-        pemakaian,
-        stockAkhir,
-        createdBy: currentUser.email || "unknown",
-        updatedAt: new Date().toISOString(),
-      };
-
-      await setDoc(doc(db, "stock_harian", docId), docData, { merge: true });
-      triggerToast(`Stock ${nama} (${pabrikLabel}) berhasil disimpan`, "ok");
-    } catch (e) {
-      console.error("Save stock failed:", e);
-      triggerToast("Gagal menyimpan data stock", "er");
-    } finally {
-      setSaving(null);
-    }
+      const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
+      const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
+      await setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
+      triggerToast(`Stock ${nama} (${PABRIK_SHORT[pabrik]}) disimpan`, "ok");
+    } catch (e) { console.error(e); triggerToast("Gagal simpan", "er"); }
+    finally { setSaving(null); }
   };
 
-  // Save all rows for a location
   const handleSaveAll = async (pabrik: string) => {
     if (!currentUser || !isMasterAdmin) return;
-
     setSaving(pabrik);
     try {
-      const pabrikLabel = PABRIK_SHORT[pabrik];
       const isOPT = pabrik === OPT_GUDANG;
-
-      const promises = JENIS_KANTONG.map(async (nama) => {
+      await Promise.all(JENIS_KANTONG.map(nama => {
         const docId = makeDocId(pabrik, nama, selectedDate);
-        const buf = editBuffer[docId] || {
-          penerimaan: "0",
-          pengiriman: "0",
-          stockAwal: "0",
-        };
-
-        const stockAwal = parseInt(buf.stockAwal) || 0;
-        const penerimaan = parseInt(buf.penerimaan) || 0;
-        const pengiriman = parseInt(buf.pengiriman) || 0;
-        const pemakaian = isOPT ? 0 : computePemakaian(pabrikLabel, nama, selectedDate);
-        const stockAkhir = isOPT
-          ? stockAwal + penerimaan - pengiriman
-          : stockAwal + penerimaan - pengiriman - pemakaian;
-
-        const docData = {
-          pabrik,
-          nama,
-          tanggal: selectedDate,
-          stockAwal,
-          penerimaan,
-          pengiriman,
-          pemakaian,
-          stockAkhir,
-          createdBy: currentUser.email || "unknown",
-          updatedAt: new Date().toISOString(),
-        };
-
-        return setDoc(doc(db, "stock_harian", docId), docData, { merge: true });
-      });
-
-      await Promise.all(promises);
-      triggerToast(`Semua stock ${pabrikLabel} berhasil disimpan`, "ok");
-    } catch (e) {
-      console.error("Save all stock failed:", e);
-      triggerToast("Gagal menyimpan data stock", "er");
-    } finally {
-      setSaving(null);
-    }
+        const b = editBuffer[docId] || { penerimaan: "0", pengiriman: "0", stockAwal: "0" };
+        const sa = parseInt(b.stockAwal) || 0, pn = parseInt(b.penerimaan) || 0, pg = parseInt(b.pengiriman) || 0;
+        const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
+        const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
+        return setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
+      }));
+      triggerToast(`Semua stock ${PABRIK_SHORT[pabrik]} disimpan`, "ok");
+    } catch (e) { console.error(e); triggerToast("Gagal simpan", "er"); }
+    finally { setSaving(null); }
   };
 
-  // Auto-fill stock awal from previous day's stock akhir
   const handleAutoFillStockAwal = async (pabrik: string) => {
     if (!currentUser || !isMasterAdmin) return;
-
-    const pabrikLabel = PABRIK_SHORT[pabrik];
     const prevDate = getPrevDate(selectedDate);
-
     try {
       const updates: Record<string, string> = {};
-      let foundCount = 0;
-
+      let cnt = 0;
       for (const nama of JENIS_KANTONG) {
-        const prevDocId = makeDocId(pabrik, nama, prevDate);
-        const prevDoc = await getDoc(doc(db, "stock_harian", prevDocId));
-
-        if (prevDoc.exists()) {
-          const prevData = prevDoc.data();
-          const prevStockAkhir = Number(prevData.stockAkhir) || 0;
-          const curDocId = makeDocId(pabrik, nama, selectedDate);
-          updates[curDocId] = String(prevStockAkhir);
-          foundCount++;
-        }
+        const prev = await getDoc(doc(db, "stock_harian", makeDocId(pabrik, nama, prevDate)));
+        if (prev.exists()) { updates[makeDocId(pabrik, nama, selectedDate)] = String(Number(prev.data()?.stockAkhir) || 0); cnt++; }
       }
-
-      if (foundCount > 0) {
-        setEditBuffer((prev) => {
-          const next = { ...prev };
-          for (const [docId, val] of Object.entries(updates)) {
-            next[docId] = { ...next[docId], stockAwal: val };
-          }
-          return next;
-        });
-        triggerToast(
-          `Stock awal ${pabrikLabel} diisi dari stock akhir ${formatDateDisplay(prevDate)} (${foundCount} item)`,
-          "ok"
-        );
-      } else {
-        triggerToast(
-          `Tidak ada data stock akhir pada ${formatDateDisplay(prevDate)} untuk ${pabrikLabel}`,
-          "inf"
-        );
-      }
-    } catch (e) {
-      console.error("Auto-fill stock awal failed:", e);
-      triggerToast("Gagal mengisi stock awal otomatis", "er");
-    }
+      if (cnt > 0) {
+        setEditBuffer(p => { const n = { ...p }; for (const [id, v] of Object.entries(updates)) n[id] = { ...n[id], stockAwal: v }; return n; });
+        triggerToast(`Stock awal ${PABRIK_SHORT[pabrik]} dari ${formatDateDisplay(prevDate)} (${cnt} item)`, "ok");
+      } else triggerToast(`Tidak ada data sebelumnya untuk ${PABRIK_SHORT[pabrik]}`, "inf");
+    } catch (e) { console.error(e); triggerToast("Gagal auto-fill", "er"); }
   };
 
-  // Date navigation
-  const goToPrevDay = () => {
-    const d = new Date(selectedDate + "T00:00:00");
-    d.setDate(d.getDate() - 1);
-    setSelectedDate(getDateString(d));
-  };
-
-  const goToNextDay = () => {
-    const d = new Date(selectedDate + "T00:00:00");
-    d.setDate(d.getDate() + 1);
-    setSelectedDate(getDateString(d));
-  };
-
-  const goToToday = () => {
-    setSelectedDate(getDateString(new Date()));
-  };
-
-  // Compute display values for a row
   const getRowDisplay = (pabrik: string, nama: string, docId: string) => {
-    const pabrikLabel = PABRIK_SHORT[pabrik];
-    const buf = editBuffer[docId] || {
-      penerimaan: "0",
-      pengiriman: "0",
-      stockAwal: "0",
-    };
-
-    const stockAwal = parseInt(buf.stockAwal) || 0;
-    const penerimaan = parseInt(buf.penerimaan) || 0;
-    const pengiriman = parseInt(buf.pengiriman) || 0;
-
+    const b = editBuffer[docId] || { penerimaan: "0", pengiriman: "0", stockAwal: "0" };
+    const sa = parseInt(b.stockAwal) || 0, pn = parseInt(b.penerimaan) || 0, pg = parseInt(b.pengiriman) || 0;
     const isOPT = pabrik === OPT_GUDANG;
-    const pemakaian = isOPT ? 0 : computePemakaian(pabrikLabel, nama, selectedDate);
-    const stockAkhir = isOPT
-      ? stockAwal + penerimaan - pengiriman
-      : stockAwal + penerimaan - pengiriman - pemakaian;
-
-    return { stockAwal, penerimaan, pengiriman, pemakaian, stockAkhir };
+    const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
+    const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
+    return { stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk };
   };
 
-  // === Render OPT Gudang table (tanpa kolom Pemakaian) ===
-  const renderOPTTable = () => {
-    const colors = {
-      header: "bg-gray-800",
-      bg: "bg-gray-100",
-      accent: "border-gray-300",
-    };
-
-    return (
-      <div className={`rounded-xl border ${colors.accent} overflow-hidden mb-6 shadow-sm`}>
-        {/* Header */}
-        <div className={`${colors.header} text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2`}>
-          <div className="flex items-center gap-2">
-            <Package className="w-5 h-5" />
-            <h3 className="font-bold text-lg">📦 {OPT_GUDANG}</h3>
-          </div>
-          <div className="flex items-center gap-2">
-            {isMasterAdmin && (
-              <>
-                <button
-                  onClick={() => handleAutoFillStockAwal(OPT_GUDANG)}
-                  className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
-                  title="Isi stock awal dari stock akhir hari sebelumnya"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  Auto Stock Awal
-                </button>
-                <button
-                  onClick={() => handleSaveAll(OPT_GUDANG)}
-                  disabled={saving === OPT_GUDANG}
-                  className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {saving === OPT_GUDANG ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Save className="w-3.5 h-3.5" />
-                  )}
-                  Simpan Semua
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Table — tanpa kolom Pemakaian */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className={`${colors.bg} text-gray-700`}>
-                <th className="px-4 py-2.5 text-left font-semibold border-b border-gray-200 min-w-[180px]">
-                  Jenis Kantong
-                </th>
-                <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">
-                  Stock Awal
-                </th>
-                <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">
-                  Penerimaan
-                </th>
-                <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">
-                  Pengiriman
-                </th>
-                <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">
-                  Stock Akhir
-                </th>
-                {isMasterAdmin && (
-                  <th className="px-3 py-2.5 text-center font-semibold border-b border-gray-200 w-[80px]">
-                    Aksi
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {JENIS_KANTONG.map((nama, idx) => {
-                const docId = makeDocId(OPT_GUDANG, nama, selectedDate);
-                const display = getRowDisplay(OPT_GUDANG, nama, docId);
-                const buf = editBuffer[docId] || {
-                  penerimaan: "",
-                  pengiriman: "",
-                  stockAwal: "",
-                };
-
-                return (
-                  <tr
-                    key={nama}
-                    className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
-                      idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"
-                    }`}
-                  >
-                    <td className="px-4 py-2 font-medium text-gray-800">{nama}</td>
-
-                    {/* Stock Awal */}
-                    <td className="px-3 py-2 text-right">
-                      {isMasterAdmin ? (
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={buf.stockAwal}
-                          onChange={(e) => handleInputChange(docId, "stockAwal", e.target.value)}
-                          className="w-20 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300"
-                          placeholder="0"
-                        />
-                      ) : (
-                        <span className="text-gray-700">{display.stockAwal}</span>
-                      )}
-                    </td>
-
-                    {/* Penerimaan */}
-                    <td className="px-3 py-2 text-right">
-                      {isMasterAdmin ? (
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={buf.penerimaan}
-                          onChange={(e) => handleInputChange(docId, "penerimaan", e.target.value)}
-                          className="w-20 text-right bg-green-50 border border-green-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-300"
-                          placeholder="0"
-                        />
-                      ) : (
-                        <span className="text-gray-700">{display.penerimaan}</span>
-                      )}
-                    </td>
-
-                    {/* Pengiriman */}
-                    <td className="px-3 py-2 text-right">
-                      {isMasterAdmin ? (
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={buf.pengiriman}
-                          onChange={(e) => handleInputChange(docId, "pengiriman", e.target.value)}
-                          className="w-20 text-right bg-blue-50 border border-blue-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                          placeholder="0"
-                        />
-                      ) : (
-                        <span className="text-gray-700">{display.pengiriman}</span>
-                      )}
-                    </td>
-
-                    {/* Stock Akhir */}
-                    <td className="px-3 py-2 text-right">
-                      <span
-                        className={`font-bold ${
-                          display.stockAkhir < 0
-                            ? "text-red-600"
-                            : display.stockAkhir === 0
-                            ? "text-gray-400"
-                            : "text-emerald-700"
-                        }`}
-                      >
-                        {display.stockAkhir}
-                      </span>
-                    </td>
-
-                    {/* Save button */}
-                    {isMasterAdmin && (
-                      <td className="px-3 py-2 text-center">
-                        <button
-                          onClick={() => handleSaveRow(OPT_GUDANG, nama, docId)}
-                          disabled={saving === docId}
-                          className="text-indigo-600 hover:text-indigo-800 disabled:text-gray-300 transition-colors"
-                          title="Simpan baris ini"
-                        >
-                          {saving === docId ? (
-                            <Loader2 className="w-4 h-4 animate-spin mx-auto" />
-                          ) : (
-                            <Save className="w-4 h-4 mx-auto" />
-                          )}
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-
-              {/* Total row */}
-              {(() => {
-                const totals = JENIS_KANTONG.reduce(
-                  (acc, nama) => {
-                    const docId = makeDocId(OPT_GUDANG, nama, selectedDate);
-                    const d = getRowDisplay(OPT_GUDANG, nama, docId);
-                    acc.stockAwal += d.stockAwal;
-                    acc.penerimaan += d.penerimaan;
-                    acc.pengiriman += d.pengiriman;
-                    acc.stockAkhir += d.stockAkhir;
-                    return acc;
-                  },
-                  { stockAwal: 0, penerimaan: 0, pengiriman: 0, stockAkhir: 0 }
-                );
-
-                return (
-                  <tr className={`${colors.bg} font-bold text-gray-800`}>
-                    <td className="px-4 py-2.5 border-t-2 border-gray-300">TOTAL</td>
-                    <td className="px-3 py-2.5 text-right border-t-2 border-gray-300">{totals.stockAwal}</td>
-                    <td className="px-3 py-2.5 text-right border-t-2 border-gray-300">{totals.penerimaan}</td>
-                    <td className="px-3 py-2.5 text-right border-t-2 border-gray-300">{totals.pengiriman}</td>
-                    <td className="px-3 py-2.5 text-right border-t-2 border-gray-300 text-emerald-700">{totals.stockAkhir}</td>
-                    {isMasterAdmin && <td className="border-t-2 border-gray-300"></td>}
-                  </tr>
-                );
-              })()}
-            </tbody>
-          </table>
-        </div>
+  const renderOPTTable = () => (
+    <div className="rounded-xl border border-gray-300 overflow-hidden mb-6 shadow-sm">
+      <div className="bg-gray-800 text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2"><Package className="w-5 h-5" /><h3 className="font-bold text-lg">📦 {OPT_GUDANG}</h3></div>
+        {isMasterAdmin && <div className="flex items-center gap-2">
+          <button onClick={() => handleAutoFillStockAwal(OPT_GUDANG)} className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"><RefreshCw className="w-3.5 h-3.5" /> Auto Stock Awal</button>
+          <button onClick={() => handleSaveAll(OPT_GUDANG)} disabled={saving === OPT_GUDANG} className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">{saving === OPT_GUDANG ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Simpan Semua</button>
+        </div>}
       </div>
-    );
-  };
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead><tr className="bg-gray-100 text-gray-700">
+            <th className="px-4 py-2.5 text-left font-semibold border-b border-gray-200 min-w-[180px]">Jenis Kantong</th>
+            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Stock Awal</th>
+            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Penerimaan</th>
+            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Pengiriman</th>
+            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Stock Akhir</th>
+            {isMasterAdmin && <th className="px-3 py-2.5 text-center font-semibold border-b border-gray-200 w-[80px]">Aksi</th>}
+          </tr></thead>
+          <tbody>{JENIS_KANTONG.map((nama, idx) => {
+            const docId = makeDocId(OPT_GUDANG, nama, selectedDate);
+            const d = getRowDisplay(OPT_GUDANG, nama, docId);
+            const buf = editBuffer[docId] || { penerimaan: "", pengiriman: "", stockAwal: "" };
+            return (
+              <tr key={nama} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                <td className="px-4 py-2 font-medium text-gray-800">{nama}</td>
+                <td className="px-3 py-2 text-right">{isMasterAdmin ? <input type="text" inputMode="numeric" value={buf.stockAwal} onChange={e => handleInputChange(docId, "stockAwal", e.target.value)} className="w-20 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" /> : <span className="text-gray-700">{d.stockAwal}</span>}</td>
+                <td className="px-3 py-2 text-right">{isMasterAdmin ? <input type="text" inputMode="numeric" value={buf.penerimaan} onChange={e => handleInputChange(docId, "penerimaan", e.target.value)} className="w-20 text-right bg-green-50 border border-green-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-300" placeholder="0" /> : <span className="text-gray-700">{d.penerimaan}</span>}</td>
+                <td className="px-3 py-2 text-right">{isMasterAdmin ? <input type="text" inputMode="numeric" value={buf.pengiriman} onChange={e => handleInputChange(docId, "pengiriman", e.target.value)} className="w-20 text-right bg-blue-50 border border-blue-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" placeholder="0" /> : <span className="text-gray-700">{d.pengiriman}</span>}</td>
+                <td className="px-3 py-2 text-right"><span className={`font-bold ${d.stockAkhir < 0 ? "text-red-600" : d.stockAkhir === 0 ? "text-gray-400" : "text-emerald-700"}`}>{d.stockAkhir}</span></td>
+                {isMasterAdmin && <td className="px-3 py-2 text-center"><button onClick={() => handleSaveRow(OPT_GUDANG, nama, docId)} disabled={saving === docId} className="text-indigo-600 hover:text-indigo-800 disabled:text-gray-300 transition-colors">{saving === docId ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : <Save className="w-4 h-4 mx-auto" />}</button></td>}
+              </tr>
+            );
+          })}</tbody>
+        </table>
+      </div>
+    </div>
+  );
 
-  // === Render Pabrik table (dengan kolom Pemakaian) ===
   const renderPabrikTable = (pabrik: string) => {
-    const pabrikColors: Record<string, { header: string; bg: string; accent: string }> = {
-      "Pabrik Baturaja 1 (PBR 1)": { header: "bg-indigo-600", bg: "bg-indigo-50", accent: "border-indigo-200" },
-      "Pabrik Baturaja 2 (PBR 2)": { header: "bg-teal-600", bg: "bg-teal-50", accent: "border-teal-200" },
-      "Pabrik Palembang (PPG)": { header: "bg-amber-600", bg: "bg-amber-50", accent: "border-amber-200" },
-      "Pabrik Panjang (PPJ)": { header: "bg-rose-600", bg: "bg-rose-50", accent: "border-rose-200" },
+    const pc: Record<string, { h: string; b: string; a: string }> = {
+      "Pabrik Baturaja 1 (PBR 1)": { h: "bg-indigo-600", b: "bg-indigo-50", a: "border-indigo-200" },
+      "Pabrik Baturaja 2 (PBR 2)": { h: "bg-teal-600", b: "bg-teal-50", a: "border-teal-200" },
+      "Pabrik Palembang (PPG)": { h: "bg-amber-600", b: "bg-amber-50", a: "border-amber-200" },
+      "Pabrik Panjang (PPJ)": { h: "bg-rose-600", b: "bg-rose-50", a: "border-rose-200" },
     };
-
-    const colors = pabrikColors[pabrik] || { header: "bg-gray-600", bg: "bg-gray-50", accent: "border-gray-200" };
-
+    const c = pc[pabrik] || { h: "bg-gray-600", b: "bg-gray-50", a: "border-gray-200" };
     return (
-      <div key={pabrik} className={`rounded-xl border ${colors.accent} overflow-hidden mb-6 shadow-sm`}>
-        {/* Header */}
-        <div className={`${colors.header} text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2`}>
-          <div className="flex items-center gap-2">
-            <Package className="w-5 h-5" />
-            <h3 className="font-bold text-lg">🏭 {pabrik}</h3>
-          </div>
-          <div className="flex items-center gap-2">
-            {isMasterAdmin && (
-              <>
-                <button
-                  onClick={() => handleAutoFillStockAwal(pabrik)}
-                  className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
-                  title="Isi stock awal dari stock akhir hari sebelumnya"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  Auto Stock Awal
-                </button>
-                <button
-                  onClick={() => handleSaveAll(pabrik)}
-                  disabled={saving === pabrik}
-                  className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {saving === pabrik ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Save className="w-3.5 h-3.5" />
-                  )}
-                  Simpan Semua
-                </button>
-              </>
-            )}
-          </div>
+      <div key={pabrik} className={`rounded-xl border ${c.a} overflow-hidden mb-6 shadow-sm`}>
+        <div className={`${c.h} text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2`}>
+          <div className="flex items-center gap-2"><Package className="w-5 h-5" /><h3 className="font-bold text-lg">🏭 {pabrik}</h3></div>
+          {isMasterAdmin && <div className="flex items-center gap-2">
+            <button onClick={() => handleAutoFillStockAwal(pabrik)} className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"><RefreshCw className="w-3.5 h-3.5" /> Auto Stock Awal</button>
+            <button onClick={() => handleSaveAll(pabrik)} disabled={saving === pabrik} className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">{saving === pabrik ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Simpan Semua</button>
+          </div>}
         </div>
-
-        {/* Table — dengan kolom Pemakaian */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead>
-              <tr className={`${colors.bg} text-gray-700`}>
-                <th className="px-4 py-2.5 text-left font-semibold border-b border-gray-200 min-w-[180px]">Jenis Kantong</th>
-                <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Stock Awal</th>
-                <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Penerimaan</th>
-                <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Pengiriman</th>
-                <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Pemakaian</th>
-                <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Stock Akhir</th>
-                {isMasterAdmin && (
-                  <th className="px-3 py-2.5 text-center font-semibold border-b border-gray-200 w-[80px]">Aksi</th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {JENIS_KANTONG.map((nama, idx) => {
-                const docId = makeDocId(pabrik, nama, selectedDate);
-                const display = getRowDisplay(pabrik, nama, docId);
-                const buf = editBuffer[docId] || { penerimaan: "", pengiriman: "", stockAwal: "" };
-
-                return (
-                  <tr key={nama} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
-                    <td className="px-4 py-2 font-medium text-gray-800">{nama}</td>
-
-                    {/* Stock Awal */}
-                    <td className="px-3 py-2 text-right">
-                      {isMasterAdmin ? (
-                        <input type="text" inputMode="numeric" value={buf.stockAwal}
-                          onChange={(e) => handleInputChange(docId, "stockAwal", e.target.value)}
-                          className="w-20 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
-                      ) : (
-                        <span className="text-gray-700">{display.stockAwal}</span>
-                      )}
-                    </td>
-
-                    {/* Penerimaan */}
-                    <td className="px-3 py-2 text-right">
-                      {isMasterAdmin ? (
-                        <input type="text" inputMode="numeric" value={buf.penerimaan}
-                          onChange={(e) => handleInputChange(docId, "penerimaan", e.target.value)}
-                          className="w-20 text-right bg-green-50 border border-green-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-300" placeholder="0" />
-                      ) : (
-                        <span className="text-gray-700">{display.penerimaan}</span>
-                      )}
-                    </td>
-
-                    {/* Pengiriman */}
-                    <td className="px-3 py-2 text-right">
-                      {isMasterAdmin ? (
-                        <input type="text" inputMode="numeric" value={buf.pengiriman}
-                          onChange={(e) => handleInputChange(docId, "pengiriman", e.target.value)}
-                          className="w-20 text-right bg-blue-50 border border-blue-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" placeholder="0" />
-                      ) : (
-                        <span className="text-gray-700">{display.pengiriman}</span>
-                      )}
-                    </td>
-
-                    {/* Pemakaian (auto) */}
-                    <td className="px-3 py-2 text-right">
-                      <span className={`font-medium ${display.pemakaian > 0 ? "text-red-600" : "text-gray-400"}`}>
-                        {display.pemakaian}
-                      </span>
-                    </td>
-
-                    {/* Stock Akhir */}
-                    <td className="px-3 py-2 text-right">
-                      <span className={`font-bold ${display.stockAkhir < 0 ? "text-red-600" : display.stockAkhir === 0 ? "text-gray-400" : "text-emerald-700"}`}>
-                        {display.stockAkhir}
-                      </span>
-                    </td>
-
-                    {/* Save button */}
-                    {isMasterAdmin && (
-                      <td className="px-3 py-2 text-center">
-                        <button onClick={() => handleSaveRow(pabrik, nama, docId)} disabled={saving === docId}
-                          className="text-indigo-600 hover:text-indigo-800 disabled:text-gray-300 transition-colors" title="Simpan baris ini">
-                          {saving === docId ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : <Save className="w-4 h-4 mx-auto" />}
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-
-              {/* Total row */}
-              {(() => {
-                const totals = JENIS_KANTONG.reduce((acc, nama) => {
-                  const docId = makeDocId(pabrik, nama, selectedDate);
-                  const d = getRowDisplay(pabrik, nama, docId);
-                  acc.stockAwal += d.stockAwal;
-                  acc.penerimaan += d.penerimaan;
-                  acc.pengiriman += d.pengiriman;
-                  acc.pemakaian += d.pemakaian;
-                  acc.stockAkhir += d.stockAkhir;
-                  return acc;
-                }, { stockAwal: 0, penerimaan: 0, pengiriman: 0, pemakaian: 0, stockAkhir: 0 });
-
-                return (
-                  <tr className={`${colors.bg} font-bold text-gray-800`}>
-                    <td className="px-4 py-2.5 border-t-2 border-gray-300">TOTAL</td>
-                    <td className="px-3 py-2.5 text-right border-t-2 border-gray-300">{totals.stockAwal}</td>
-                    <td className="px-3 py-2.5 text-right border-t-2 border-gray-300">{totals.penerimaan}</td>
-                    <td className="px-3 py-2.5 text-right border-t-2 border-gray-300">{totals.pengiriman}</td>
-                    <td className="px-3 py-2.5 text-right border-t-2 border-gray-300 text-red-600">{totals.pemakaian}</td>
-                    <td className="px-3 py-2.5 text-right border-t-2 border-gray-300 text-emerald-700">{totals.stockAkhir}</td>
-                    {isMasterAdmin && <td className="border-t-2 border-gray-300"></td>}
-                  </tr>
-                );
-              })()}
-            </tbody>
+            <thead><tr className={`${c.b} text-gray-700`}>
+              <th className="px-4 py-2.5 text-left font-semibold border-b border-gray-200 min-w-[180px]">Jenis Kantong</th>
+              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Stock Awal</th>
+              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Penerimaan</th>
+              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Pengiriman</th>
+              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Pemakaian</th>
+              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Stock Akhir</th>
+              {isMasterAdmin && <th className="px-3 py-2.5 text-center font-semibold border-b border-gray-200 w-[80px]">Aksi</th>}
+            </tr></thead>
+            <tbody>{JENIS_KANTONG.map((nama, idx) => {
+              const docId = makeDocId(pabrik, nama, selectedDate);
+              const d = getRowDisplay(pabrik, nama, docId);
+              const buf = editBuffer[docId] || { penerimaan: "", pengiriman: "", stockAwal: "" };
+              return (
+                <tr key={nama} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                  <td className="px-4 py-2 font-medium text-gray-800">{nama}</td>
+                  <td className="px-3 py-2 text-right">{isMasterAdmin ? <input type="text" inputMode="numeric" value={buf.stockAwal} onChange={e => handleInputChange(docId, "stockAwal", e.target.value)} className="w-20 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" /> : <span className="text-gray-700">{d.stockAwal}</span>}</td>
+                  <td className="px-3 py-2 text-right">{isMasterAdmin ? <input type="text" inputMode="numeric" value={buf.penerimaan} onChange={e => handleInputChange(docId, "penerimaan", e.target.value)} className="w-20 text-right bg-green-50 border border-green-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-300" placeholder="0" /> : <span className="text-gray-700">{d.penerimaan}</span>}</td>
+                  <td className="px-3 py-2 text-right">{isMasterAdmin ? <input type="text" inputMode="numeric" value={buf.pengiriman} onChange={e => handleInputChange(docId, "pengiriman", e.target.value)} className="w-20 text-right bg-blue-50 border border-blue-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" placeholder="0" /> : <span className="text-gray-700">{d.pengiriman}</span>}</td>
+                  <td className="px-3 py-2 text-right"><span className={`font-medium ${d.pemakaian > 0 ? "text-red-600" : "text-gray-400"}`}>{d.pemakaian}</span></td>
+                  <td className="px-3 py-2 text-right"><span className={`font-bold ${d.stockAkhir < 0 ? "text-red-600" : d.stockAkhir === 0 ? "text-gray-400" : "text-emerald-700"}`}>{d.stockAkhir}</span></td>
+                  {isMasterAdmin && <td className="px-3 py-2 text-center"><button onClick={() => handleSaveRow(pabrik, nama, docId)} disabled={saving === docId} className="text-indigo-600 hover:text-indigo-800 disabled:text-gray-300 transition-colors">{saving === docId ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : <Save className="w-4 h-4 mx-auto" />}</button></td>}
+                </tr>
+              );
+            })}</tbody>
           </table>
         </div>
       </div>
     );
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-        <span className="ml-3 text-gray-600">Memuat data stock harian...</span>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /><span className="ml-3 text-gray-600">Memuat data stock harian...</span></div>;
 
   return (
     <div className="space-y-6">
-      {/* Date Selector */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <CalendarIcon className="w-5 h-5 text-gray-500" />
-            <span className="text-sm text-gray-500 font-medium">Tanggal:</span>
-            <div className="flex items-center gap-1">
-              <button onClick={goToPrevDay} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors">
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-              <button onClick={goToNextDay} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors">
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-            <span className="text-sm text-gray-600 font-semibold">{formatDateDisplay(selectedDate)}</span>
-            <button onClick={goToToday} className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-lg hover:bg-indigo-200 transition-colors">
-              Hari Ini
-            </button>
-          </div>
-
-          {!isMasterAdmin && (
-            <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
-              <AlertCircle className="w-3.5 h-3.5" />
-              Mode baca saja — Hanya Admin Utama yang bisa mengedit
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Formula info */}
-      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-sm text-emerald-800">
-        <p className="font-semibold mb-1">📋 Rumus Perhitungan:</p>
-        <p><strong>OPT Gudang:</strong> Stock Akhir = Stock Awal + Penerimaan − Pengiriman</p>
-        <p><strong>Pabrik:</strong> Stock Akhir = Stock Awal + Penerimaan − Pengiriman − Pemakaian</p>
-        <p className="text-xs text-emerald-600 mt-1">
-          * Pemakaian pabrik dihitung otomatis dari data laporan pemakaian kantong
-        </p>
-        <p className="text-xs text-emerald-600">
-          * Stock Awal bisa diisi otomatis dari stock akhir hari sebelumnya (klik "Auto Stock Awal")
-        </p>
-      </div>
-
-      {/* 1. OPT Gudang */}
+      {!isMasterAdmin && <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5"><AlertCircle className="w-3.5 h-3.5" /> Mode baca saja — Hanya Admin Utama yang bisa mengedit</div>}
       {renderOPTTable()}
-
-      {/* 2-5. Per Pabrik */}
-      {PABRIK_LIST.map((pabrik) => renderPabrikTable(pabrik))}
+      {PABRIK_LIST.map(p => renderPabrikTable(p))}
     </div>
   );
 }

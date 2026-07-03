@@ -3193,7 +3193,7 @@ export default function App() {
 
       {/* PENERIMAAN MODAL (admin utama only) */}
       <AnimatePresence>
-        {isPenerimaanModalOpen && isMasterAdmin && (
+        {isPenerimaanModalOpen && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
             <motion.div
               initial={{ opacity: 0 }}
@@ -3253,7 +3253,7 @@ export default function App() {
 
       {/* PENGIRIMAN MODAL (admin utama only) */}
       <AnimatePresence>
-        {isPengirimanModalOpen && isMasterAdmin && (
+        {isPengirimanModalOpen && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
             <motion.div
               initial={{ opacity: 0 }}

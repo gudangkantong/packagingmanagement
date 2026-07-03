@@ -1626,7 +1626,7 @@ export default function App() {
                       onClick={() => setActiveTab("stock")}
                       className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${
                         activeTab === "stock"
-                          ? "bg-emerald-600 text-white shadow-sm"
+                          ? "bg-brand-green text-white shadow-sm"
                           : "text-[#6b6560] hover:bg-[#faf9f6] hover:text-[#1a1814]"
                       }`}
                     >

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { initializeApp, deleteApp } from "firebase/app";
 import {
   signInWithEmailAndPassword,
@@ -161,6 +160,7 @@ export default function App() {
 
   // Modal form state
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalTab, setModalTab] = useState<"pemakaian" | "penerimaan" | "pengiriman">("pemakaian");
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -890,6 +890,7 @@ export default function App() {
   // Manage Report Records
   const handleOpenAddForm = () => {
     setEditingId(null);
+    setModalTab("pemakaian");
     setFormVendor(effectiveVendors[0]);
     setFormJenis(effectiveJenisKantong[0]);
     const defaultPabrik = userAllowedPabrik.length > 0 ? userAllowedPabrik[0] : effectivePabrikList[0];
@@ -1047,7 +1048,8 @@ export default function App() {
       setPnFormJumlah("");
       setPnFormKeterangan("");
       setPnFormSumber("Gudang OPT");
-      setIsPenerimaanModalOpen(false);
+      setModalTab("pemakaian");
+      setIsModalOpen(false);
     } catch (err) {
       console.error("Save penerimaan failed:", err);
       triggerToast("Gagal menyimpan penerimaan", "er");
@@ -1081,7 +1083,8 @@ export default function App() {
       setPgFormJumlah("");
       setPgFormKeterangan("");
       setPgFormTujuan("Gudang OPT");
-      setIsPengirimanModalOpen(false);
+      setModalTab("pemakaian");
+      setIsModalOpen(false);
     } catch (err) {
       console.error("Save pengiriman failed:", err);
       triggerToast("Gagal menyimpan pengiriman", "er");
@@ -2128,79 +2131,7 @@ export default function App() {
                           )}
                         </button>
                       )}
-                      {isMasterAdmin && (
-                        <>
-                          <button
-                            onClick={() => setIsPenerimaanModalOpen(true)}
-                            className="h-10 px-4 rounded-xl font-bold text-[13px] flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 bg-emerald-600 hover:bg-emerald-700 text-white hover:shadow-md"
-                          >
-                            <div className="bg-white/20 p-0.5 rounded-md">
-                              <Plus className="w-4 h-4" />
-                            </div>
-                            <span>Penerimaan</span>
-                          </button>
-                          <button
-                            onClick={() => setIsPengirimanModalOpen(true)}
-                            className="h-10 px-4 rounded-xl font-bold text-[13px] flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md"
-                          >
-                            <div className="bg-white/20 p-0.5 rounded-md">
-                              <Plus className="w-4 h-4" />
-                            </div>
-                            <span>Pengiriman</span>
-                          </button>
-                        </>
-                      )}
                     </div>
-
-                    {/* Penerimaan & Pengiriman Summary Cards (admin utama only) */}
-                    {isMasterAdmin && (penerimaanList.filter(r => r.tanggal === selectedDate).length > 0 || pengirimanList.filter(r => r.tanggal === selectedDate).length > 0) && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                        {penerimaanList.filter(r => r.tanggal === selectedDate).length > 0 && (
-                          <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4">
-                            <h4 className="text-xs font-bold text-emerald-700 mb-2 uppercase tracking-wide">📦 Data Penerimaan Hari Ini</h4>
-                            <div className="space-y-1">
-                              {penerimaanList.filter(r => r.tanggal === selectedDate).map(item => (
-                                <div key={item.id} className="flex items-center justify-between text-xs bg-white rounded-lg px-3 py-1.5 border border-emerald-100">
-                                  <span className="font-medium text-gray-700">{item.nama} ({PABRIK_SHORT[item.pabrik] || item.pabrik})</span>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-bold text-emerald-700">+{item.jumlah}</span>
-                                    {item.keterangan && <span className="text-gray-400 text-[10px]">{item.keterangan}</span>}
-                                    <button
-                                      onClick={async () => { try { await deleteDoc(doc(db, "penerimaan_data", item.id)); triggerToast("Penerimaan dihapus", "ok"); } catch (e) { triggerToast("Gagal hapus", "er"); } }}
-                                      className="text-rose-400 hover:text-rose-600 p-0.5"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {pengirimanList.filter(r => r.tanggal === selectedDate).length > 0 && (
-                          <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4">
-                            <h4 className="text-xs font-bold text-blue-700 mb-2 uppercase tracking-wide">🚚 Data Pengiriman Hari Ini</h4>
-                            <div className="space-y-1">
-                              {pengirimanList.filter(r => r.tanggal === selectedDate).map(item => (
-                                <div key={item.id} className="flex items-center justify-between text-xs bg-white rounded-lg px-3 py-1.5 border border-blue-100">
-                                  <span className="font-medium text-gray-700">{item.nama} ({PABRIK_SHORT[item.pabrik] || item.pabrik})</span>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-bold text-blue-700">+{item.jumlah}</span>
-                                    {item.keterangan && <span className="text-gray-400 text-[10px]">{item.keterangan}</span>}
-                                    <button
-                                      onClick={async () => { try { await deleteDoc(doc(db, "pengiriman_data", item.id)); triggerToast("Pengiriman dihapus", "ok"); } catch (e) { triggerToast("Gagal hapus", "er"); } }}
-                                      className="text-rose-400 hover:text-rose-600 p-0.5"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
 
                     {inputFilteredReports.length === 0 ? (
                       <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-12 text-center shadow-xs">
@@ -3027,18 +2958,29 @@ export default function App() {
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
               className="bg-white border-2 border-[#e8e4de] rounded-t-3xl sm:rounded-3xl shadow-xl w-full max-w-xl relative overflow-hidden z-10 max-h-[90vh] flex flex-col"
             >
-              <div className="p-4 md:p-5 border-b border-[#e8e4de] flex items-center justify-between bg-[#fcfbfa]">
-                <h3 className="font-extrabold text-sm md:text-base text-[#1a1814]">
-                  {editingId ? "✏️ Edit Laporan Pemakaian" : "➕ Tambah Laporan Baru"}
-                </h3>
-                <button
-                  onClick={() => setIsModalOpen(false)}
-                  className="p-1.5 text-[#6b6560] hover:text-[#1a1814] hover:bg-[#faf9f7] rounded-xl transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+              <div className="p-4 md:p-5 border-b border-[#e8e4de] bg-[#fcfbfa]">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-extrabold text-sm md:text-base text-[#1a1814]">
+                    ➕ Tambah Data
+                  </h3>
+                  <button
+                    onClick={() => setIsModalOpen(false)}
+                    className="p-1.5 text-[#6b6560] hover:text-[#1a1814] hover:bg-[#faf9f7] rounded-xl transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                {isMasterAdmin && !editingId && (
+                  <div className="flex gap-1 mt-3">
+                    <button type="button" onClick={() => setModalTab("pemakaian")} className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${modalTab === "pemakaian" ? "bg-brand-green text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Pemakaian</button>
+                    <button type="button" onClick={() => setModalTab("penerimaan")} className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${modalTab === "penerimaan" ? "bg-emerald-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Penerimaan</button>
+                    <button type="button" onClick={() => setModalTab("pengiriman")} className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${modalTab === "pengiriman" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Pengiriman</button>
+                  </div>
+                )}
               </div>
 
+              {/* Tab: Pemakaian Kantong (default) */}
+              {(modalTab === "pemakaian" || editingId || !isMasterAdmin) && (
               <form onSubmit={handleSaveEntry} className="flex-1 overflow-y-auto p-5 md:p-6 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Vendor Selection */}
@@ -3193,14 +3135,110 @@ export default function App() {
                   </button>
                 </div>
               </form>
+              )}
+
+              {/* Tab: Penerimaan */}
+              {modalTab === "penerimaan" && !editingId && isMasterAdmin && (
+              <form onSubmit={handleSavePenerimaan} className="flex-1 overflow-y-auto p-5 md:p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Tanggal</label>
+                    <div className="px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814]">{formatDateDisplay(selectedDate)}</div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Pabrik Tujuan</label>
+                    <select value={pnFormPabrik} onChange={e => setPnFormPabrik(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
+                      {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Jenis Kantong</label>
+                    <select value={pnFormNama} onChange={e => setPnFormNama(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
+                      {effectiveJenisKantong.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Jumlah</label>
+                    <input type="text" inputMode="numeric" value={pnFormJumlah} onChange={e => { if (e.target.value === "" || /^\d*$/.test(e.target.value)) setPnFormJumlah(e.target.value); }} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white" placeholder="0" required />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Penerimaan Dari</label>
+                  <select value={pnFormSumber} onChange={e => setPnFormSumber(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
+                    <option value="Gudang OPT">Gudang OPT</option>
+                    {effectiveVendors.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Keterangan <span className="font-normal">(opsional)</span></label>
+                  <input type="text" value={pnFormKeterangan} onChange={e => setPnFormKeterangan(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white" placeholder="Catatan tambahan..." />
+                </div>
+                <div className="pt-4 border-t border-[#e8e4de] flex items-center justify-end gap-2">
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="border-2 border-[#e8e4de] hover:bg-[#faf9f7] text-[#1a1814] px-4 py-2.5 rounded-xl text-xs font-bold transition-all">Batal</button>
+                  <button type="submit" disabled={isSavingPenerimaan} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-2 disabled:opacity-50">
+                    {isSavingPenerimaan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Simpan Penerimaan
+                  </button>
+                </div>
+              </form>
+              )}
+
+              {/* Tab: Pengiriman */}
+              {modalTab === "pengiriman" && !editingId && isMasterAdmin && (
+              <form onSubmit={handleSavePengiriman} className="flex-1 overflow-y-auto p-5 md:p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Tanggal</label>
+                    <div className="px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814]">{formatDateDisplay(selectedDate)}</div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Pabrik Asal</label>
+                    <select value={pgFormPabrik} onChange={e => setPgFormPabrik(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
+                      {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Jenis Kantong</label>
+                    <select value={pgFormNama} onChange={e => setPgFormNama(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
+                      {effectiveJenisKantong.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Jumlah</label>
+                    <input type="text" inputMode="numeric" value={pgFormJumlah} onChange={e => { if (e.target.value === "" || /^\d*$/.test(e.target.value)) setPgFormJumlah(e.target.value); }} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white" placeholder="0" required />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Pengiriman Ke</label>
+                  <select value={pgFormTujuan} onChange={e => setPgFormTujuan(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
+                    <option value="Gudang OPT">Gudang OPT</option>
+                    {effectiveVendors.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Keterangan <span className="font-normal">(opsional)</span></label>
+                  <input type="text" value={pgFormKeterangan} onChange={e => setPgFormKeterangan(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white" placeholder="Catatan tambahan..." />
+                </div>
+                <div className="pt-4 border-t border-[#e8e4de] flex items-center justify-end gap-2">
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="border-2 border-[#e8e4de] hover:bg-[#faf9f7] text-[#1a1814] px-4 py-2.5 rounded-xl text-xs font-bold transition-all">Batal</button>
+                  <button type="submit" disabled={isSavingPengiriman} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-2 disabled:opacity-50">
+                    {isSavingPengiriman ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Simpan Pengiriman
+                  </button>
+                </div>
+              </form>
+              )}
+
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* PENERIMAAN MODAL (admin utama only) - via portal to avoid overflow clipping */}
-      {createPortal(
-      <AnimatePresence>
+      {/* CUSTOM CONFIRMATION MODAL */}
         {isPenerimaanModalOpen && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
             <motion.div
@@ -3269,11 +3307,8 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
-      , document.body)}
 
-      {/* PENGIRIMAN MODAL (admin utama only) - via portal */}
-      {createPortal(
-      <AnimatePresence>
+      {/* CUSTOM CONFIRMATION MODAL */}
         {isPengirimanModalOpen && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
             <motion.div
@@ -3342,7 +3377,6 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
-      , document.body)}
 
       {/* CUSTOM CONFIRMATION MODAL */}
       <AnimatePresence>

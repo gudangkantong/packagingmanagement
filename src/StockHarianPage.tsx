@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
-  collection, doc, setDoc, getDoc, onSnapshot, query, where,
+  collection, doc, setDoc, onSnapshot, query, where,
 } from "firebase/firestore";
 import { Save, Loader2, Package, RefreshCw } from "lucide-react";
 import { db } from "./firebase";
@@ -39,12 +39,14 @@ export default function StockHarianPage({
   const userRole = currentUserData?.role || (currentUser?.isAnonymous ? "guest" : null);
   const isMasterAdmin = userRole === "super_admin";
 
+  const [prevDayData, setPrevDayData] = useState<Record<string, StockHarian>>({});
   const [stockData, setStockData] = useState<Record<string, StockHarian>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [editBuffer, setEditBuffer] = useState<Record<string, { penerimaan: string; pengiriman: string; stockAwal: string }>>({});
 
   const ALL_LOCATIONS = [OPT_GUDANG, ...PABRIK_LIST];
+  const prevDate = (() => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate()-1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); })();
 
   const makeDocId = (pabrik: string, nama: string, tanggal: string) => {
     const pKey = PABRIK_SHORT[pabrik] || pabrik;
@@ -76,45 +78,39 @@ export default function StockHarianPage({
   }, [currentUser, isAllowed, selectedDate]);
 
   useEffect(() => {
+    if (!currentUser || isAllowed !== true) { setPrevDayData({}); return; }
+    const q = query(collection(db, "stock_harian"), where("tanggal", "==", prevDate));
+    const unsub = onSnapshot(q, snap => { const data: Record<string, StockHarian> = {}; snap.forEach(d => { data[d.id] = d.data() as StockHarian; }); setPrevDayData(data); }, err => console.error(err));
+    return () => unsub();
+  }, [currentUser, isAllowed, prevDate]);
+
+  useEffect(() => {
     const buf: Record<string, { penerimaan: string; pengiriman: string; stockAwal: string }> = {};
     ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
       const id = makeDocId(p, n, selectedDate);
-      const ex = stockData[id];
-      buf[id] = ex ? { penerimaan: String(ex.penerimaan), pengiriman: String(ex.pengiriman), stockAwal: String(ex.stockAwal) } : { penerimaan: "", pengiriman: "", stockAwal: "" };
+      const saved = stockData[id];
+      if (saved) { buf[id] = { penerimaan: String(saved.penerimaan), pengiriman: String(saved.pengiriman), stockAwal: String(saved.stockAwal) }; } else { const prevId = makeDocId(p, n, prevDate); const pv = prevDayData[prevId]; const ps = pv ? Number(pv.stockAkhir) || 0 : 0; buf[id] = { penerimaan: "", pengiriman: "", stockAwal: ps !== 0 ? String(ps) : "" }; }
     }));
     setEditBuffer(buf);
   }, [stockData, selectedDate]);
 
 
-  // Auto-fill stock awal from previous day on first load (if empty)
+  // Real-time sync: update stock awal HANYA untuk baris yang BELUM disimpan
   useEffect(() => {
-    if (!currentUser || !isMasterAdmin || loading) return;
-    const hasData = ALL_LOCATIONS.some(p =>
-      JENIS_KANTONG.some(n => {
+    setEditBuffer(prev => {
+      const next = { ...prev };
+      let changed = false;
+      ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
         const id = makeDocId(p, n, selectedDate);
-        return editBuffer[id] && editBuffer[id].stockAwal !== "";
-      })
-    );
-    if (hasData) return;
-    const prevDate = getPrevDate(selectedDate);
-    const doAutoFill = async () => {
-      let totalFilled = 0;
-      const updates = {};
-      for (const pabrik of ALL_LOCATIONS) {
-        for (const nama of JENIS_KANTONG) {
-          try {
-            const prevDoc = await getDoc(doc(db, "stock_harian", makeDocId(pabrik, nama, prevDate)));
-            if (prevDoc.exists()) {
-              const ps = Number(prevDoc.data()?.stockAkhir) || 0;
-              if (ps !== 0) { updates[makeDocId(pabrik, nama, selectedDate)] = String(ps); totalFilled++; }
-            }
-          } catch (e) {}
-        }
-      }
-      if (totalFilled > 0) setEditBuffer(prev => { const n={...prev}; for(const[id,v] of Object.entries(updates)) n[id]={...n[id],stockAwal:v}; return n; });
-    };
-    doAutoFill();
-  }, [loading, selectedDate, isMasterAdmin]);
+        if (stockData[id]) return;
+        const prevId = makeDocId(p, n, prevDate);
+        const pv = prevDayData[prevId];
+        const newSA = pv ? String(Number(pv.stockAkhir) || 0) : "";
+        if (next[id] && next[id].stockAwal !== newSA) { next[id] = { ...next[id], stockAwal: newSA }; changed = true; }
+      }));
+      return changed ? next : prev;
+    });
+  }, [prevDayData, stockData, selectedDate]);
 
   const handleInputChange = (docId: string, field: "penerimaan" | "pengiriman" | "stockAwal", value: string) => {
     if (value === "" || /^\d*$/.test(value)) setEditBuffer(p => ({ ...p, [docId]: { ...p[docId], [field]: value } }));
@@ -160,8 +156,8 @@ export default function StockHarianPage({
       const updates: Record<string, string> = {};
       let cnt = 0;
       for (const nama of JENIS_KANTONG) {
-        const prev = await getDoc(doc(db, "stock_harian", makeDocId(pabrik, nama, prevDate)));
-        if (prev.exists()) { updates[makeDocId(pabrik, nama, selectedDate)] = String(Number(prev.data()?.stockAkhir) || 0); cnt++; }
+        const pv = prevDayData[makeDocId(pabrik, nama, prevDate)];
+        if (pv) { updates[makeDocId(pabrik, nama, selectedDate)] = String(Number(pv.stockAkhir) || 0); cnt++; }
       }
       if (cnt > 0) {
         setEditBuffer(p => { const n = { ...p }; for (const [id, v] of Object.entries(updates)) n[id] = { ...n[id], stockAwal: v }; return n; });

@@ -46,6 +46,7 @@ export default function StockHarianPage({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [editBuffer, setEditBuffer] = useState<Record<string, { stockAwal: string }>>({});
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
   const ALL_LOCATIONS = [OPT_GUDANG, ...PABRIK_LIST];
   const prevDate = (() => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate()-1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); })();
@@ -70,6 +71,20 @@ export default function StockHarianPage({
 
   const computePengiriman = (pabrik: string, nama: string, tanggal: string): number =>
     pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik).reduce((s, r) => s + r.jumlah, 0);
+
+  // Get detail data for expanded rows
+  const getPenerimaanDetails = (pabrik: string, nama: string, tanggal: string) =>
+    penerimaanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik);
+
+  const getPengirimanDetails = (pabrik: string, nama: string, tanggal: string) =>
+    pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik);
+
+  const getPemakaianDetails = (pabrikLabel: string, nama: string, tanggal: string) => {
+    const items = reports.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik.includes(pabrikLabel));
+    const vendorMap: Record<string, number> = {};
+    items.forEach(r => { vendorMap[r.vendor] = (vendorMap[r.vendor] || 0) + r.total; });
+    return Object.entries(vendorMap).map(([vendor, total]) => ({ vendor, total }));
+  };
 
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setStockData({}); setLoading(false); return; }
@@ -225,25 +240,56 @@ export default function StockHarianPage({
             const d = getRowDisplay(OPT_GUDANG, nama, docId);
             const buf = editBuffer[docId] || { stockAwal: "" };
             const changed = isStockAwalChanged(docId);
+            const rowKey = `${OPT_GUDANG}_${nama}`;
+            const isExpanded = expandedRows[rowKey];
+            const pnDetails = getPenerimaanDetails(OPT_GUDANG, nama, selectedDate);
+            const pgDetails = getPengirimanDetails(OPT_GUDANG, nama, selectedDate);
+            const hasDetails = d.penerimaan > 0 || d.pengiriman > 0;
             return (
-              <tr key={nama} className={`border-b border-[#e8e4de] hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
-                <td className="px-4 py-2 font-medium text-gray-800">{nama}</td>
-                <td className="px-3 py-2 text-right">
-                  {isMasterAdmin ? (
-                    <div className="flex items-center justify-end gap-1.5">
-                      <input type="text" inputMode="numeric" value={buf.stockAwal} onChange={e => handleInputChange(docId, e.target.value)} className="w-20 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
-                      {changed && (
-                        <button onClick={() => handleSaveRow(OPT_GUDANG, nama, docId)} disabled={saving === docId} className="text-emerald-600 hover:text-emerald-800 disabled:text-gray-300 transition-colors" title="Simpan">
-                          {saving === docId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        </button>
-                      )}
-                    </div>
-                  ) : <span className="text-gray-700">{formatNumber(d.stockAwal)}</span>}
-                </td>
-                <td className="px-3 py-2 text-right"><span className="text-gray-700">{formatNumber(d.penerimaan)}</span></td>
-                <td className="px-3 py-2 text-right"><span className="text-gray-700">{formatNumber(d.pengiriman)}</span></td>
-                <td className="px-3 py-2 text-right"><span className={`font-bold ${d.stockAkhir < 0 ? "text-red-600" : d.stockAkhir === 0 ? "text-gray-400" : "text-emerald-700"}`}>{formatNumber(d.stockAkhir)}</span></td>
-              </tr>
+              <React.Fragment key={nama}>
+                <tr className={`border-b border-[#e8e4de] hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"} ${hasDetails ? "cursor-pointer" : ""} ${isExpanded ? "bg-gray-50" : ""}`} onClick={() => { if (hasDetails) setExpandedRows(prev => ({ ...prev, [rowKey]: !prev[rowKey] })); }}>
+                  <td className="px-4 py-2 font-medium text-gray-800">
+                    {nama}
+                    {hasDetails && <span className="ml-2 text-xs text-gray-400">{isExpanded ? "▼" : "▶"}</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {isMasterAdmin ? (
+                      <div className="flex items-center justify-end gap-1.5">
+                        <input type="text" inputMode="numeric" value={buf.stockAwal} onChange={e => handleInputChange(docId, e.target.value)} className="w-20 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
+                        {changed && (
+                          <button onClick={(e) => { e.stopPropagation(); handleSaveRow(OPT_GUDANG, nama, docId); }} disabled={saving === docId} className="text-emerald-600 hover:text-emerald-800 disabled:text-gray-300 transition-colors" title="Simpan">
+                            {saving === docId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                          </button>
+                        )}
+                      </div>
+                    ) : <span className="text-gray-700">{formatNumber(d.stockAwal)}</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right"><span className="text-gray-700">{formatNumber(d.penerimaan)}</span></td>
+                  <td className="px-3 py-2 text-right"><span className="text-gray-700">{formatNumber(d.pengiriman)}</span></td>
+                  <td className="px-3 py-2 text-right"><span className={`font-bold ${d.stockAkhir < 0 ? "text-red-600" : d.stockAkhir === 0 ? "text-gray-400" : "text-emerald-700"}`}>{formatNumber(d.stockAkhir)}</span></td>
+                </tr>
+                {isExpanded && (
+                  <tr className="bg-gray-50/80">
+                    <td colSpan={5} className="px-4 py-2">
+                      <div className="pl-4 space-y-1 text-xs">
+                        {pnDetails.length > 0 && pnDetails.map((item, i) => (
+                          <div key={i} className="flex items-center gap-2 text-emerald-600">
+                            <span>📦</span> <span>Penerimaan dari {item.sumber || item.pabrik}: <strong>+{formatNumber(item.jumlah)}</strong></span>
+                          </div>
+                        ))}
+                        {pgDetails.length > 0 && pgDetails.map((item, i) => (
+                          <div key={i} className="flex items-center gap-2 text-blue-600">
+                            <span>🚚</span> <span>Pengiriman ke {item.tujuan || item.pabrik}: <strong>-{formatNumber(item.jumlah)}</strong></span>
+                          </div>
+                        ))}
+                        {pnDetails.length === 0 && pgDetails.length === 0 && (
+                          <div className="text-gray-400 italic">Tidak ada rincian penerimaan/pengiriman</div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             );
           })}</tbody>
         </table>
@@ -281,26 +327,63 @@ export default function StockHarianPage({
               const d = getRowDisplay(pabrik, nama, docId);
               const buf = editBuffer[docId] || { stockAwal: "" };
               const changed = isStockAwalChanged(docId);
+              const rowKey = `${pabrik}_${nama}`;
+              const isExpanded = expandedRows[rowKey];
+              const pnDetails = getPenerimaanDetails(pabrik, nama, selectedDate);
+              const pgDetails = getPengirimanDetails(pabrik, nama, selectedDate);
+              const pkDetails = getPemakaianDetails(PABRIK_SHORT[pabrik], nama, selectedDate);
+              const hasDetails = d.penerimaan > 0 || d.pengiriman > 0 || d.pemakaian > 0;
               return (
-                <tr key={nama} className={`border-b border-[#e8e4de] hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
-                  <td className="px-4 py-2 font-medium text-gray-800">{nama}</td>
-                  <td className="px-3 py-2 text-right">
-                    {isMasterAdmin ? (
-                      <div className="flex items-center justify-end gap-1.5">
-                        <input type="text" inputMode="numeric" value={buf.stockAwal} onChange={e => handleInputChange(docId, e.target.value)} className="w-20 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
-                        {changed && (
-                          <button onClick={() => handleSaveRow(pabrik, nama, docId)} disabled={saving === docId} className="text-emerald-600 hover:text-emerald-800 disabled:text-gray-300 transition-colors" title="Simpan">
-                            {saving === docId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                          </button>
-                        )}
-                      </div>
-                    ) : <span className="text-gray-700">{formatNumber(d.stockAwal)}</span>}
-                  </td>
-                  <td className="px-3 py-2 text-right"><span className="text-gray-700">{formatNumber(d.penerimaan)}</span></td>
-                  <td className="px-3 py-2 text-right"><span className="text-gray-700">{formatNumber(d.pengiriman)}</span></td>
-                  <td className="px-3 py-2 text-right"><span className={`font-medium ${d.pemakaian > 0 ? "text-red-600" : "text-gray-400"}`}>{formatNumber(d.pemakaian)}</span></td>
-                  <td className="px-3 py-2 text-right"><span className={`font-bold ${d.stockAkhir < 0 ? "text-red-600" : d.stockAkhir === 0 ? "text-gray-400" : "text-emerald-700"}`}>{formatNumber(d.stockAkhir)}</span></td>
-                </tr>
+                <React.Fragment key={nama}>
+                  <tr className={`border-b border-[#e8e4de] hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"} ${hasDetails ? "cursor-pointer" : ""} ${isExpanded ? "bg-gray-50" : ""}`} onClick={() => { if (hasDetails) setExpandedRows(prev => ({ ...prev, [rowKey]: !prev[rowKey] })); }}>
+                    <td className="px-4 py-2 font-medium text-gray-800">
+                      {nama}
+                      {hasDetails && <span className="ml-2 text-xs text-gray-400">{isExpanded ? "▼" : "▶"}</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {isMasterAdmin ? (
+                        <div className="flex items-center justify-end gap-1.5">
+                          <input type="text" inputMode="numeric" value={buf.stockAwal} onChange={e => handleInputChange(docId, e.target.value)} className="w-20 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
+                          {changed && (
+                            <button onClick={(e) => { e.stopPropagation(); handleSaveRow(pabrik, nama, docId); }} disabled={saving === docId} className="text-emerald-600 hover:text-emerald-800 disabled:text-gray-300 transition-colors" title="Simpan">
+                              {saving === docId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                            </button>
+                          )}
+                        </div>
+                      ) : <span className="text-gray-700">{formatNumber(d.stockAwal)}</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right"><span className="text-gray-700">{formatNumber(d.penerimaan)}</span></td>
+                    <td className="px-3 py-2 text-right"><span className="text-gray-700">{formatNumber(d.pengiriman)}</span></td>
+                    <td className="px-3 py-2 text-right"><span className={`font-medium ${d.pemakaian > 0 ? "text-red-600" : "text-gray-400"}`}>{formatNumber(d.pemakaian)}</span></td>
+                    <td className="px-3 py-2 text-right"><span className={`font-bold ${d.stockAkhir < 0 ? "text-red-600" : d.stockAkhir === 0 ? "text-gray-400" : "text-emerald-700"}`}>{formatNumber(d.stockAkhir)}</span></td>
+                  </tr>
+                  {isExpanded && (
+                    <tr className="bg-gray-50/80">
+                      <td colSpan={6} className="px-4 py-2">
+                        <div className="pl-4 space-y-1 text-xs">
+                          {pnDetails.length > 0 && pnDetails.map((item, i) => (
+                            <div key={i} className="flex items-center gap-2 text-emerald-600">
+                              <span>📦</span> <span>Penerimaan dari {item.sumber || item.pabrik}: <strong>+{formatNumber(item.jumlah)}</strong></span>
+                            </div>
+                          ))}
+                          {pgDetails.length > 0 && pgDetails.map((item, i) => (
+                            <div key={i} className="flex items-center gap-2 text-blue-600">
+                              <span>🚚</span> <span>Pengiriman ke {item.tujuan || item.pabrik}: <strong>-{formatNumber(item.jumlah)}</strong></span>
+                            </div>
+                          ))}
+                          {pkDetails.length > 0 && pkDetails.map((item, i) => (
+                            <div key={i} className="flex items-center gap-2 text-rose-600">
+                              <span>📋</span> <span>Pemakaian {item.vendor}: <strong>-{formatNumber(item.total)}</strong></span>
+                            </div>
+                          ))}
+                          {pnDetails.length === 0 && pgDetails.length === 0 && pkDetails.length === 0 && (
+                            <div className="text-gray-400 italic">Tidak ada rincian</div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               );
             })}</tbody>
           </table>

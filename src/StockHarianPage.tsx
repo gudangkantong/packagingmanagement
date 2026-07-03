@@ -73,17 +73,22 @@ export default function StockHarianPage({
   const computePemakaian = (pabrikLabel: string, nama: string, tanggal: string): number =>
     reports.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik.includes(pabrikLabel)).reduce((s, r) => s + r.total, 0);
 
-  // Penerimaan = HANYA dari vendor (data penerimaan langsung)
-  const computePenerimaan = (pabrik: string, nama: string, tanggal: string): number =>
-    penerimaanList
+  // Penerimaan = dari vendor + transfer masuk dari pabrik lain
+  const computePenerimaan = (pabrik: string, nama: string, tanggal: string): number => {
+    const directPenerimaan = penerimaanList
       .filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik)
       .reduce((s, r) => s + r.jumlah, 0);
+    const incomingPengiriman = pengirimanList
+      .filter(r => r.tanggal === tanggal && r.nama === nama && r.tujuan === pabrik)
+      .reduce((s, r) => s + r.jumlah, 0);
+    return directPenerimaan + incomingPengiriman;
+  };
 
   // Pengiriman keluar = data pengiriman dari pabrik ini ke pabrik lain
   const computePengiriman = (pabrik: string, nama: string, tanggal: string): number =>
     pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik).reduce((s, r) => s + r.jumlah, 0);
 
-  // Pengiriman masuk = pengiriman dari pabrik lain yang tujuannya ke pabrik ini
+  // Transfer masuk = pengiriman dari pabrik lain yang tujuannya ke pabrik ini (untuk detail view)
   const computeIncomingPengiriman = (pabrik: string, nama: string, tanggal: string): number =>
     pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.tujuan === pabrik).reduce((s, r) => s + r.jumlah, 0);
 
@@ -173,10 +178,9 @@ export default function StockHarianPage({
           if (!saved) continue;
           const pn = computePenerimaan(saved.pabrik, saved.nama, selectedDate);
           const pg = computePengiriman(saved.pabrik, saved.nama, selectedDate);
-          const inc = computeIncomingPengiriman(saved.pabrik, saved.nama, selectedDate);
           const isOPT = saved.pabrik === OPT_GUDANG;
           const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[saved.pabrik], saved.nama, selectedDate);
-          const sk = isOPT ? saved.stockAwal + pn + inc - pg : saved.stockAwal + pn + inc - pg - pk;
+          const sk = isOPT ? saved.stockAwal + pn - pg : saved.stockAwal + pn - pg - pk;
           // Hanya update jika nilai berubah
           if (pn !== saved.penerimaan || pg !== saved.pengiriman || pk !== saved.pemakaian || sk !== saved.stockAkhir) {
             batch.update(doc(db, "stock_harian", docId), {
@@ -210,10 +214,9 @@ export default function StockHarianPage({
       const sa = parseInt(b.stockAwal) || 0;
       const pn = computePenerimaan(pabrik, nama, selectedDate);
       const pg = computePengiriman(pabrik, nama, selectedDate);
-      const inc = computeIncomingPengiriman(pabrik, nama, selectedDate);
       const isOPT = pabrik === OPT_GUDANG;
       const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
-      const sk = isOPT ? sa + pn + inc - pg : sa + pn + inc - pg - pk;
+      const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
       await setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
       triggerToast(`Stock ${nama} (${PABRIK_SHORT[pabrik]}) disimpan`, "ok");
     } catch (e) { console.error(e); triggerToast("Gagal simpan", "er"); }
@@ -231,9 +234,8 @@ export default function StockHarianPage({
         const sa = parseInt(b.stockAwal) || 0;
         const pn = computePenerimaan(pabrik, nama, selectedDate);
         const pg = computePengiriman(pabrik, nama, selectedDate);
-        const inc = computeIncomingPengiriman(pabrik, nama, selectedDate);
         const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
-        const sk = isOPT ? sa + pn + inc - pg : sa + pn + inc - pg - pk;
+        const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
         return setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
       }));
       triggerToast(`Semua stock ${PABRIK_SHORT[pabrik]} disimpan`, "ok");
@@ -264,7 +266,7 @@ export default function StockHarianPage({
   };
 
   // getRowDisplay: SELALU hitung dari list terkini
-  // stockAkhir = stockAwal + penerimaan(vendor) + incoming_pengiriman - pengiriman(keluar) - pemakaian
+  // stockAkhir = stockAwal + penerimaan(vendor+transfer masuk) - pengiriman(keluar) - pemakaian
   const getRowDisplay = (pabrik: string, nama: string, docId: string) => {
     const b = editBuffer[docId] || { stockAwal: "0" };
     const sa = parseInt(b.stockAwal) || 0;
@@ -273,7 +275,7 @@ export default function StockHarianPage({
     const pg = computePengiriman(pabrik, nama, selectedDate);
     const inc = computeIncomingPengiriman(pabrik, nama, selectedDate);
     const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
-    const sk = isOPT ? sa + pn + inc - pg : sa + pn + inc - pg - pk;
+    const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
     return { stockAwal: sa, penerimaan: pn, pengiriman: pg, incomingPengiriman: inc, pemakaian: pk, stockAkhir: sk };
   };
 

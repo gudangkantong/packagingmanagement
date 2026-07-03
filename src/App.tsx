@@ -3227,7 +3227,6 @@ export default function App() {
                     <input type="text" value={pgFormKeterangan} onChange={e => setPgFormKeterangan(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white" placeholder="Catatan tambahan..." />
                   </div>
                 </div>
-                </div>
                 <div className="pt-4 border-t border-[#e8e4de] flex items-center justify-end gap-2">
                   <button type="button" onClick={() => setIsModalOpen(false)} className="border-2 border-[#e8e4de] hover:bg-[#faf9f7] text-[#1a1814] px-4 py-2.5 rounded-xl text-xs font-bold transition-all">Batal</button>
                   <button type="submit" disabled={isSavingPengiriman} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-2 disabled:opacity-50">

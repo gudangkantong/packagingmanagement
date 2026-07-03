@@ -190,37 +190,55 @@ export default function StockHarianPage({
     return { stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk };
   };
 
+  // Check if stock awal has been changed from saved value
+  const isStockAwalChanged = (docId: string): boolean => {
+    const buf = editBuffer[docId];
+    if (!buf) return false;
+    const saved = stockData[docId];
+    const savedVal = saved ? String(saved.stockAwal) : "";
+    return buf.stockAwal !== savedVal && buf.stockAwal !== "";
+  };
+
   const renderOPTTable = () => (
     <div className="rounded-xl border border-gray-300 overflow-hidden mb-6 shadow-sm">
       <div className="bg-gray-800 text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2"><Package className="w-5 h-5" /><h3 className="font-bold text-lg">📦 {OPT_GUDANG}</h3></div>
         {isMasterAdmin && <div className="flex items-center gap-2">
           <button onClick={() => handleAutoFillStockAwal(OPT_GUDANG)} className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"><RefreshCw className="w-3.5 h-3.5" /> Auto Stock Awal</button>
-          <button onClick={() => handleSaveAll(OPT_GUDANG)} disabled={saving === OPT_GUDANG} className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">{saving === OPT_GUDANG ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Simpan Semua</button>
         </div>}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="bg-gray-100 text-gray-700">
             <th className="px-4 py-2.5 text-left font-semibold border-b border-gray-200 min-w-[180px]">Jenis Kantong</th>
-            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Stock Awal</th>
+            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[130px] whitespace-nowrap">Stock Awal</th>
             <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Penerimaan</th>
             <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Pengiriman</th>
             <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Stock Akhir</th>
-            {isMasterAdmin && <th className="px-3 py-2.5 text-center font-semibold border-b border-gray-200 w-[80px]">Aksi</th>}
           </tr></thead>
           <tbody>{JENIS_KANTONG.map((nama, idx) => {
             const docId = makeDocId(OPT_GUDANG, nama, selectedDate);
             const d = getRowDisplay(OPT_GUDANG, nama, docId);
             const buf = editBuffer[docId] || { stockAwal: "" };
+            const changed = isStockAwalChanged(docId);
             return (
               <tr key={nama} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
                 <td className="px-4 py-2 font-medium text-gray-800">{nama}</td>
-                <td className="px-3 py-2 text-right">{isMasterAdmin ? <input type="text" inputMode="numeric" value={buf.stockAwal} onChange={e => handleInputChange(docId, e.target.value)} className="w-20 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" /> : <span className="text-gray-700">{d.stockAwal}</span>}</td>
+                <td className="px-3 py-2 text-right">
+                  {isMasterAdmin ? (
+                    <div className="flex items-center justify-end gap-1.5">
+                      <input type="text" inputMode="numeric" value={buf.stockAwal} onChange={e => handleInputChange(docId, e.target.value)} className="w-20 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
+                      {changed && (
+                        <button onClick={() => handleSaveRow(OPT_GUDANG, nama, docId)} disabled={saving === docId} className="text-emerald-600 hover:text-emerald-800 disabled:text-gray-300 transition-colors" title="Simpan">
+                          {saving === docId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        </button>
+                      )}
+                    </div>
+                  ) : <span className="text-gray-700">{d.stockAwal}</span>}
+                </td>
                 <td className="px-3 py-2 text-right"><span className="text-gray-700">{d.penerimaan}</span></td>
                 <td className="px-3 py-2 text-right"><span className="text-gray-700">{d.pengiriman}</span></td>
                 <td className="px-3 py-2 text-right"><span className={`font-bold ${d.stockAkhir < 0 ? "text-red-600" : d.stockAkhir === 0 ? "text-gray-400" : "text-emerald-700"}`}>{d.stockAkhir}</span></td>
-                {isMasterAdmin && <td className="px-3 py-2 text-center"><button onClick={() => handleSaveRow(OPT_GUDANG, nama, docId)} disabled={saving === docId} className="text-indigo-600 hover:text-indigo-800 disabled:text-gray-300 transition-colors">{saving === docId ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : <Save className="w-4 h-4 mx-auto" />}</button></td>}
               </tr>
             );
           })}</tbody>
@@ -243,33 +261,42 @@ export default function StockHarianPage({
           <div className="flex items-center gap-2"><Package className="w-5 h-5" /><h3 className="font-bold text-lg">🏭 {pabrik}</h3></div>
           {isMasterAdmin && <div className="flex items-center gap-2">
             <button onClick={() => handleAutoFillStockAwal(pabrik)} className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"><RefreshCw className="w-3.5 h-3.5" /> Auto Stock Awal</button>
-            <button onClick={() => handleSaveAll(pabrik)} disabled={saving === pabrik} className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">{saving === pabrik ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Simpan Semua</button>
           </div>}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className={`${c.b} text-gray-700`}>
               <th className="px-4 py-2.5 text-left font-semibold border-b border-gray-200 min-w-[180px]">Jenis Kantong</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Stock Awal</th>
+              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[130px] whitespace-nowrap">Stock Awal</th>
               <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Penerimaan</th>
               <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Pengiriman</th>
               <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Pemakaian</th>
               <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Stock Akhir</th>
-              {isMasterAdmin && <th className="px-3 py-2.5 text-center font-semibold border-b border-gray-200 w-[80px]">Aksi</th>}
             </tr></thead>
             <tbody>{JENIS_KANTONG.map((nama, idx) => {
               const docId = makeDocId(pabrik, nama, selectedDate);
               const d = getRowDisplay(pabrik, nama, docId);
               const buf = editBuffer[docId] || { stockAwal: "" };
+              const changed = isStockAwalChanged(docId);
               return (
                 <tr key={nama} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
                   <td className="px-4 py-2 font-medium text-gray-800">{nama}</td>
-                  <td className="px-3 py-2 text-right">{isMasterAdmin ? <input type="text" inputMode="numeric" value={buf.stockAwal} onChange={e => handleInputChange(docId, e.target.value)} className="w-20 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" /> : <span className="text-gray-700">{d.stockAwal}</span>}</td>
+                  <td className="px-3 py-2 text-right">
+                    {isMasterAdmin ? (
+                      <div className="flex items-center justify-end gap-1.5">
+                        <input type="text" inputMode="numeric" value={buf.stockAwal} onChange={e => handleInputChange(docId, e.target.value)} className="w-20 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
+                        {changed && (
+                          <button onClick={() => handleSaveRow(pabrik, nama, docId)} disabled={saving === docId} className="text-emerald-600 hover:text-emerald-800 disabled:text-gray-300 transition-colors" title="Simpan">
+                            {saving === docId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                          </button>
+                        )}
+                      </div>
+                    ) : <span className="text-gray-700">{d.stockAwal}</span>}
+                  </td>
                   <td className="px-3 py-2 text-right"><span className="text-gray-700">{d.penerimaan}</span></td>
                   <td className="px-3 py-2 text-right"><span className="text-gray-700">{d.pengiriman}</span></td>
                   <td className="px-3 py-2 text-right"><span className={`font-medium ${d.pemakaian > 0 ? "text-red-600" : "text-gray-400"}`}>{d.pemakaian}</span></td>
                   <td className="px-3 py-2 text-right"><span className={`font-bold ${d.stockAkhir < 0 ? "text-red-600" : d.stockAkhir === 0 ? "text-gray-400" : "text-emerald-700"}`}>{d.stockAkhir}</span></td>
-                  {isMasterAdmin && <td className="px-3 py-2 text-center"><button onClick={() => handleSaveRow(pabrik, nama, docId)} disabled={saving === docId} className="text-indigo-600 hover:text-indigo-800 disabled:text-gray-300 transition-colors">{saving === docId ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : <Save className="w-4 h-4 mx-auto" />}</button></td>}
                 </tr>
               );
             })}</tbody>

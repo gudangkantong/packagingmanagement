@@ -46,7 +46,8 @@ import {
   Mail,
   UserCheck,
   X,
-  Package
+  Package,
+  Save
 } from "lucide-react";
 import { auth, db, firebaseConfig } from "./firebase";
 import { LaporanKantong, AllowedUser, LockedDate, ROLE_MAP, PABRIK_ROLE_MAP, PenerimaanData, PengirimanData } from "./types";

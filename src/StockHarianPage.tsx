@@ -179,6 +179,11 @@ export default function StockHarianPage({
     } catch (e) { console.error(e); triggerToast("Gagal auto-fill", "er"); }
   };
 
+  const formatNumber = (num: number): string => {
+    if (num === 0) return "0";
+    return num.toLocaleString("id-ID");
+  };
+
   const getRowDisplay = (pabrik: string, nama: string, docId: string) => {
     const b = editBuffer[docId] || { stockAwal: "0" };
     const sa = parseInt(b.stockAwal) || 0;
@@ -233,11 +238,11 @@ export default function StockHarianPage({
                         </button>
                       )}
                     </div>
-                  ) : <span className="text-gray-700">{d.stockAwal}</span>}
+                  ) : <span className="text-gray-700">{formatNumber(d.stockAwal)}</span>}
                 </td>
-                <td className="px-3 py-2 text-right"><span className="text-gray-700">{d.penerimaan}</span></td>
-                <td className="px-3 py-2 text-right"><span className="text-gray-700">{d.pengiriman}</span></td>
-                <td className="px-3 py-2 text-right"><span className={`font-bold ${d.stockAkhir < 0 ? "text-red-600" : d.stockAkhir === 0 ? "text-gray-400" : "text-emerald-700"}`}>{d.stockAkhir}</span></td>
+                <td className="px-3 py-2 text-right"><span className="text-gray-700">{formatNumber(d.penerimaan)}</span></td>
+                <td className="px-3 py-2 text-right"><span className="text-gray-700">{formatNumber(d.pengiriman)}</span></td>
+                <td className="px-3 py-2 text-right"><span className={`font-bold ${d.stockAkhir < 0 ? "text-red-600" : d.stockAkhir === 0 ? "text-gray-400" : "text-emerald-700"}`}>{formatNumber(d.stockAkhir)}</span></td>
               </tr>
             );
           })}</tbody>
@@ -289,12 +294,12 @@ export default function StockHarianPage({
                           </button>
                         )}
                       </div>
-                    ) : <span className="text-gray-700">{d.stockAwal}</span>}
+                    ) : <span className="text-gray-700">{formatNumber(d.stockAwal)}</span>}
                   </td>
-                  <td className="px-3 py-2 text-right"><span className="text-gray-700">{d.penerimaan}</span></td>
-                  <td className="px-3 py-2 text-right"><span className="text-gray-700">{d.pengiriman}</span></td>
-                  <td className="px-3 py-2 text-right"><span className={`font-medium ${d.pemakaian > 0 ? "text-red-600" : "text-gray-400"}`}>{d.pemakaian}</span></td>
-                  <td className="px-3 py-2 text-right"><span className={`font-bold ${d.stockAkhir < 0 ? "text-red-600" : d.stockAkhir === 0 ? "text-gray-400" : "text-emerald-700"}`}>{d.stockAkhir}</span></td>
+                  <td className="px-3 py-2 text-right"><span className="text-gray-700">{formatNumber(d.penerimaan)}</span></td>
+                  <td className="px-3 py-2 text-right"><span className="text-gray-700">{formatNumber(d.pengiriman)}</span></td>
+                  <td className="px-3 py-2 text-right"><span className={`font-medium ${d.pemakaian > 0 ? "text-red-600" : "text-gray-400"}`}>{formatNumber(d.pemakaian)}</span></td>
+                  <td className="px-3 py-2 text-right"><span className={`font-bold ${d.stockAkhir < 0 ? "text-red-600" : d.stockAkhir === 0 ? "text-gray-400" : "text-emerald-700"}`}>{formatNumber(d.stockAkhir)}</span></td>
                 </tr>
               );
             })}</tbody>

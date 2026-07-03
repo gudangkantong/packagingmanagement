@@ -2095,17 +2095,7 @@ export default function App() {
                     transition={{ duration: 0.2 }}
                     className="space-y-1"
                   >
-                    <div className="flex items-center justify-between gap-4 pt-0 pb-2">
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-                        <h2 className="text-xs font-bold text-[#6b6560] tracking-widest uppercase">
-                          Daftar Laporan
-                        </h2>
-                        <div className="h-4 w-[1px] bg-[#e8e4de] hidden sm:block"></div>
-                        <div className="text-sm font-extrabold text-[#1a1814] flex items-center gap-1.5">
-                          <CalendarIcon className="w-3.5 h-3.5 text-brand-green" />
-                          {formatDateDisplay(selectedDate)}
-                        </div>
-                      </div>
+                    <div className="flex items-center gap-2 pt-0 pb-2 flex-wrap">
                       {!isGuest && (
                         <button
                           onClick={handleOpenAddForm}

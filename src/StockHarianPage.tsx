@@ -161,10 +161,10 @@ export default function StockHarianPage({
         <table className="w-full text-sm">
           <thead><tr className="bg-gray-100 text-gray-700">
             <th className="px-4 py-2.5 text-left font-semibold border-b border-gray-200 min-w-[180px]">Jenis Kantong</th>
-            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Stock Awal</th>
-            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Penerimaan</th>
-            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Pengiriman</th>
-            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Stock Akhir</th>
+            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Stock Awal</th>
+            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Penerimaan</th>
+            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Pengiriman</th>
+            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Stock Akhir</th>
             {isMasterAdmin && <th className="px-3 py-2.5 text-center font-semibold border-b border-gray-200 w-[80px]">Aksi</th>}
           </tr></thead>
           <tbody>{JENIS_KANTONG.map((nama, idx) => {
@@ -208,11 +208,11 @@ export default function StockHarianPage({
           <table className="w-full text-sm">
             <thead><tr className={`${c.b} text-gray-700`}>
               <th className="px-4 py-2.5 text-left font-semibold border-b border-gray-200 min-w-[180px]">Jenis Kantong</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Stock Awal</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Penerimaan</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Pengiriman</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Pemakaian</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px]">Stock Akhir</th>
+              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Stock Awal</th>
+              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Penerimaan</th>
+              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Pengiriman</th>
+              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Pemakaian</th>
+              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Stock Akhir</th>
               {isMasterAdmin && <th className="px-3 py-2.5 text-center font-semibold border-b border-gray-200 w-[80px]">Aksi</th>}
             </tr></thead>
             <tbody>{JENIS_KANTONG.map((nama, idx) => {

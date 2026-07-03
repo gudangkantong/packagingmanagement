@@ -2497,6 +2497,59 @@ export default function App() {
                       );
                     })()}
 
+                    {/* === DATA PEMAKAIAN KANTONG === */}
+                    {(() => {
+                      if (filteredReports.length === 0) return null;
+                      return (
+                        <div className="space-y-2 pt-4">
+                          <h3 className="text-center text-sm font-extrabold text-rose-700 tracking-wide uppercase">📋 Data Pemakaian Kantong</h3>
+                          <div className="bg-white border-2 border-rose-200 rounded-3xl shadow-xs overflow-hidden">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left text-xs border-collapse">
+                                <thead>
+                                  <tr className="bg-rose-50 border-b border-rose-200 text-rose-800 font-semibold uppercase text-[10px] tracking-wider">
+                                    <th className="py-3 px-4 text-center w-12">No</th>
+                                    <th className="py-3 px-4">Jenis Kantong</th>
+                                    <th className="py-3 px-4">Pabrik</th>
+                                    <th className="py-3 px-4">Vendor</th>
+                                    <th className="py-3 px-4 text-center">Utuh</th>
+                                    <th className="py-3 px-4 text-center">Pecah</th>
+                                    <th className="py-3 px-4 text-center">Sortir</th>
+                                    <th className="py-3 px-4 text-center">Total</th>
+                                    <th className="py-3 px-4">Oleh</th>
+                                    {isMasterAdmin && <th className="py-3 px-4 text-center w-28">Aksi</th>}
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-rose-100">
+                                  {filteredReports.map((item, index) => (
+                                    <tr key={item.id} className="hover:bg-rose-50/50 transition-colors">
+                                      <td className="py-2.5 px-4 text-center font-bold text-[#9e9892]">{index + 1}</td>
+                                      <td className="py-2.5 px-4 font-bold text-[#1a1814]">{item.nama}</td>
+                                      <td className="py-2.5 px-4 font-medium text-[#6b6560]">{item.pabrik.match(/\(([^)]+)\)/)?.[1] || item.pabrik}</td>
+                                      <td className="py-2.5 px-4 font-medium text-rose-700">{item.vendor}</td>
+                                      <td className="py-2.5 px-4 text-center font-bold text-[#1a1814]">{item.utuh.toLocaleString()}</td>
+                                      <td className="py-2.5 px-4 text-center font-bold text-[#1a1814]">{item.pecah.toLocaleString()}</td>
+                                      <td className="py-2.5 px-4 text-center font-bold text-[#1a1814]">{item.sortir.toLocaleString()}</td>
+                                      <td className="py-2.5 px-4 text-center font-extrabold text-rose-700">{item.total.toLocaleString()}</td>
+                                      <td className="py-2.5 px-4 text-xs text-[#6b6560] font-medium max-w-[120px] truncate" title={item.createdBy || "Sistem"}>{item.createdBy?.split("@")[0] || "Sistem"}</td>
+                                      {isMasterAdmin && (
+                                        <td className="py-2.5 px-4 text-center">
+                                          <div className="flex items-center justify-center gap-1.5">
+                                            <button onClick={() => handleOpenEditForm(item)} className="p-1.5 border border-[#e8e4de] hover:border-rose-500 hover:bg-rose-50 text-[#6b6560] hover:text-rose-600 rounded-lg transition-all cursor-pointer" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
+                                            <button onClick={() => handleDeleteEntry(item.id)} className="p-1.5 border border-[#e8e4de] hover:border-rose-200 hover:bg-rose-50 text-[#6b6560] hover:text-rose-600 rounded-lg transition-all cursor-pointer" title="Hapus"><Trash2 className="w-3.5 h-3.5" /></button>
+                                          </div>
+                                        </td>
+                                      )}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                   </motion.div>
                 )}
 

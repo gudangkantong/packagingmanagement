@@ -2882,7 +2882,7 @@ export default function App() {
               <button
                 onClick={() => setActiveTab("stock")}
                 className={`flex-1 flex flex-col items-center gap-1 py-1 px-2 rounded-xl transition-all ${
-                  activeTab === "stock" ? "text-emerald-600 bg-emerald-50 font-bold" : "text-[#9e9892]"
+                  activeTab === "stock" ? "text-brand-green bg-brand-green-light/60 font-bold" : "text-[#9e9892]"
                 }`}
               >
                 <Package className="w-5 h-5" />

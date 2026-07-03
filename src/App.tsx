@@ -188,7 +188,7 @@ export default function App() {
   const [pnFormPabrik, setPnFormPabrik] = useState("Gudang OPT");
   const [pnFormJumlah, setPnFormJumlah] = useState("");
   const [pnFormKeterangan, setPnFormKeterangan] = useState("");
-  const [pnFormSumber, setPnFormSumber] = useState("Gudang OPT");
+  const [pnFormSumber, setPnFormSumber] = useState(VENDORS[0]);
   const [pnFormTanggal, setPnFormTanggal] = useState(getDateString(new Date()));
   const [pgFormNama, setPgFormNama] = useState(JENIS_KANTONG[0]);
   const [pgFormPabrik, setPgFormPabrik] = useState("Gudang OPT");
@@ -1055,7 +1055,7 @@ export default function App() {
       triggerToast(`Penerimaan ${pnFormNama} (${PABRIK_SHORT[pnFormPabrik] || pnFormPabrik}) berhasil ${editingPenerimaanId ? "diperbarui" : "disimpan"}`, "ok");
       setPnFormJumlah("");
       setPnFormKeterangan("");
-      setPnFormSumber("Gudang OPT");
+      setPnFormSumber(VENDORS[0]);
       setPnFormTanggal(getDateString(new Date()));
       setEditingPenerimaanId(null);
       setModalTab("pemakaian");
@@ -1147,7 +1147,7 @@ export default function App() {
     setPnFormNama(item.nama);
     setPnFormPabrik(item.pabrik);
     setPnFormJumlah(String(item.jumlah));
-    setPnFormSumber(item.sumber || "Gudang OPT");
+    setPnFormSumber(item.sumber || VENDORS[0]);
     setPnFormKeterangan(item.keterangan || "");
     setPnFormTanggal(item.tanggal);
     setModalTab("penerimaan");
@@ -3316,8 +3316,6 @@ export default function App() {
                   <div>
                     <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Penerimaan Dari</label>
                     <select value={pnFormSumber} onChange={e => setPnFormSumber(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
-                      <option value="Gudang OPT">Gudang OPT</option>
-                      {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
                       {effectiveVendors.map(v => <option key={v} value={v}>{v}</option>)}
                     </select>
                   </div>

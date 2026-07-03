@@ -3142,36 +3142,39 @@ export default function App() {
                     <input type="date" value={pnFormTanggal} onChange={e => setPnFormTanggal(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white" />
                   </div>
                   <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Penerimaan Dari</label>
+                    <select value={pnFormSumber} onChange={e => setPnFormSumber(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
+                      <option value="Gudang OPT">Gudang OPT</option>
+                      {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
+                      {effectiveVendors.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
                     <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Pabrik Tujuan</label>
                     <select value={pnFormPabrik} onChange={e => setPnFormPabrik(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
                       <option value="Gudang OPT">Gudang OPT</option>
                       {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Jenis Kantong</label>
                     <select value={pnFormNama} onChange={e => setPnFormNama(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
                       {effectiveJenisKantong.map(n => <option key={n} value={n}>{n}</option>)}
                     </select>
                   </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Jumlah</label>
                     <input type="text" inputMode="numeric" value={pnFormJumlah} onChange={e => { if (e.target.value === "" || /^\d*$/.test(e.target.value)) setPnFormJumlah(e.target.value); }} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white" placeholder="0" required />
                   </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Keterangan <span className="font-normal">(opsional)</span></label>
+                    <input type="text" value={pnFormKeterangan} onChange={e => setPnFormKeterangan(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white" placeholder="Catatan tambahan..." />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Penerimaan Dari</label>
-                  <select value={pnFormSumber} onChange={e => setPnFormSumber(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
-                    <option value="Gudang OPT">Gudang OPT</option>
-                    {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
-                    {effectiveVendors.map(v => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Keterangan <span className="font-normal">(opsional)</span></label>
-                  <input type="text" value={pnFormKeterangan} onChange={e => setPnFormKeterangan(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white" placeholder="Catatan tambahan..." />
                 </div>
                 <div className="pt-4 border-t border-[#e8e4de] flex items-center justify-end gap-2">
                   <button type="button" onClick={() => setIsModalOpen(false)} className="border-2 border-[#e8e4de] hover:bg-[#faf9f7] text-[#1a1814] px-4 py-2.5 rounded-xl text-xs font-bold transition-all">Batal</button>

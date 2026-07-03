@@ -75,14 +75,14 @@ export default function StockHarianPage({
     penerimaanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik).reduce((s, r) => s + r.jumlah, 0);
 
   const computePengiriman = (pabrik: string, nama: string, tanggal: string): number =>
-    pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.tujuan === pabrik).reduce((s, r) => s + r.jumlah, 0);
+    pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik).reduce((s, r) => s + r.jumlah, 0);
 
   // Get detail data for expanded rows
   const getPenerimaanDetails = (pabrik: string, nama: string, tanggal: string) =>
     penerimaanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik);
 
   const getPengirimanDetails = (pabrik: string, nama: string, tanggal: string) =>
-    pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.tujuan === pabrik);
+    pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik);
 
   const getPemakaianDetails = (pabrikLabel: string, nama: string, tanggal: string) => {
     const items = reports.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik.includes(pabrikLabel));
@@ -288,7 +288,7 @@ export default function StockHarianPage({
                         ))}
                         {pgDetails.length > 0 && pgDetails.map((item, i) => (
                           <div key={i} className="flex items-center gap-2 text-blue-600 group">
-                            <span>🚚</span> <span>Pengiriman dari {item.pabrik}: <strong>-{formatNumber(item.jumlah)}</strong></span>
+                            <span>🚚</span> <span>Pengiriman ke {item.tujuan || "-"}: <strong>-{formatNumber(item.jumlah)}</strong></span>
                             {isMasterAdmin && <span className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button onClick={(e) => { e.stopPropagation(); onEditPengiriman(item); }} className="p-0.5 rounded hover:bg-blue-100 text-blue-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
                               <button onClick={(e) => { e.stopPropagation(); onDeletePengiriman(item.id); }} className="p-0.5 rounded hover:bg-red-100 text-red-500" title="Hapus"><Trash2 className="w-3 h-3" /></button>
@@ -385,7 +385,7 @@ export default function StockHarianPage({
                           ))}
                           {pgDetails.length > 0 && pgDetails.map((item, i) => (
                             <div key={i} className="flex items-center gap-2 text-blue-600 group">
-                              <span>🚚</span> <span>Pengiriman dari {item.pabrik}: <strong>-{formatNumber(item.jumlah)}</strong></span>
+                              <span>🚚</span> <span>Pengiriman ke {item.tujuan || "-"}: <strong>-{formatNumber(item.jumlah)}</strong></span>
                               {isMasterAdmin && <span className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button onClick={(e) => { e.stopPropagation(); onEditPengiriman(item); }} className="p-0.5 rounded hover:bg-blue-100 text-blue-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
                                 <button onClick={(e) => { e.stopPropagation(); onDeletePengiriman(item.id); }} className="p-0.5 rounded hover:bg-red-100 text-red-500" title="Hapus"><Trash2 className="w-3 h-3" /></button>

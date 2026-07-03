@@ -181,7 +181,7 @@ export default function StockHarianPage({
 
   const formatNumber = (num: number): string => {
     if (num === 0) return "0";
-    return num.toLocaleString("id-ID");
+    return num.toLocaleString("en-US");
   };
 
   const getRowDisplay = (pabrik: string, nama: string, docId: string) => {

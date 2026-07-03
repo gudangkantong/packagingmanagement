@@ -88,6 +88,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 const VENDORS = ["GEMAH", "YANA", "HARDO", "IKSG", "KRR", "SAMI", "TRI USAHA"];
 const PABRIK_LIST = ["Pabrik Baturaja 1 (PBR 1)", "Pabrik Baturaja 2 (PBR 2)", "Pabrik Palembang (PPG)", "Pabrik Panjang (PPJ)"];
 const PABRIK_SHORT: Record<string, string> = {
+  "Gudang OPT": "OPT",
   "Pabrik Baturaja 1 (PBR 1)": "PBR 1",
   "Pabrik Baturaja 2 (PBR 2)": "PBR 2",
   "Pabrik Palembang (PPG)": "PPG",
@@ -184,7 +185,7 @@ export default function App() {
   const [isPenerimaanModalOpen, setIsPenerimaanModalOpen] = useState(false);
   const [isPengirimanModalOpen, setIsPengirimanModalOpen] = useState(false);
   const [pnFormNama, setPnFormNama] = useState(JENIS_KANTONG[0]);
-  const [pnFormPabrik, setPnFormPabrik] = useState(PABRIK_LIST[0]);
+  const [pnFormPabrik, setPnFormPabrik] = useState("Gudang OPT");
   const [pnFormJumlah, setPnFormJumlah] = useState("");
   const [pnFormKeterangan, setPnFormKeterangan] = useState("");
   const [pnFormSumber, setPnFormSumber] = useState("Gudang OPT");
@@ -3149,6 +3150,7 @@ export default function App() {
                   <div>
                     <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Pabrik Tujuan</label>
                     <select value={pnFormPabrik} onChange={e => setPnFormPabrik(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
+                      <option value="Gudang OPT">Gudang OPT</option>
                       {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </div>

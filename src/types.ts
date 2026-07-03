@@ -42,6 +42,29 @@ export interface StockHarian {
   updatedAt: string;
 }
 
+// === Penerimaan & Pengiriman Data (from Pelaporan page) ===
+export interface PenerimaanData {
+  id: string;
+  nama: string;          // jenis kantong
+  pabrik: string;        // full pabrik name
+  tanggal: string;       // YYYY-MM-DD
+  jumlah: number;
+  keterangan: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface PengirimanData {
+  id: string;
+  nama: string;          // jenis kantong
+  pabrik: string;        // full pabrik name
+  tanggal: string;       // YYYY-MM-DD
+  jumlah: number;
+  keterangan: string;
+  createdBy: string;
+  createdAt: string;
+}
+
 // Role display mapping (kode DB → label Indonesia)
 export const ROLE_MAP: Record<string, string> = {
   super_admin: 'Admin Utama',

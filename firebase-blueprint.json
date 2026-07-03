@@ -124,6 +124,90 @@
         }
       },
       "required": ["locked"]
+    },
+    "PenerimaanData": {
+      "title": "Penerimaan Data",
+      "description": "Record of incoming goods (penerimaan) input by admin utama from the Pelaporan page.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the record"
+        },
+        "nama": {
+          "type": "string",
+          "description": "Type of the bag (jenis kantong)"
+        },
+        "pabrik": {
+          "type": "string",
+          "description": "The factory location"
+        },
+        "tanggal": {
+          "type": "string",
+          "format": "date",
+          "description": "The date (YYYY-MM-DD)"
+        },
+        "jumlah": {
+          "type": "integer",
+          "description": "Quantity of incoming goods"
+        },
+        "keterangan": {
+          "type": "string",
+          "description": "Optional notes"
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "Email address of the creator"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the record was created"
+        }
+      },
+      "required": ["id", "nama", "pabrik", "tanggal", "jumlah"]
+    },
+    "PengirimanData": {
+      "title": "Pengiriman Data",
+      "description": "Record of outgoing goods (pengiriman) input by admin utama from the Pelaporan page.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the record"
+        },
+        "nama": {
+          "type": "string",
+          "description": "Type of the bag (jenis kantong)"
+        },
+        "pabrik": {
+          "type": "string",
+          "description": "The factory location"
+        },
+        "tanggal": {
+          "type": "string",
+          "format": "date",
+          "description": "The date (YYYY-MM-DD)"
+        },
+        "jumlah": {
+          "type": "integer",
+          "description": "Quantity of outgoing goods"
+        },
+        "keterangan": {
+          "type": "string",
+          "description": "Optional notes"
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "Email address of the creator"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the record was created"
+        }
+      },
+      "required": ["id", "nama", "pabrik", "tanggal", "jumlah"]
     }
   },
   "firestore": {
@@ -138,6 +222,14 @@
     "/locked_dates/{date}": {
       "schema": "LockedDate",
       "description": "Collection of dates that have been locked/verified by the main admin."
+    },
+    "/penerimaan_data/{id}": {
+      "schema": "PenerimaanData",
+      "description": "Collection of incoming goods data input by admin utama."
+    },
+    "/pengiriman_data/{id}": {
+      "schema": "PengirimanData",
+      "description": "Collection of outgoing goods data input by admin utama."
     }
   }
 }

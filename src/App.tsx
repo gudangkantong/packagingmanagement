@@ -49,7 +49,7 @@ import {
   Package
 } from "lucide-react";
 import { auth, db, firebaseConfig } from "./firebase";
-import { LaporanKantong, AllowedUser, LockedDate, ROLE_MAP, PABRIK_ROLE_MAP } from "./types";
+import { LaporanKantong, AllowedUser, LockedDate, ROLE_MAP, PABRIK_ROLE_MAP, PenerimaanData, PengirimanData } from "./types";
 import StockHarianPage from "./StockHarianPage";
 import { getDateString, formatDateDisplay } from "./utils";
 import { JENIS_KANTONG, JENIS_KANTONG_SHORT } from "./csvUtils";
@@ -86,6 +86,12 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
 const VENDORS = ["GEMAH", "YANA", "HARDO", "IKSG", "KRR", "SAMI", "TRI USAHA"];
 const PABRIK_LIST = ["Pabrik Baturaja 1 (PBR 1)", "Pabrik Baturaja 2 (PBR 2)", "Pabrik Palembang (PPG)", "Pabrik Panjang (PPJ)"];
+const PABRIK_SHORT: Record<string, string> = {
+  "Pabrik Baturaja 1 (PBR 1)": "PBR 1",
+  "Pabrik Baturaja 2 (PBR 2)": "PBR 2",
+  "Pabrik Palembang (PPG)": "PPG",
+  "Pabrik Panjang (PPJ)": "PPJ",
+};
 const SHIFT_INFO = [
   { id: 1, label: "Shift 1", time: "00:00 – 08:00", color: "text-blue-600 bg-blue-50 border-blue-200" },
   { id: 2, label: "Shift 2", time: "08:00 – 16:00", color: "text-purple-600 bg-purple-50 border-purple-200" },
@@ -107,6 +113,8 @@ export default function App() {
   const [allowedUsers, setAllowedUsers] = useState<AllowedUser[]>([]);
   const [lockedDates, setLockedDates] = useState<Record<string, LockedDate>>({});
   const [dataLoading, setDataLoading] = useState<boolean>(true);
+  const [penerimaanList, setPenerimaanList] = useState<PenerimaanData[]>([]);
+  const [pengirimanList, setPengirimanList] = useState<PengirimanData[]>([]);
 
   // Role-based check (dari Firestore allowed_users collection)
   const currentUserData = allowedUsers.find(u => u.email === currentUser?.email?.toLowerCase());
@@ -169,6 +177,20 @@ export default function App() {
   const [formUtuh, setFormUtuh] = useState("");
   const [formPecah, setFormPecah] = useState("");
   const [formSortir, setFormSortir] = useState("");
+
+  // Penerimaan & Pengiriman modal state (admin utama only)
+  const [isPenerimaanModalOpen, setIsPenerimaanModalOpen] = useState(false);
+  const [isPengirimanModalOpen, setIsPengirimanModalOpen] = useState(false);
+  const [pnFormNama, setPnFormNama] = useState(JENIS_KANTONG[0]);
+  const [pnFormPabrik, setPnFormPabrik] = useState(PABRIK_LIST[0]);
+  const [pnFormJumlah, setPnFormJumlah] = useState("");
+  const [pnFormKeterangan, setPnFormKeterangan] = useState("");
+  const [pgFormNama, setPgFormNama] = useState(JENIS_KANTONG[0]);
+  const [pgFormPabrik, setPgFormPabrik] = useState(PABRIK_LIST[0]);
+  const [pgFormJumlah, setPgFormJumlah] = useState("");
+  const [pgFormKeterangan, setPgFormKeterangan] = useState("");
+  const [isSavingPenerimaan, setIsSavingPenerimaan] = useState(false);
+  const [isSavingPengiriman, setIsSavingPengiriman] = useState(false);
 
   // User management state
   const [newAllowedEmail, setNewAllowedEmail] = useState("");
@@ -354,6 +376,36 @@ export default function App() {
     });
 
     return () => unsubReports();
+  }, [currentUser, isAllowed]);
+
+  // Listen to penerimaan_data collection when authorized
+  useEffect(() => {
+    if (!currentUser || isAllowed !== true) { setPenerimaanList([]); return; }
+    const pnQuery = query(collection(db, "penerimaan_data"));
+    const unsubPn = onSnapshot(pnQuery, (snap) => {
+      const items: PenerimaanData[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+      });
+      setPenerimaanList(items);
+    }, (err) => { console.error("Failed to sync penerimaan_data:", err); handleFirestoreError(err, OperationType.GET, "penerimaan_data"); });
+    return () => unsubPn();
+  }, [currentUser, isAllowed]);
+
+  // Listen to pengiriman_data collection when authorized
+  useEffect(() => {
+    if (!currentUser || isAllowed !== true) { setPengirimanList([]); return; }
+    const pgQuery = query(collection(db, "pengiriman_data"));
+    const unsubPg = onSnapshot(pgQuery, (snap) => {
+      const items: PengirimanData[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+      });
+      setPengirimanList(items);
+    }, (err) => { console.error("Failed to sync pengiriman_data:", err); handleFirestoreError(err, OperationType.GET, "pengiriman_data"); });
+    return () => unsubPg();
   }, [currentUser, isAllowed]);
 
   // Listen to allowed_users collection when authorized
@@ -965,6 +1017,70 @@ export default function App() {
         }
       }
     });
+  };
+
+  // Handle save penerimaan (admin utama only)
+  const handleSavePenerimaan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !isMasterAdmin) return;
+    if (!pnFormJumlah || parseInt(pnFormJumlah) <= 0) {
+      triggerToast("Jumlah penerimaan harus diisi", "er");
+      return;
+    }
+    setIsSavingPenerimaan(true);
+    try {
+      const docId = `pn_${PABRIK_SHORT[pnFormPabrik] || pnFormPabrik}_${pnFormNama.replace(/\s+/g, "_")}_${selectedDate}_${Date.now()}`;
+      await setDoc(doc(db, "penerimaan_data", docId), {
+        nama: pnFormNama,
+        pabrik: pnFormPabrik,
+        tanggal: selectedDate,
+        jumlah: parseInt(pnFormJumlah) || 0,
+        keterangan: pnFormKeterangan,
+        createdBy: currentUser.email || "",
+        createdAt: new Date().toISOString()
+      });
+      triggerToast(`Penerimaan ${pnFormNama} (${PABRIK_SHORT[pnFormPabrik] || pnFormPabrik}) berhasil disimpan`, "ok");
+      setPnFormJumlah("");
+      setPnFormKeterangan("");
+      setIsPenerimaanModalOpen(false);
+    } catch (err) {
+      console.error("Save penerimaan failed:", err);
+      triggerToast("Gagal menyimpan penerimaan", "er");
+    } finally {
+      setIsSavingPenerimaan(false);
+    }
+  };
+
+  // Handle save pengiriman (admin utama only)
+  const handleSavePengiriman = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !isMasterAdmin) return;
+    if (!pgFormJumlah || parseInt(pgFormJumlah) <= 0) {
+      triggerToast("Jumlah pengiriman harus diisi", "er");
+      return;
+    }
+    setIsSavingPengiriman(true);
+    try {
+      const docId = `pg_${PABRIK_SHORT[pgFormPabrik] || pgFormPabrik}_${pgFormNama.replace(/\s+/g, "_")}_${selectedDate}_${Date.now()}`;
+      await setDoc(doc(db, "pengiriman_data", docId), {
+        nama: pgFormNama,
+        pabrik: pgFormPabrik,
+        tanggal: selectedDate,
+        jumlah: parseInt(pgFormJumlah) || 0,
+        keterangan: pgFormKeterangan,
+        createdBy: currentUser.email || "",
+        createdAt: new Date().toISOString()
+      });
+      triggerToast(`Pengiriman ${pgFormNama} (${PABRIK_SHORT[pgFormPabrik] || pgFormPabrik}) berhasil disimpan`, "ok");
+      setPgFormJumlah("");
+      setPgFormKeterangan("");
+      setIsPengirimanModalOpen(false);
+    } catch (err) {
+      console.error("Save pengiriman failed:", err);
+      triggerToast("Gagal menyimpan pengiriman", "er");
+    } finally {
+      setIsSavingPengiriman(false);
+    }
   };
 
   // Function to initialize Google Drive Login
@@ -1963,6 +2079,8 @@ export default function App() {
                       allowedUsers={allowedUsers}
                       triggerToast={triggerToast}
                       selectedDate={selectedDate}
+                      penerimaanList={penerimaanList}
+                      pengirimanList={pengirimanList}
                     />
                   </motion.div>
                 )}
@@ -2013,7 +2131,79 @@ export default function App() {
                           )}
                         </button>
                       )}
+                      {isMasterAdmin && (
+                        <>
+                          <button
+                            onClick={() => setIsPenerimaanModalOpen(true)}
+                            className="h-10 px-4 rounded-xl font-bold text-[13px] flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 bg-emerald-600 hover:bg-emerald-700 text-white hover:shadow-md"
+                          >
+                            <div className="bg-white/20 p-0.5 rounded-md">
+                              <Plus className="w-4 h-4" />
+                            </div>
+                            <span>Penerimaan</span>
+                          </button>
+                          <button
+                            onClick={() => setIsPengirimanModalOpen(true)}
+                            className="h-10 px-4 rounded-xl font-bold text-[13px] flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md"
+                          >
+                            <div className="bg-white/20 p-0.5 rounded-md">
+                              <Plus className="w-4 h-4" />
+                            </div>
+                            <span>Pengiriman</span>
+                          </button>
+                        </>
+                      )}
                     </div>
+
+                    {/* Penerimaan & Pengiriman Summary Cards (admin utama only) */}
+                    {isMasterAdmin && (penerimaanList.filter(r => r.tanggal === selectedDate).length > 0 || pengirimanList.filter(r => r.tanggal === selectedDate).length > 0) && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                        {penerimaanList.filter(r => r.tanggal === selectedDate).length > 0 && (
+                          <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4">
+                            <h4 className="text-xs font-bold text-emerald-700 mb-2 uppercase tracking-wide">📦 Data Penerimaan Hari Ini</h4>
+                            <div className="space-y-1">
+                              {penerimaanList.filter(r => r.tanggal === selectedDate).map(item => (
+                                <div key={item.id} className="flex items-center justify-between text-xs bg-white rounded-lg px-3 py-1.5 border border-emerald-100">
+                                  <span className="font-medium text-gray-700">{item.nama} ({PABRIK_SHORT[item.pabrik] || item.pabrik})</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-emerald-700">+{item.jumlah}</span>
+                                    {item.keterangan && <span className="text-gray-400 text-[10px]">{item.keterangan}</span>}
+                                    <button
+                                      onClick={async () => { try { await deleteDoc(doc(db, "penerimaan_data", item.id)); triggerToast("Penerimaan dihapus", "ok"); } catch (e) { triggerToast("Gagal hapus", "er"); } }}
+                                      className="text-rose-400 hover:text-rose-600 p-0.5"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {pengirimanList.filter(r => r.tanggal === selectedDate).length > 0 && (
+                          <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4">
+                            <h4 className="text-xs font-bold text-blue-700 mb-2 uppercase tracking-wide">🚚 Data Pengiriman Hari Ini</h4>
+                            <div className="space-y-1">
+                              {pengirimanList.filter(r => r.tanggal === selectedDate).map(item => (
+                                <div key={item.id} className="flex items-center justify-between text-xs bg-white rounded-lg px-3 py-1.5 border border-blue-100">
+                                  <span className="font-medium text-gray-700">{item.nama} ({PABRIK_SHORT[item.pabrik] || item.pabrik})</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-blue-700">+{item.jumlah}</span>
+                                    {item.keterangan && <span className="text-gray-400 text-[10px]">{item.keterangan}</span>}
+                                    <button
+                                      onClick={async () => { try { await deleteDoc(doc(db, "pengiriman_data", item.id)); triggerToast("Pengiriman dihapus", "ok"); } catch (e) { triggerToast("Gagal hapus", "er"); } }}
+                                      className="text-rose-400 hover:text-rose-600 p-0.5"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {inputFilteredReports.length === 0 ? (
                       <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-12 text-center shadow-xs">
@@ -3003,6 +3193,126 @@ export default function App() {
                     className="bg-brand-green hover:bg-brand-green-hover text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors"
                   >
                     {editingId ? "Simpan Perubahan" : "Simpan Laporan"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* PENERIMAAN MODAL (admin utama only) */}
+      <AnimatePresence>
+        {isPenerimaanModalOpen && isMasterAdmin && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsPenerimaanModalOpen(false)}
+              className="absolute inset-0 bg-[#1a1814]/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ y: 200, opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 200, opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="bg-white border-2 border-[#e8e4de] rounded-t-3xl sm:rounded-3xl shadow-xl w-full max-w-md relative overflow-hidden z-10 max-h-[90vh] flex flex-col"
+            >
+              <div className="p-4 md:p-5 border-b border-[#e8e4de] flex items-center justify-between bg-emerald-50">
+                <h3 className="font-extrabold text-sm md:text-base text-emerald-800">📦 Input Penerimaan</h3>
+                <button onClick={() => setIsPenerimaanModalOpen(false)} className="p-1.5 border border-emerald-200 rounded-xl hover:bg-emerald-100 text-emerald-600 transition-colors cursor-pointer"><X className="w-4 h-4" /></button>
+              </div>
+              <form onSubmit={handleSavePenerimaan} className="p-4 md:p-5 space-y-4 overflow-y-auto">
+                <div>
+                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Tanggal</label>
+                  <div className="text-sm font-bold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-xl border border-emerald-200">{formatDateDisplay(selectedDate)}</div>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Jenis Kantong</label>
+                  <select value={pnFormNama} onChange={e => setPnFormNama(e.target.value)} className="w-full border-2 border-[#e8e4de] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-400">
+                    {effectiveJenisKantong.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Pabrik Tujuan</label>
+                  <select value={pnFormPabrik} onChange={e => setPnFormPabrik(e.target.value)} className="w-full border-2 border-[#e8e4de] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-400">
+                    {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Jumlah</label>
+                  <input type="text" inputMode="numeric" value={pnFormJumlah} onChange={e => { if (e.target.value === "" || /^\d*$/.test(e.target.value)) setPnFormJumlah(e.target.value); }} className="w-full border-2 border-[#e8e4de] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-400" placeholder="Masukkan jumlah" required />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Keterangan (opsional)</label>
+                  <input type="text" value={pnFormKeterangan} onChange={e => setPnFormKeterangan(e.target.value)} className="w-full border-2 border-[#e8e4de] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-400" placeholder="Contoh: Dari vendor XYZ" />
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setIsPenerimaanModalOpen(false)} className="flex-1 h-11 border-2 border-[#e8e4de] text-[#6b6560] font-bold text-[13px] rounded-xl hover:bg-gray-50 transition-colors cursor-pointer">Batal</button>
+                  <button type="submit" disabled={isSavingPenerimaan} className="flex-1 h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[13px] rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
+                    {isSavingPenerimaan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Simpan
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* PENGIRIMAN MODAL (admin utama only) */}
+      <AnimatePresence>
+        {isPengirimanModalOpen && isMasterAdmin && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsPengirimanModalOpen(false)}
+              className="absolute inset-0 bg-[#1a1814]/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ y: 200, opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 200, opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="bg-white border-2 border-[#e8e4de] rounded-t-3xl sm:rounded-3xl shadow-xl w-full max-w-md relative overflow-hidden z-10 max-h-[90vh] flex flex-col"
+            >
+              <div className="p-4 md:p-5 border-b border-[#e8e4de] flex items-center justify-between bg-blue-50">
+                <h3 className="font-extrabold text-sm md:text-base text-blue-800">🚚 Input Pengiriman</h3>
+                <button onClick={() => setIsPengirimanModalOpen(false)} className="p-1.5 border border-blue-200 rounded-xl hover:bg-blue-100 text-blue-600 transition-colors cursor-pointer"><X className="w-4 h-4" /></button>
+              </div>
+              <form onSubmit={handleSavePengiriman} className="p-4 md:p-5 space-y-4 overflow-y-auto">
+                <div>
+                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Tanggal</label>
+                  <div className="text-sm font-bold text-blue-700 bg-blue-50 px-3 py-2 rounded-xl border border-blue-200">{formatDateDisplay(selectedDate)}</div>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Jenis Kantong</label>
+                  <select value={pgFormNama} onChange={e => setPgFormNama(e.target.value)} className="w-full border-2 border-[#e8e4de] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400">
+                    {effectiveJenisKantong.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Pabrik Asal</label>
+                  <select value={pgFormPabrik} onChange={e => setPgFormPabrik(e.target.value)} className="w-full border-2 border-[#e8e4de] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400">
+                    {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Jumlah</label>
+                  <input type="text" inputMode="numeric" value={pgFormJumlah} onChange={e => { if (e.target.value === "" || /^\d*$/.test(e.target.value)) setPgFormJumlah(e.target.value); }} className="w-full border-2 border-[#e8e4de] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400" placeholder="Masukkan jumlah" required />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Keterangan (opsional)</label>
+                  <input type="text" value={pgFormKeterangan} onChange={e => setPgFormKeterangan(e.target.value)} className="w-full border-2 border-[#e8e4de] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400" placeholder="Contoh: Kirim ke pabrik lain" />
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setIsPengirimanModalOpen(false)} className="flex-1 h-11 border-2 border-[#e8e4de] text-[#6b6560] font-bold text-[13px] rounded-xl hover:bg-gray-50 transition-colors cursor-pointer">Batal</button>
+                  <button type="submit" disabled={isSavingPengiriman} className="flex-1 h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[13px] rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
+                    {isSavingPengiriman ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Simpan
                   </button>
                 </div>
               </form>

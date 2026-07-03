@@ -4,7 +4,7 @@ import {
 } from "firebase/firestore";
 import { Save, Loader2, Package, RefreshCw } from "lucide-react";
 import { db } from "./firebase";
-import { StockHarian, LaporanKantong, AllowedUser } from "./types";
+import { StockHarian, LaporanKantong, AllowedUser, PenerimaanData, PengirimanData } from "./types";
 import { getDateString, formatDateDisplay } from "./utils";
 import { JENIS_KANTONG } from "./csvUtils";
 
@@ -30,10 +30,12 @@ interface StockHarianPageProps {
   allowedUsers: AllowedUser[];
   triggerToast: (text: string, type?: "ok" | "er" | "inf") => void;
   selectedDate: string;
+  penerimaanList: PenerimaanData[];
+  pengirimanList: PengirimanData[];
 }
 
 export default function StockHarianPage({
-  currentUser, isAllowed, reports, allowedUsers, triggerToast, selectedDate,
+  currentUser, isAllowed, reports, allowedUsers, triggerToast, selectedDate, penerimaanList, pengirimanList,
 }: StockHarianPageProps) {
   const currentUserData = allowedUsers.find(u => u.email === currentUser?.email?.toLowerCase());
   const userRole = currentUserData?.role || (currentUser?.isAnonymous ? "guest" : null);
@@ -43,7 +45,7 @@ export default function StockHarianPage({
   const [stockData, setStockData] = useState<Record<string, StockHarian>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
-  const [editBuffer, setEditBuffer] = useState<Record<string, { penerimaan: string; pengiriman: string; stockAwal: string }>>({});
+  const [editBuffer, setEditBuffer] = useState<Record<string, { stockAwal: string }>>({});
 
   const ALL_LOCATIONS = [OPT_GUDANG, ...PABRIK_LIST];
   const prevDate = (() => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate()-1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); })();
@@ -61,6 +63,13 @@ export default function StockHarianPage({
 
   const computePemakaian = (pabrikLabel: string, nama: string, tanggal: string): number =>
     reports.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik.includes(pabrikLabel)).reduce((s, r) => s + r.total, 0);
+
+  // Compute penerimaan & pengiriman from pelaporan data
+  const computePenerimaan = (pabrik: string, nama: string, tanggal: string): number =>
+    penerimaanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik).reduce((s, r) => s + r.jumlah, 0);
+
+  const computePengiriman = (pabrik: string, nama: string, tanggal: string): number =>
+    pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik).reduce((s, r) => s + r.jumlah, 0);
 
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setStockData({}); setLoading(false); return; }
@@ -85,11 +94,11 @@ export default function StockHarianPage({
   }, [currentUser, isAllowed, prevDate]);
 
   useEffect(() => {
-    const buf: Record<string, { penerimaan: string; pengiriman: string; stockAwal: string }> = {};
+    const buf: Record<string, { stockAwal: string }> = {};
     ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
       const id = makeDocId(p, n, selectedDate);
       const saved = stockData[id];
-      if (saved) { buf[id] = { penerimaan: String(saved.penerimaan), pengiriman: String(saved.pengiriman), stockAwal: String(saved.stockAwal) }; } else { const prevId = makeDocId(p, n, prevDate); const pv = prevDayData[prevId]; const ps = pv ? Number(pv.stockAkhir) || 0 : 0; buf[id] = { penerimaan: "", pengiriman: "", stockAwal: ps !== 0 ? String(ps) : "" }; }
+      if (saved) { buf[id] = { stockAwal: String(saved.stockAwal) }; } else { const prevId = makeDocId(p, n, prevDate); const pv = prevDayData[prevId]; const ps = pv ? Number(pv.stockAkhir) || 0 : 0; buf[id] = { stockAwal: ps !== 0 ? String(ps) : "" }; }
     }));
     setEditBuffer(buf);
   }, [stockData, selectedDate]);
@@ -106,22 +115,24 @@ export default function StockHarianPage({
         const prevId = makeDocId(p, n, prevDate);
         const pv = prevDayData[prevId];
         const newSA = pv ? String(Number(pv.stockAkhir) || 0) : "";
-        if (next[id] && next[id].stockAwal !== newSA) { next[id] = { ...next[id], stockAwal: newSA }; changed = true; }
+        if (next[id] && next[id].stockAwal !== newSA) { next[id] = { stockAwal: newSA }; changed = true; }
       }));
       return changed ? next : prev;
     });
   }, [prevDayData, stockData, selectedDate]);
 
-  const handleInputChange = (docId: string, field: "penerimaan" | "pengiriman" | "stockAwal", value: string) => {
-    if (value === "" || /^\d*$/.test(value)) setEditBuffer(p => ({ ...p, [docId]: { ...p[docId], [field]: value } }));
+  const handleInputChange = (docId: string, value: string) => {
+    if (value === "" || /^\d*$/.test(value)) setEditBuffer(p => ({ ...p, [docId]: { ...p[docId], stockAwal: value } }));
   };
 
   const handleSaveRow = async (pabrik: string, nama: string, docId: string) => {
     if (!currentUser || !isMasterAdmin) return;
     setSaving(docId);
     try {
-      const b = editBuffer[docId] || { penerimaan: "0", pengiriman: "0", stockAwal: "0" };
-      const sa = parseInt(b.stockAwal) || 0, pn = parseInt(b.penerimaan) || 0, pg = parseInt(b.pengiriman) || 0;
+      const b = editBuffer[docId] || { stockAwal: "0" };
+      const sa = parseInt(b.stockAwal) || 0;
+      const pn = computePenerimaan(pabrik, nama, selectedDate);
+      const pg = computePengiriman(pabrik, nama, selectedDate);
       const isOPT = pabrik === OPT_GUDANG;
       const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
       const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
@@ -138,8 +149,10 @@ export default function StockHarianPage({
       const isOPT = pabrik === OPT_GUDANG;
       await Promise.all(JENIS_KANTONG.map(nama => {
         const docId = makeDocId(pabrik, nama, selectedDate);
-        const b = editBuffer[docId] || { penerimaan: "0", pengiriman: "0", stockAwal: "0" };
-        const sa = parseInt(b.stockAwal) || 0, pn = parseInt(b.penerimaan) || 0, pg = parseInt(b.pengiriman) || 0;
+        const b = editBuffer[docId] || { stockAwal: "0" };
+        const sa = parseInt(b.stockAwal) || 0;
+        const pn = computePenerimaan(pabrik, nama, selectedDate);
+        const pg = computePengiriman(pabrik, nama, selectedDate);
         const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
         const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
         return setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
@@ -160,16 +173,18 @@ export default function StockHarianPage({
         if (pv) { updates[makeDocId(pabrik, nama, selectedDate)] = String(Number(pv.stockAkhir) || 0); cnt++; }
       }
       if (cnt > 0) {
-        setEditBuffer(p => { const n = { ...p }; for (const [id, v] of Object.entries(updates)) n[id] = { ...n[id], stockAwal: v }; return n; });
+        setEditBuffer(p => { const n = { ...p }; for (const [id, v] of Object.entries(updates)) n[id] = { stockAwal: v }; return n; });
         triggerToast(`Stock awal ${PABRIK_SHORT[pabrik]} dari ${formatDateDisplay(prevDate)} (${cnt} item)`, "ok");
       } else triggerToast(`Tidak ada data sebelumnya untuk ${PABRIK_SHORT[pabrik]}`, "inf");
     } catch (e) { console.error(e); triggerToast("Gagal auto-fill", "er"); }
   };
 
   const getRowDisplay = (pabrik: string, nama: string, docId: string) => {
-    const b = editBuffer[docId] || { penerimaan: "0", pengiriman: "0", stockAwal: "0" };
-    const sa = parseInt(b.stockAwal) || 0, pn = parseInt(b.penerimaan) || 0, pg = parseInt(b.pengiriman) || 0;
+    const b = editBuffer[docId] || { stockAwal: "0" };
+    const sa = parseInt(b.stockAwal) || 0;
     const isOPT = pabrik === OPT_GUDANG;
+    const pn = computePenerimaan(pabrik, nama, selectedDate);
+    const pg = computePengiriman(pabrik, nama, selectedDate);
     const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
     const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
     return { stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk };
@@ -197,13 +212,13 @@ export default function StockHarianPage({
           <tbody>{JENIS_KANTONG.map((nama, idx) => {
             const docId = makeDocId(OPT_GUDANG, nama, selectedDate);
             const d = getRowDisplay(OPT_GUDANG, nama, docId);
-            const buf = editBuffer[docId] || { penerimaan: "", pengiriman: "", stockAwal: "" };
+            const buf = editBuffer[docId] || { stockAwal: "" };
             return (
               <tr key={nama} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
                 <td className="px-4 py-2 font-medium text-gray-800">{nama}</td>
-                <td className="px-3 py-2 text-right">{isMasterAdmin ? <input type="text" inputMode="numeric" value={buf.stockAwal} onChange={e => handleInputChange(docId, "stockAwal", e.target.value)} className="w-20 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" /> : <span className="text-gray-700">{d.stockAwal}</span>}</td>
-                <td className="px-3 py-2 text-right">{isMasterAdmin ? <input type="text" inputMode="numeric" value={buf.penerimaan} onChange={e => handleInputChange(docId, "penerimaan", e.target.value)} className="w-20 text-right bg-green-50 border border-green-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-300" placeholder="0" /> : <span className="text-gray-700">{d.penerimaan}</span>}</td>
-                <td className="px-3 py-2 text-right">{isMasterAdmin ? <input type="text" inputMode="numeric" value={buf.pengiriman} onChange={e => handleInputChange(docId, "pengiriman", e.target.value)} className="w-20 text-right bg-blue-50 border border-blue-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" placeholder="0" /> : <span className="text-gray-700">{d.pengiriman}</span>}</td>
+                <td className="px-3 py-2 text-right">{isMasterAdmin ? <input type="text" inputMode="numeric" value={buf.stockAwal} onChange={e => handleInputChange(docId, e.target.value)} className="w-20 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" /> : <span className="text-gray-700">{d.stockAwal}</span>}</td>
+                <td className="px-3 py-2 text-right"><span className="text-gray-700">{d.penerimaan}</span></td>
+                <td className="px-3 py-2 text-right"><span className="text-gray-700">{d.pengiriman}</span></td>
                 <td className="px-3 py-2 text-right"><span className={`font-bold ${d.stockAkhir < 0 ? "text-red-600" : d.stockAkhir === 0 ? "text-gray-400" : "text-emerald-700"}`}>{d.stockAkhir}</span></td>
                 {isMasterAdmin && <td className="px-3 py-2 text-center"><button onClick={() => handleSaveRow(OPT_GUDANG, nama, docId)} disabled={saving === docId} className="text-indigo-600 hover:text-indigo-800 disabled:text-gray-300 transition-colors">{saving === docId ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : <Save className="w-4 h-4 mx-auto" />}</button></td>}
               </tr>
@@ -245,13 +260,13 @@ export default function StockHarianPage({
             <tbody>{JENIS_KANTONG.map((nama, idx) => {
               const docId = makeDocId(pabrik, nama, selectedDate);
               const d = getRowDisplay(pabrik, nama, docId);
-              const buf = editBuffer[docId] || { penerimaan: "", pengiriman: "", stockAwal: "" };
+              const buf = editBuffer[docId] || { stockAwal: "" };
               return (
                 <tr key={nama} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
                   <td className="px-4 py-2 font-medium text-gray-800">{nama}</td>
-                  <td className="px-3 py-2 text-right">{isMasterAdmin ? <input type="text" inputMode="numeric" value={buf.stockAwal} onChange={e => handleInputChange(docId, "stockAwal", e.target.value)} className="w-20 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" /> : <span className="text-gray-700">{d.stockAwal}</span>}</td>
-                  <td className="px-3 py-2 text-right">{isMasterAdmin ? <input type="text" inputMode="numeric" value={buf.penerimaan} onChange={e => handleInputChange(docId, "penerimaan", e.target.value)} className="w-20 text-right bg-green-50 border border-green-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-300" placeholder="0" /> : <span className="text-gray-700">{d.penerimaan}</span>}</td>
-                  <td className="px-3 py-2 text-right">{isMasterAdmin ? <input type="text" inputMode="numeric" value={buf.pengiriman} onChange={e => handleInputChange(docId, "pengiriman", e.target.value)} className="w-20 text-right bg-blue-50 border border-blue-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" placeholder="0" /> : <span className="text-gray-700">{d.pengiriman}</span>}</td>
+                  <td className="px-3 py-2 text-right">{isMasterAdmin ? <input type="text" inputMode="numeric" value={buf.stockAwal} onChange={e => handleInputChange(docId, e.target.value)} className="w-20 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" /> : <span className="text-gray-700">{d.stockAwal}</span>}</td>
+                  <td className="px-3 py-2 text-right"><span className="text-gray-700">{d.penerimaan}</span></td>
+                  <td className="px-3 py-2 text-right"><span className="text-gray-700">{d.pengiriman}</span></td>
                   <td className="px-3 py-2 text-right"><span className={`font-medium ${d.pemakaian > 0 ? "text-red-600" : "text-gray-400"}`}>{d.pemakaian}</span></td>
                   <td className="px-3 py-2 text-right"><span className={`font-bold ${d.stockAkhir < 0 ? "text-red-600" : d.stockAkhir === 0 ? "text-gray-400" : "text-emerald-700"}`}>{d.stockAkhir}</span></td>
                   {isMasterAdmin && <td className="px-3 py-2 text-center"><button onClick={() => handleSaveRow(pabrik, nama, docId)} disabled={saving === docId} className="text-indigo-600 hover:text-indigo-800 disabled:text-gray-300 transition-colors">{saving === docId ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : <Save className="w-4 h-4 mx-auto" />}</button></td>}

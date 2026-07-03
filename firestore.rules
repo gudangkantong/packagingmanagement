@@ -102,5 +102,21 @@ service cloud.firestore {
       allow update: if isSuperAdmin();
       allow delete: if isSuperAdmin();
     }
+
+    // === Penerimaan Data (from Pelaporan page) ===
+    // Only super_admin can create/delete; all authenticated can read
+    match /penerimaan_data/{id} {
+      allow read: if isAuthenticated();
+      allow create: if isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // === Pengiriman Data (from Pelaporan page) ===
+    // Only super_admin can create/delete; all authenticated can read
+    match /pengiriman_data/{id} {
+      allow read: if isAuthenticated();
+      allow create: if isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
   }
 }

@@ -2396,6 +2396,107 @@ export default function App() {
                         })}
                       </>
                     )}
+
+                    {/* === DATA PENERIMAAN === */}
+                    {(() => {
+                      const datePenerimaan = penerimaanList.filter(r => r.tanggal === selectedDate);
+                      if (datePenerimaan.length === 0) return null;
+                      return (
+                        <div className="space-y-2 pt-4">
+                          <h3 className="text-center text-sm font-extrabold text-emerald-700 tracking-wide uppercase">📦 Data Penerimaan</h3>
+                          <div className="bg-white border-2 border-emerald-200 rounded-3xl shadow-xs overflow-hidden">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left text-xs border-collapse">
+                                <thead>
+                                  <tr className="bg-emerald-50 border-b border-emerald-200 text-emerald-800 font-semibold uppercase text-[10px] tracking-wider">
+                                    <th className="py-3 px-4 text-center w-12">No</th>
+                                    <th className="py-3 px-4">Jenis Kantong</th>
+                                    <th className="py-3 px-4">Tujuan</th>
+                                    <th className="py-3 px-4">Sumber</th>
+                                    <th className="py-3 px-4 text-center">Jumlah</th>
+                                    <th className="py-3 px-4">Keterangan</th>
+                                    <th className="py-3 px-4">Oleh</th>
+                                    {isMasterAdmin && <th className="py-3 px-4 text-center w-28">Aksi</th>}
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-emerald-100">
+                                  {datePenerimaan.map((item, index) => (
+                                    <tr key={item.id} className="hover:bg-emerald-50/50 transition-colors">
+                                      <td className="py-2.5 px-4 text-center font-bold text-[#9e9892]">{index + 1}</td>
+                                      <td className="py-2.5 px-4 font-bold text-[#1a1814]">{item.nama}</td>
+                                      <td className="py-2.5 px-4 font-medium text-[#6b6560]">{item.pabrik.match(/\(([^)]+)\)/)?.[1] || item.pabrik}</td>
+                                      <td className="py-2.5 px-4 font-medium text-emerald-700">{item.sumber || "-"}</td>
+                                      <td className="py-2.5 px-4 text-center font-extrabold text-emerald-700">+{item.jumlah.toLocaleString()}</td>
+                                      <td className="py-2.5 px-4 text-[#6b6560]">{item.keterangan || "-"}</td>
+                                      <td className="py-2.5 px-4 text-xs text-[#6b6560] font-medium max-w-[120px] truncate" title={item.createdBy || "Sistem"}>{item.createdBy?.split("@")[0] || "Sistem"}</td>
+                                      {isMasterAdmin && (
+                                        <td className="py-2.5 px-4 text-center">
+                                          <div className="flex items-center justify-center gap-1.5">
+                                            <button onClick={() => handleEditPenerimaan(item)} className="p-1.5 border border-[#e8e4de] hover:border-emerald-500 hover:bg-emerald-50 text-[#6b6560] hover:text-emerald-600 rounded-lg transition-all cursor-pointer" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
+                                            <button onClick={() => handleDeletePenerimaan(item.id)} className="p-1.5 border border-[#e8e4de] hover:border-rose-200 hover:bg-rose-50 text-[#6b6560] hover:text-rose-600 rounded-lg transition-all cursor-pointer" title="Hapus"><Trash2 className="w-3.5 h-3.5" /></button>
+                                          </div>
+                                        </td>
+                                      )}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* === DATA PENGIRIMAN === */}
+                    {(() => {
+                      const datePengiriman = pengirimanList.filter(r => r.tanggal === selectedDate);
+                      if (datePengiriman.length === 0) return null;
+                      return (
+                        <div className="space-y-2 pt-4">
+                          <h3 className="text-center text-sm font-extrabold text-blue-700 tracking-wide uppercase">🚚 Data Pengiriman</h3>
+                          <div className="bg-white border-2 border-blue-200 rounded-3xl shadow-xs overflow-hidden">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left text-xs border-collapse">
+                                <thead>
+                                  <tr className="bg-blue-50 border-b border-blue-200 text-blue-800 font-semibold uppercase text-[10px] tracking-wider">
+                                    <th className="py-3 px-4 text-center w-12">No</th>
+                                    <th className="py-3 px-4">Jenis Kantong</th>
+                                    <th className="py-3 px-4">Sumber</th>
+                                    <th className="py-3 px-4">Tujuan</th>
+                                    <th className="py-3 px-4 text-center">Jumlah</th>
+                                    <th className="py-3 px-4">Keterangan</th>
+                                    <th className="py-3 px-4">Oleh</th>
+                                    {isMasterAdmin && <th className="py-3 px-4 text-center w-28">Aksi</th>}
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-blue-100">
+                                  {datePengiriman.map((item, index) => (
+                                    <tr key={item.id} className="hover:bg-blue-50/50 transition-colors">
+                                      <td className="py-2.5 px-4 text-center font-bold text-[#9e9892]">{index + 1}</td>
+                                      <td className="py-2.5 px-4 font-bold text-[#1a1814]">{item.nama}</td>
+                                      <td className="py-2.5 px-4 font-medium text-blue-700">{item.pabrik.match(/\(([^)]+)\)/)?.[1] || item.pabrik}</td>
+                                      <td className="py-2.5 px-4 font-medium text-[#6b6560]">{item.tujuan || "-"}</td>
+                                      <td className="py-2.5 px-4 text-center font-extrabold text-blue-700">-{item.jumlah.toLocaleString()}</td>
+                                      <td className="py-2.5 px-4 text-[#6b6560]">{item.keterangan || "-"}</td>
+                                      <td className="py-2.5 px-4 text-xs text-[#6b6560] font-medium max-w-[120px] truncate" title={item.createdBy || "Sistem"}>{item.createdBy?.split("@")[0] || "Sistem"}</td>
+                                      {isMasterAdmin && (
+                                        <td className="py-2.5 px-4 text-center">
+                                          <div className="flex items-center justify-center gap-1.5">
+                                            <button onClick={() => handleEditPengiriman(item)} className="p-1.5 border border-[#e8e4de] hover:border-blue-500 hover:bg-blue-50 text-[#6b6560] hover:text-blue-600 rounded-lg transition-all cursor-pointer" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
+                                            <button onClick={() => handleDeletePengiriman(item.id)} className="p-1.5 border border-[#e8e4de] hover:border-rose-200 hover:bg-rose-50 text-[#6b6560] hover:text-rose-600 rounded-lg transition-all cursor-pointer" title="Hapus"><Trash2 className="w-3.5 h-3.5" /></button>
+                                          </div>
+                                        </td>
+                                      )}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                   </motion.div>
                 )}
 

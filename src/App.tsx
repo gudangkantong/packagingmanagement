@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { initializeApp, deleteApp } from "firebase/app";
 import {
   signInWithEmailAndPassword,
@@ -3197,7 +3198,8 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* PENERIMAAN MODAL (admin utama only) */}
+      {/* PENERIMAAN MODAL (admin utama only) - via portal to avoid overflow clipping */}
+      {createPortal(
       <AnimatePresence>
         {isPenerimaanModalOpen && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -3267,8 +3269,10 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+      , document.body)}
 
-      {/* PENGIRIMAN MODAL (admin utama only) */}
+      {/* PENGIRIMAN MODAL (admin utama only) - via portal */}
+      {createPortal(
       <AnimatePresence>
         {isPengirimanModalOpen && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -3338,6 +3342,7 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+      , document.body)}
 
       {/* CUSTOM CONFIRMATION MODAL */}
       <AnimatePresence>

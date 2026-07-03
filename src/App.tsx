@@ -1541,7 +1541,7 @@ export default function App() {
 
             {/* Sub-header with Date Navigation & Controls */}
             {activeTab !== "users" && (
-              <div className="bg-white border-b border-[#e8e4de] py-3 shadow-xs">
+              <div className="bg-white border-b border-[#e8e4de] py-3 shadow-xs sticky top-[72px] z-10">
                 <div className="max-w-7xl mx-auto px-4 md:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
                   {/* Datepicker Navigation */}
                   <div className="flex items-center gap-1 border border-[#e8e4de] bg-[#fcfbfa] p-1.5 rounded-2xl w-full sm:w-auto shadow-xs">

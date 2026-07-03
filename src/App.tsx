@@ -1921,7 +1921,7 @@ export default function App() {
                           </span>.
                           {!isGuest && (
                             <span className="block mt-1.5 text-[#9e9892] text-[11px] font-medium">
-                              Klik icon <span className="font-bold text-brand-green">+</span> di pojok kanan bawah halaman untuk menambahkan data baru.
+                              Silakan buka tab <span className="font-bold text-brand-green">Pelaporan</span> untuk menambahkan data baru.
                             </span>
                           )}
                         </p>

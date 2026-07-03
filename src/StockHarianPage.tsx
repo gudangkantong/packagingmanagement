@@ -204,7 +204,6 @@ export default function StockHarianPage({
       <div className="bg-gray-800 text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2"><Package className="w-5 h-5" /><h3 className="font-bold text-lg">📦 {OPT_GUDANG}</h3></div>
         {isMasterAdmin && <div className="flex items-center gap-2">
-          <button onClick={() => handleAutoFillStockAwal(OPT_GUDANG)} className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"><RefreshCw className="w-3.5 h-3.5" /> Auto Stock Awal</button>
         </div>}
       </div>
       <div className="overflow-x-auto">
@@ -260,7 +259,6 @@ export default function StockHarianPage({
         <div className={`${c.h} text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2`}>
           <div className="flex items-center gap-2"><Package className="w-5 h-5" /><h3 className="font-bold text-lg">🏭 {pabrik}</h3></div>
           {isMasterAdmin && <div className="flex items-center gap-2">
-            <button onClick={() => handleAutoFillStockAwal(pabrik)} className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"><RefreshCw className="w-3.5 h-3.5" /> Auto Stock Awal</button>
           </div>}
         </div>
         <div className="overflow-x-auto">

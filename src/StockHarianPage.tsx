@@ -5,7 +5,7 @@ import {
 import { Save, Loader2, Package, RefreshCw } from "lucide-react";
 import { db } from "./firebase";
 import { StockHarian, LaporanKantong, AllowedUser } from "./types";
-import { formatDateDisplay } from "./utils";
+import { getDateString, formatDateDisplay } from "./utils";
 import { JENIS_KANTONG } from "./csvUtils";
 
 const OPT_GUDANG = "Gudang OPT";
@@ -84,6 +84,37 @@ export default function StockHarianPage({
     }));
     setEditBuffer(buf);
   }, [stockData, selectedDate]);
+
+
+  // Auto-fill stock awal from previous day on first load (if empty)
+  useEffect(() => {
+    if (!currentUser || !isMasterAdmin || loading) return;
+    const hasData = ALL_LOCATIONS.some(p =>
+      JENIS_KANTONG.some(n => {
+        const id = makeDocId(p, n, selectedDate);
+        return editBuffer[id] && editBuffer[id].stockAwal !== "";
+      })
+    );
+    if (hasData) return;
+    const prevDate = getPrevDate(selectedDate);
+    const doAutoFill = async () => {
+      let totalFilled = 0;
+      const updates = {};
+      for (const pabrik of ALL_LOCATIONS) {
+        for (const nama of JENIS_KANTONG) {
+          try {
+            const prevDoc = await getDoc(doc(db, "stock_harian", makeDocId(pabrik, nama, prevDate)));
+            if (prevDoc.exists()) {
+              const ps = Number(prevDoc.data()?.stockAkhir) || 0;
+              if (ps !== 0) { updates[makeDocId(pabrik, nama, selectedDate)] = String(ps); totalFilled++; }
+            }
+          } catch (e) {}
+        }
+      }
+      if (totalFilled > 0) setEditBuffer(prev => { const n={...prev}; for(const[id,v] of Object.entries(updates)) n[id]={...n[id],stockAwal:v}; return n; });
+    };
+    doAutoFill();
+  }, [loading, selectedDate, isMasterAdmin]);
 
   const handleInputChange = (docId: string, field: "penerimaan" | "pengiriman" | "stockAwal", value: string) => {
     if (value === "" || /^\d*$/.test(value)) setEditBuffer(p => ({ ...p, [docId]: { ...p[docId], [field]: value } }));

@@ -108,6 +108,7 @@ service cloud.firestore {
     match /penerimaan_data/{id} {
       allow read: if isAuthenticated();
       allow create: if isSuperAdmin();
+      allow update: if isSuperAdmin();
       allow delete: if isSuperAdmin();
     }
 
@@ -116,6 +117,7 @@ service cloud.firestore {
     match /pengiriman_data/{id} {
       allow read: if isAuthenticated();
       allow create: if isSuperAdmin();
+      allow update: if isSuperAdmin();
       allow delete: if isSuperAdmin();
     }
   }

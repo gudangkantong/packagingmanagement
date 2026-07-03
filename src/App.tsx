@@ -2113,34 +2113,6 @@ export default function App() {
                     transition={{ duration: 0.2 }}
                     className="space-y-1"
                   >
-                    <div className="flex items-center gap-2 pt-0 pb-2 flex-wrap">
-                      {!isGuest && (
-                        <button
-                          onClick={handleOpenAddForm}
-                          disabled={isSelectedDateLocked && !isMasterAdmin}
-                          className={`h-10 px-5 rounded-xl font-bold text-[13px] flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 ${
-                            isSelectedDateLocked && !isMasterAdmin
-                              ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200 shadow-none"
-                              : "bg-brand-green hover:bg-brand-green-hover text-white hover:shadow-md"
-                          }`}
-                        >
-                          {isSelectedDateLocked && !isMasterAdmin ? (
-                            <>
-                              <Lock className="w-4 h-4 text-slate-400" />
-                              <span>Verified</span>
-                            </>
-                          ) : (
-                            <>
-                              <div className="bg-white/20 p-0.5 rounded-md">
-                                <Plus className="w-4 h-4" />
-                              </div>
-                              <span>Tambah Data</span>
-                            </>
-                          )}
-                        </button>
-                      )}
-                    </div>
-
                     {inputFilteredReports.length === 0 ? (
                       <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-12 text-center shadow-xs">
                         <div className="flex justify-center mb-4 animate-pulse">
@@ -2944,6 +2916,22 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* Floating Action Button - Tambah Data (Pelaporan tab only) */}
+      {activeTab === "input" && !isGuest && (
+        <button
+          onClick={handleOpenAddForm}
+          disabled={isSelectedDateLocked && !isMasterAdmin}
+          className={`fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-40 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all cursor-pointer active:scale-90 ${
+            isSelectedDateLocked && !isMasterAdmin
+              ? "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none"
+              : "bg-brand-green hover:bg-brand-green-hover text-white hover:shadow-xl"
+          }`}
+          title="Tambah Data"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
+      )}
 
       {/* FORM INPUT MODAL */}
       <AnimatePresence>

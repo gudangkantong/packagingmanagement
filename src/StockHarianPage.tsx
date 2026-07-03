@@ -8,7 +8,7 @@ import { StockHarian, LaporanKantong, AllowedUser } from "./types";
 import { formatDateDisplay } from "./utils";
 import { JENIS_KANTONG } from "./csvUtils";
 
-const OPT_GUDANG = "OPT Gudang";
+const OPT_GUDANG = "Gudang OPT";
 const PABRIK_LIST = [
   "Pabrik Baturaja 1 (PBR 1)",
   "Pabrik Baturaja 2 (PBR 2)",

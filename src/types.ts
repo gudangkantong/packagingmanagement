@@ -46,9 +46,10 @@ export interface StockHarian {
 export interface PenerimaanData {
   id: string;
   nama: string;          // jenis kantong
-  pabrik: string;        // full pabrik name
+  pabrik: string;        // full pabrik name (tujuan penerimaan)
   tanggal: string;       // YYYY-MM-DD
   jumlah: number;
+  sumber: string;        // asal penerimaan (vendor atau nama pabrik lain)
   keterangan: string;
   createdBy: string;
   createdAt: string;
@@ -57,9 +58,10 @@ export interface PenerimaanData {
 export interface PengirimanData {
   id: string;
   nama: string;          // jenis kantong
-  pabrik: string;        // full pabrik name
+  pabrik: string;        // full pabrik name (sumber pengiriman)
   tanggal: string;       // YYYY-MM-DD
   jumlah: number;
+  tujuan: string;        // tujuan pengiriman (nama pabrik lain)
   keterangan: string;
   createdBy: string;
   createdAt: string;

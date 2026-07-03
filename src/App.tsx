@@ -393,7 +393,7 @@ export default function App() {
       const items: PenerimaanData[] = [];
       snap.forEach((d) => {
         const data = d.data();
-        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
       });
       setPenerimaanList(items);
     }, (err) => { console.error("Failed to sync penerimaan_data:", err); handleFirestoreError(err, OperationType.GET, "penerimaan_data"); });
@@ -408,7 +408,7 @@ export default function App() {
       const items: PengirimanData[] = [];
       snap.forEach((d) => {
         const data = d.data();
-        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
       });
       setPengirimanList(items);
     }, (err) => { console.error("Failed to sync pengiriman_data:", err); handleFirestoreError(err, OperationType.GET, "pengiriman_data"); });

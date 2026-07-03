@@ -70,14 +70,14 @@ export default function StockHarianPage({
     penerimaanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik).reduce((s, r) => s + r.jumlah, 0);
 
   const computePengiriman = (pabrik: string, nama: string, tanggal: string): number =>
-    pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik).reduce((s, r) => s + r.jumlah, 0);
+    pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.tujuan === pabrik).reduce((s, r) => s + r.jumlah, 0);
 
   // Get detail data for expanded rows
   const getPenerimaanDetails = (pabrik: string, nama: string, tanggal: string) =>
     penerimaanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik);
 
   const getPengirimanDetails = (pabrik: string, nama: string, tanggal: string) =>
-    pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik);
+    pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.tujuan === pabrik);
 
   const getPemakaianDetails = (pabrikLabel: string, nama: string, tanggal: string) => {
     const items = reports.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik.includes(pabrikLabel));
@@ -279,7 +279,7 @@ export default function StockHarianPage({
                         ))}
                         {pgDetails.length > 0 && pgDetails.map((item, i) => (
                           <div key={i} className="flex items-center gap-2 text-blue-600">
-                            <span>🚚</span> <span>Pengiriman ke {item.tujuan || item.pabrik}: <strong>-{formatNumber(item.jumlah)}</strong></span>
+                            <span>🚚</span> <span>Pengiriman dari {item.pabrik}: <strong>-{formatNumber(item.jumlah)}</strong></span>
                           </div>
                         ))}
                         {pnDetails.length === 0 && pgDetails.length === 0 && (
@@ -368,7 +368,7 @@ export default function StockHarianPage({
                           ))}
                           {pgDetails.length > 0 && pgDetails.map((item, i) => (
                             <div key={i} className="flex items-center gap-2 text-blue-600">
-                              <span>🚚</span> <span>Pengiriman ke {item.tujuan || item.pabrik}: <strong>-{formatNumber(item.jumlah)}</strong></span>
+                              <span>🚚</span> <span>Pengiriman dari {item.pabrik}: <strong>-{formatNumber(item.jumlah)}</strong></span>
                             </div>
                           ))}
                           {pkDetails.length > 0 && pkDetails.map((item, i) => (

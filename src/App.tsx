@@ -185,10 +185,12 @@ export default function App() {
   const [pnFormPabrik, setPnFormPabrik] = useState(PABRIK_LIST[0]);
   const [pnFormJumlah, setPnFormJumlah] = useState("");
   const [pnFormKeterangan, setPnFormKeterangan] = useState("");
+  const [pnFormSumber, setPnFormSumber] = useState("Gudang OPT");
   const [pgFormNama, setPgFormNama] = useState(JENIS_KANTONG[0]);
   const [pgFormPabrik, setPgFormPabrik] = useState(PABRIK_LIST[0]);
   const [pgFormJumlah, setPgFormJumlah] = useState("");
   const [pgFormKeterangan, setPgFormKeterangan] = useState("");
+  const [pgFormTujuan, setPgFormTujuan] = useState("Gudang OPT");
   const [isSavingPenerimaan, setIsSavingPenerimaan] = useState(false);
   const [isSavingPengiriman, setIsSavingPengiriman] = useState(false);
 
@@ -1035,6 +1037,7 @@ export default function App() {
         pabrik: pnFormPabrik,
         tanggal: selectedDate,
         jumlah: parseInt(pnFormJumlah) || 0,
+        sumber: pnFormSumber,
         keterangan: pnFormKeterangan,
         createdBy: currentUser.email || "",
         createdAt: new Date().toISOString()
@@ -1042,6 +1045,7 @@ export default function App() {
       triggerToast(`Penerimaan ${pnFormNama} (${PABRIK_SHORT[pnFormPabrik] || pnFormPabrik}) berhasil disimpan`, "ok");
       setPnFormJumlah("");
       setPnFormKeterangan("");
+      setPnFormSumber("Gudang OPT");
       setIsPenerimaanModalOpen(false);
     } catch (err) {
       console.error("Save penerimaan failed:", err);
@@ -1067,6 +1071,7 @@ export default function App() {
         pabrik: pgFormPabrik,
         tanggal: selectedDate,
         jumlah: parseInt(pgFormJumlah) || 0,
+        tujuan: pgFormTujuan,
         keterangan: pgFormKeterangan,
         createdBy: currentUser.email || "",
         createdAt: new Date().toISOString()
@@ -1074,6 +1079,7 @@ export default function App() {
       triggerToast(`Pengiriman ${pgFormNama} (${PABRIK_SHORT[pgFormPabrik] || pgFormPabrik}) berhasil disimpan`, "ok");
       setPgFormJumlah("");
       setPgFormKeterangan("");
+      setPgFormTujuan("Gudang OPT");
       setIsPengirimanModalOpen(false);
     } catch (err) {
       console.error("Save pengiriman failed:", err);
@@ -3207,40 +3213,51 @@ export default function App() {
               animate={{ y: 0, opacity: 1, scale: 1 }}
               exit={{ y: 200, opacity: 0, scale: 0.95 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="bg-white border-2 border-[#e8e4de] rounded-t-3xl sm:rounded-3xl shadow-xl w-full max-w-md relative overflow-hidden z-10 max-h-[90vh] flex flex-col"
+              className="bg-white border-2 border-[#e8e4de] rounded-t-3xl sm:rounded-3xl shadow-xl w-full max-w-xl relative overflow-hidden z-10 max-h-[90vh] flex flex-col"
             >
-              <div className="p-4 md:p-5 border-b border-[#e8e4de] flex items-center justify-between bg-emerald-50">
-                <h3 className="font-extrabold text-sm md:text-base text-emerald-800">📦 Input Penerimaan</h3>
-                <button onClick={() => setIsPenerimaanModalOpen(false)} className="p-1.5 border border-emerald-200 rounded-xl hover:bg-emerald-100 text-emerald-600 transition-colors cursor-pointer"><X className="w-4 h-4" /></button>
+              <div className="p-4 md:p-5 border-b border-[#e8e4de] flex items-center justify-between bg-[#fcfbfa]">
+                <h3 className="font-extrabold text-sm md:text-base text-[#1a1814]">📦 Input Penerimaan</h3>
+                <button onClick={() => setIsPenerimaanModalOpen(false)} className="p-1.5 text-[#6b6560] hover:text-[#1a1814] hover:bg-[#faf9f7] rounded-xl transition-colors"><X className="w-5 h-5" /></button>
               </div>
-              <form onSubmit={handleSavePenerimaan} className="p-4 md:p-5 space-y-4 overflow-y-auto">
-                <div>
-                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Tanggal</label>
-                  <div className="text-sm font-bold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-xl border border-emerald-200">{formatDateDisplay(selectedDate)}</div>
+              <form onSubmit={handleSavePenerimaan} className="flex-1 overflow-y-auto p-5 md:p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Tanggal</label>
+                    <div className="px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814]">{formatDateDisplay(selectedDate)}</div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Pabrik Tujuan</label>
+                    <select value={pnFormPabrik} onChange={e => setPnFormPabrik(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
+                      {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Jenis Kantong</label>
+                    <select value={pnFormNama} onChange={e => setPnFormNama(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
+                      {effectiveJenisKantong.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Jumlah</label>
+                    <input type="text" inputMode="numeric" value={pnFormJumlah} onChange={e => { if (e.target.value === "" || /^\d*$/.test(e.target.value)) setPnFormJumlah(e.target.value); }} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white" placeholder="0" required />
+                  </div>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Jenis Kantong</label>
-                  <select value={pnFormNama} onChange={e => setPnFormNama(e.target.value)} className="w-full border-2 border-[#e8e4de] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-400">
-                    {effectiveJenisKantong.map(n => <option key={n} value={n}>{n}</option>)}
+                  <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Penerimaan Dari</label>
+                  <select value={pnFormSumber} onChange={e => setPnFormSumber(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
+                    <option value="Gudang OPT">Gudang OPT</option>
+                    {effectiveVendors.map(v => <option key={v} value={v}>{v}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Pabrik Tujuan</label>
-                  <select value={pnFormPabrik} onChange={e => setPnFormPabrik(e.target.value)} className="w-full border-2 border-[#e8e4de] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-400">
-                    {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
+                  <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Keterangan <span className="font-normal">(opsional)</span></label>
+                  <input type="text" value={pnFormKeterangan} onChange={e => setPnFormKeterangan(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white" placeholder="Catatan tambahan..." />
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Jumlah</label>
-                  <input type="text" inputMode="numeric" value={pnFormJumlah} onChange={e => { if (e.target.value === "" || /^\d*$/.test(e.target.value)) setPnFormJumlah(e.target.value); }} className="w-full border-2 border-[#e8e4de] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-400" placeholder="Masukkan jumlah" required />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Keterangan (opsional)</label>
-                  <input type="text" value={pnFormKeterangan} onChange={e => setPnFormKeterangan(e.target.value)} className="w-full border-2 border-[#e8e4de] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-400" placeholder="Contoh: Dari vendor XYZ" />
-                </div>
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setIsPenerimaanModalOpen(false)} className="flex-1 h-11 border-2 border-[#e8e4de] text-[#6b6560] font-bold text-[13px] rounded-xl hover:bg-gray-50 transition-colors cursor-pointer">Batal</button>
-                  <button type="submit" disabled={isSavingPenerimaan} className="flex-1 h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[13px] rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
+                <div className="pt-4 border-t border-[#e8e4de] flex items-center justify-end gap-2">
+                  <button type="button" onClick={() => setIsPenerimaanModalOpen(false)} className="border-2 border-[#e8e4de] hover:bg-[#faf9f7] text-[#1a1814] px-4 py-2.5 rounded-xl text-xs font-bold transition-all">Batal</button>
+                  <button type="submit" disabled={isSavingPenerimaan} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-2 disabled:opacity-50">
                     {isSavingPenerimaan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     Simpan
                   </button>
@@ -3267,40 +3284,51 @@ export default function App() {
               animate={{ y: 0, opacity: 1, scale: 1 }}
               exit={{ y: 200, opacity: 0, scale: 0.95 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="bg-white border-2 border-[#e8e4de] rounded-t-3xl sm:rounded-3xl shadow-xl w-full max-w-md relative overflow-hidden z-10 max-h-[90vh] flex flex-col"
+              className="bg-white border-2 border-[#e8e4de] rounded-t-3xl sm:rounded-3xl shadow-xl w-full max-w-xl relative overflow-hidden z-10 max-h-[90vh] flex flex-col"
             >
-              <div className="p-4 md:p-5 border-b border-[#e8e4de] flex items-center justify-between bg-blue-50">
-                <h3 className="font-extrabold text-sm md:text-base text-blue-800">🚚 Input Pengiriman</h3>
-                <button onClick={() => setIsPengirimanModalOpen(false)} className="p-1.5 border border-blue-200 rounded-xl hover:bg-blue-100 text-blue-600 transition-colors cursor-pointer"><X className="w-4 h-4" /></button>
+              <div className="p-4 md:p-5 border-b border-[#e8e4de] flex items-center justify-between bg-[#fcfbfa]">
+                <h3 className="font-extrabold text-sm md:text-base text-[#1a1814]">🚚 Input Pengiriman</h3>
+                <button onClick={() => setIsPengirimanModalOpen(false)} className="p-1.5 text-[#6b6560] hover:text-[#1a1814] hover:bg-[#faf9f7] rounded-xl transition-colors"><X className="w-5 h-5" /></button>
               </div>
-              <form onSubmit={handleSavePengiriman} className="p-4 md:p-5 space-y-4 overflow-y-auto">
-                <div>
-                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Tanggal</label>
-                  <div className="text-sm font-bold text-blue-700 bg-blue-50 px-3 py-2 rounded-xl border border-blue-200">{formatDateDisplay(selectedDate)}</div>
+              <form onSubmit={handleSavePengiriman} className="flex-1 overflow-y-auto p-5 md:p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Tanggal</label>
+                    <div className="px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814]">{formatDateDisplay(selectedDate)}</div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Pabrik Asal</label>
+                    <select value={pgFormPabrik} onChange={e => setPgFormPabrik(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
+                      {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Jenis Kantong</label>
+                    <select value={pgFormNama} onChange={e => setPgFormNama(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
+                      {effectiveJenisKantong.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Jumlah</label>
+                    <input type="text" inputMode="numeric" value={pgFormJumlah} onChange={e => { if (e.target.value === "" || /^\d*$/.test(e.target.value)) setPgFormJumlah(e.target.value); }} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white" placeholder="0" required />
+                  </div>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Jenis Kantong</label>
-                  <select value={pgFormNama} onChange={e => setPgFormNama(e.target.value)} className="w-full border-2 border-[#e8e4de] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400">
-                    {effectiveJenisKantong.map(n => <option key={n} value={n}>{n}</option>)}
+                  <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Pengiriman Ke</label>
+                  <select value={pgFormTujuan} onChange={e => setPgFormTujuan(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
+                    <option value="Gudang OPT">Gudang OPT</option>
+                    {effectiveVendors.map(v => <option key={v} value={v}>{v}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Pabrik Asal</label>
-                  <select value={pgFormPabrik} onChange={e => setPgFormPabrik(e.target.value)} className="w-full border-2 border-[#e8e4de] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400">
-                    {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
+                  <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Keterangan <span className="font-normal">(opsional)</span></label>
+                  <input type="text" value={pgFormKeterangan} onChange={e => setPgFormKeterangan(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white" placeholder="Catatan tambahan..." />
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Jumlah</label>
-                  <input type="text" inputMode="numeric" value={pgFormJumlah} onChange={e => { if (e.target.value === "" || /^\d*$/.test(e.target.value)) setPgFormJumlah(e.target.value); }} className="w-full border-2 border-[#e8e4de] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400" placeholder="Masukkan jumlah" required />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-[#6b6560] mb-1 block">Keterangan (opsional)</label>
-                  <input type="text" value={pgFormKeterangan} onChange={e => setPgFormKeterangan(e.target.value)} className="w-full border-2 border-[#e8e4de] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400" placeholder="Contoh: Kirim ke pabrik lain" />
-                </div>
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setIsPengirimanModalOpen(false)} className="flex-1 h-11 border-2 border-[#e8e4de] text-[#6b6560] font-bold text-[13px] rounded-xl hover:bg-gray-50 transition-colors cursor-pointer">Batal</button>
-                  <button type="submit" disabled={isSavingPengiriman} className="flex-1 h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[13px] rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
+                <div className="pt-4 border-t border-[#e8e4de] flex items-center justify-end gap-2">
+                  <button type="button" onClick={() => setIsPengirimanModalOpen(false)} className="border-2 border-[#e8e4de] hover:bg-[#faf9f7] text-[#1a1814] px-4 py-2.5 rounded-xl text-xs font-bold transition-all">Batal</button>
+                  <button type="submit" disabled={isSavingPengiriman} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-2 disabled:opacity-50">
                     {isSavingPengiriman ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     Simpan
                   </button>

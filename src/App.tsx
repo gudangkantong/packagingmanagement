@@ -3138,7 +3138,7 @@ export default function App() {
               )}
 
               {/* Tab: Penerimaan */}
-              {modalTab === "penerimaan" && !editingId && isMasterAdmin && (
+              {modalTab === "penerimaan" && !editingId && (
               <form onSubmit={handleSavePenerimaan} className="flex-1 overflow-y-auto p-5 md:p-6 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -3186,7 +3186,7 @@ export default function App() {
               )}
 
               {/* Tab: Pengiriman */}
-              {modalTab === "pengiriman" && !editingId && isMasterAdmin && (
+              {modalTab === "pengiriman" && !editingId && (
               <form onSubmit={handleSavePengiriman} className="flex-1 overflow-y-auto p-5 md:p-6 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>

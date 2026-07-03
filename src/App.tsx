@@ -3194,7 +3194,7 @@ export default function App() {
                     <input type="date" value={pgFormTanggal} onChange={e => setPgFormTanggal(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white" />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Pabrik Asal</label>
+                    <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Pengiriman Dari</label>
                     <select value={pgFormPabrik} onChange={e => setPgFormPabrik(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
                       <option value="Gudang OPT">Gudang OPT</option>
                       {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}

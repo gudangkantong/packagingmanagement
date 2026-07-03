@@ -1921,7 +1921,7 @@ export default function App() {
                           </span>.
                           {!isGuest && (
                             <span className="block mt-1.5 text-[#9e9892] text-[11px] font-medium">
-                              Silakan buka tab <span className="font-bold text-brand-green">Pelaporan</span> untuk menambahkan data baru.
+                              Klik icon <span className="font-bold text-brand-green">+</span> di pojok kanan bawah halaman untuk menambahkan data baru.
                             </span>
                           )}
                         </p>
@@ -2192,7 +2192,7 @@ export default function App() {
                         </div>
                         <h4 className="text-sm font-extrabold text-[#1a1814]">Belum Ada Data</h4>
                         <p className="text-xs text-[#9e9892] mt-1 max-w-sm mx-auto">
-                          Belum ada laporan pemakaian kantong untuk tanggal ini{userPabrikRole ? ' untuk pabrik Anda' : ''}. Klik tombol <span className="font-bold text-brand-green">Tambah Data</span> di atas untuk menginput laporan.
+                          Belum ada laporan pemakaian kantong untuk tanggal ini{userPabrikRole ? ' untuk pabrik Anda' : ''}. Klik icon <span className="font-bold text-brand-green">+</span> di pojok kanan bawah untuk menginput laporan.
                         </p>
                       </div>
                     ) : (

@@ -200,7 +200,7 @@ export default function StockHarianPage({
   };
 
   const renderOPTTable = () => (
-    <div className="rounded-xl border border-[#e8e4de] overflow-hidden mb-6 shadow-sm">
+    <div className="rounded-3xl border-2 border-[#e8e4de] overflow-hidden mb-6 shadow-xs">
       <div className="bg-gray-800 text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2"><Package className="w-5 h-5" /><h3 className="font-bold text-lg">📦 {OPT_GUDANG}</h3></div>
         {isMasterAdmin && <div className="flex items-center gap-2">
@@ -255,7 +255,7 @@ export default function StockHarianPage({
     };
     const c = pc[pabrik] || { h: "bg-gray-600", b: "bg-gray-50", a: "border-[#e8e4de]" };
     return (
-      <div key={pabrik} className={`rounded-xl border ${c.a} overflow-hidden mb-6 shadow-sm`}>
+      <div key={pabrik} className={`rounded-3xl border-2 ${c.a} overflow-hidden mb-6 shadow-xs`}>
         <div className={`${c.h} text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2`}>
           <div className="flex items-center gap-2"><Package className="w-5 h-5" /><h3 className="font-bold text-lg">🏭 {pabrik}</h3></div>
           {isMasterAdmin && <div className="flex items-center gap-2">

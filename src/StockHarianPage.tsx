@@ -200,7 +200,7 @@ export default function StockHarianPage({
   };
 
   const renderOPTTable = () => (
-    <div className="rounded-xl border border-gray-300 overflow-hidden mb-6 shadow-sm">
+    <div className="rounded-xl border border-[#e8e4de] overflow-hidden mb-6 shadow-sm">
       <div className="bg-gray-800 text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2"><Package className="w-5 h-5" /><h3 className="font-bold text-lg">📦 {OPT_GUDANG}</h3></div>
         {isMasterAdmin && <div className="flex items-center gap-2">
@@ -209,11 +209,11 @@ export default function StockHarianPage({
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="bg-gray-100 text-gray-700">
-            <th className="px-4 py-2.5 text-left font-semibold border-b border-gray-200 min-w-[180px]">Jenis Kantong</th>
-            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[130px] whitespace-nowrap">Stock Awal</th>
-            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Penerimaan</th>
-            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Pengiriman</th>
-            <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Stock Akhir</th>
+            <th className="px-4 py-2.5 text-left font-semibold border-b border-[#e8e4de] min-w-[180px]">Jenis Kantong</th>
+            <th className="px-3 py-2.5 text-right font-semibold border-b border-[#e8e4de] min-w-[130px] whitespace-nowrap">Stock Awal</th>
+            <th className="px-3 py-2.5 text-right font-semibold border-b border-[#e8e4de] min-w-[100px] whitespace-nowrap">Penerimaan</th>
+            <th className="px-3 py-2.5 text-right font-semibold border-b border-[#e8e4de] min-w-[100px] whitespace-nowrap">Pengiriman</th>
+            <th className="px-3 py-2.5 text-right font-semibold border-b border-[#e8e4de] min-w-[100px] whitespace-nowrap">Stock Akhir</th>
           </tr></thead>
           <tbody>{JENIS_KANTONG.map((nama, idx) => {
             const docId = makeDocId(OPT_GUDANG, nama, selectedDate);
@@ -221,7 +221,7 @@ export default function StockHarianPage({
             const buf = editBuffer[docId] || { stockAwal: "" };
             const changed = isStockAwalChanged(docId);
             return (
-              <tr key={nama} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+              <tr key={nama} className={`border-b border-[#e8e4de] hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
                 <td className="px-4 py-2 font-medium text-gray-800">{nama}</td>
                 <td className="px-3 py-2 text-right">
                   {isMasterAdmin ? (
@@ -253,7 +253,7 @@ export default function StockHarianPage({
       "Pabrik Palembang (PPG)": { h: "bg-amber-600", b: "bg-amber-50", a: "border-amber-200" },
       "Pabrik Panjang (PPJ)": { h: "bg-rose-600", b: "bg-rose-50", a: "border-rose-200" },
     };
-    const c = pc[pabrik] || { h: "bg-gray-600", b: "bg-gray-50", a: "border-gray-200" };
+    const c = pc[pabrik] || { h: "bg-gray-600", b: "bg-gray-50", a: "border-[#e8e4de]" };
     return (
       <div key={pabrik} className={`rounded-xl border ${c.a} overflow-hidden mb-6 shadow-sm`}>
         <div className={`${c.h} text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2`}>
@@ -264,12 +264,12 @@ export default function StockHarianPage({
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className={`${c.b} text-gray-700`}>
-              <th className="px-4 py-2.5 text-left font-semibold border-b border-gray-200 min-w-[180px]">Jenis Kantong</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[130px] whitespace-nowrap">Stock Awal</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Penerimaan</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Pengiriman</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Pemakaian</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b border-gray-200 min-w-[100px] whitespace-nowrap">Stock Akhir</th>
+              <th className="px-4 py-2.5 text-left font-semibold border-b border-[#e8e4de] min-w-[180px]">Jenis Kantong</th>
+              <th className="px-3 py-2.5 text-right font-semibold border-b border-[#e8e4de] min-w-[130px] whitespace-nowrap">Stock Awal</th>
+              <th className="px-3 py-2.5 text-right font-semibold border-b border-[#e8e4de] min-w-[100px] whitespace-nowrap">Penerimaan</th>
+              <th className="px-3 py-2.5 text-right font-semibold border-b border-[#e8e4de] min-w-[100px] whitespace-nowrap">Pengiriman</th>
+              <th className="px-3 py-2.5 text-right font-semibold border-b border-[#e8e4de] min-w-[100px] whitespace-nowrap">Pemakaian</th>
+              <th className="px-3 py-2.5 text-right font-semibold border-b border-[#e8e4de] min-w-[100px] whitespace-nowrap">Stock Akhir</th>
             </tr></thead>
             <tbody>{JENIS_KANTONG.map((nama, idx) => {
               const docId = makeDocId(pabrik, nama, selectedDate);
@@ -277,7 +277,7 @@ export default function StockHarianPage({
               const buf = editBuffer[docId] || { stockAwal: "" };
               const changed = isStockAwalChanged(docId);
               return (
-                <tr key={nama} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                <tr key={nama} className={`border-b border-[#e8e4de] hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
                   <td className="px-4 py-2 font-medium text-gray-800">{nama}</td>
                   <td className="px-3 py-2 text-right">
                     {isMasterAdmin ? (

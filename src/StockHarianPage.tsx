@@ -71,15 +71,27 @@ export default function StockHarianPage({
     reports.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik.includes(pabrikLabel)).reduce((s, r) => s + r.total, 0);
 
   // Compute penerimaan & pengiriman from pelaporan data
-  const computePenerimaan = (pabrik: string, nama: string, tanggal: string): number =>
-    penerimaanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik).reduce((s, r) => s + r.jumlah, 0);
+  // Penerimaan = data penerimaan langsung + pengiriman dari pabrik lain yang tujuannya ke sini
+  const computePenerimaan = (pabrik: string, nama: string, tanggal: string): number => {
+    const directPenerimaan = penerimaanList
+      .filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik)
+      .reduce((s, r) => s + r.jumlah, 0);
+    const incomingPengiriman = pengirimanList
+      .filter(r => r.tanggal === tanggal && r.nama === nama && r.tujuan === pabrik)
+      .reduce((s, r) => s + r.jumlah, 0);
+    return directPenerimaan + incomingPengiriman;
+  };
 
+  // Pengiriman = data pengiriman langsung dari pabrik ini
   const computePengiriman = (pabrik: string, nama: string, tanggal: string): number =>
     pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik).reduce((s, r) => s + r.jumlah, 0);
 
   // Get detail data for expanded rows
   const getPenerimaanDetails = (pabrik: string, nama: string, tanggal: string) =>
     penerimaanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik);
+
+  const getIncomingPengirimanDetails = (pabrik: string, nama: string, tanggal: string) =>
+    pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.tujuan === pabrik);
 
   const getPengirimanDetails = (pabrik: string, nama: string, tanggal: string) =>
     pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik);
@@ -248,6 +260,7 @@ export default function StockHarianPage({
             const rowKey = `${OPT_GUDANG}_${nama}`;
             const isExpanded = expandedRows[rowKey];
             const pnDetails = getPenerimaanDetails(OPT_GUDANG, nama, selectedDate);
+            const incomingPgDetails = getIncomingPengirimanDetails(OPT_GUDANG, nama, selectedDate);
             const pgDetails = getPengirimanDetails(OPT_GUDANG, nama, selectedDate);
             const hasDetails = d.penerimaan > 0 || d.pengiriman > 0;
             return (
@@ -278,7 +291,7 @@ export default function StockHarianPage({
                     <td colSpan={5} className="px-4 py-2">
                       <div className="pl-4 space-y-1 text-xs">
                         {pnDetails.length > 0 && pnDetails.map((item, i) => (
-                          <div key={i} className="flex items-center gap-2 text-emerald-600 group">
+                          <div key={`pn-${i}`} className="flex items-center gap-2 text-emerald-600 group">
                             <span>📦</span> <span>Penerimaan dari {item.sumber || item.pabrik}: <strong>+{formatNumber(item.jumlah)}</strong></span>
                             {isMasterAdmin && <span className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button onClick={(e) => { e.stopPropagation(); onEditPenerimaan(item); }} className="p-0.5 rounded hover:bg-emerald-100 text-emerald-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
@@ -286,8 +299,17 @@ export default function StockHarianPage({
                             </span>}
                           </div>
                         ))}
+                        {incomingPgDetails.length > 0 && incomingPgDetails.map((item, i) => (
+                          <div key={`inc-${i}`} className="flex items-center gap-2 text-emerald-600 group">
+                            <span>📦</span> <span>Penerimaan dari {PABRIK_SHORT[item.pabrik] || item.pabrik}: <strong>+{formatNumber(item.jumlah)}</strong></span>
+                            {isMasterAdmin && <span className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={(e) => { e.stopPropagation(); onEditPengiriman(item); }} className="p-0.5 rounded hover:bg-emerald-100 text-emerald-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
+                              <button onClick={(e) => { e.stopPropagation(); onDeletePengiriman(item.id); }} className="p-0.5 rounded hover:bg-red-100 text-red-500" title="Hapus"><Trash2 className="w-3 h-3" /></button>
+                            </span>}
+                          </div>
+                        ))}
                         {pgDetails.length > 0 && pgDetails.map((item, i) => (
-                          <div key={i} className="flex items-center gap-2 text-blue-600 group">
+                          <div key={`pg-${i}`} className="flex items-center gap-2 text-blue-600 group">
                             <span>🚚</span> <span>Pengiriman ke {item.tujuan || "-"}: <strong>-{formatNumber(item.jumlah)}</strong></span>
                             {isMasterAdmin && <span className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button onClick={(e) => { e.stopPropagation(); onEditPengiriman(item); }} className="p-0.5 rounded hover:bg-blue-100 text-blue-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
@@ -295,7 +317,7 @@ export default function StockHarianPage({
                             </span>}
                           </div>
                         ))}
-                        {pnDetails.length === 0 && pgDetails.length === 0 && (
+                        {pnDetails.length === 0 && incomingPgDetails.length === 0 && pgDetails.length === 0 && (
                           <div className="text-gray-400 italic">Tidak ada rincian penerimaan/pengiriman</div>
                         )}
                       </div>
@@ -343,6 +365,7 @@ export default function StockHarianPage({
               const rowKey = `${pabrik}_${nama}`;
               const isExpanded = expandedRows[rowKey];
               const pnDetails = getPenerimaanDetails(pabrik, nama, selectedDate);
+              const incomingPgDetails = getIncomingPengirimanDetails(pabrik, nama, selectedDate);
               const pgDetails = getPengirimanDetails(pabrik, nama, selectedDate);
               const pkDetails = getPemakaianDetails(PABRIK_SHORT[pabrik], nama, selectedDate);
               const hasDetails = d.penerimaan > 0 || d.pengiriman > 0 || d.pemakaian > 0;
@@ -375,7 +398,7 @@ export default function StockHarianPage({
                       <td colSpan={6} className="px-4 py-2">
                         <div className="pl-4 space-y-1 text-xs">
                           {pnDetails.length > 0 && pnDetails.map((item, i) => (
-                            <div key={i} className="flex items-center gap-2 text-emerald-600 group">
+                            <div key={`pn-${i}`} className="flex items-center gap-2 text-emerald-600 group">
                               <span>📦</span> <span>Penerimaan dari {item.sumber || item.pabrik}: <strong>+{formatNumber(item.jumlah)}</strong></span>
                               {isMasterAdmin && <span className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button onClick={(e) => { e.stopPropagation(); onEditPenerimaan(item); }} className="p-0.5 rounded hover:bg-emerald-100 text-emerald-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
@@ -383,8 +406,17 @@ export default function StockHarianPage({
                               </span>}
                             </div>
                           ))}
+                          {incomingPgDetails.length > 0 && incomingPgDetails.map((item, i) => (
+                            <div key={`inc-${i}`} className="flex items-center gap-2 text-emerald-600 group">
+                              <span>📦</span> <span>Penerimaan dari {PABRIK_SHORT[item.pabrik] || item.pabrik}: <strong>+{formatNumber(item.jumlah)}</strong></span>
+                              {isMasterAdmin && <span className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={(e) => { e.stopPropagation(); onEditPengiriman(item); }} className="p-0.5 rounded hover:bg-emerald-100 text-emerald-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
+                                <button onClick={(e) => { e.stopPropagation(); onDeletePengiriman(item.id); }} className="p-0.5 rounded hover:bg-red-100 text-red-500" title="Hapus"><Trash2 className="w-3 h-3" /></button>
+                              </span>}
+                            </div>
+                          ))}
                           {pgDetails.length > 0 && pgDetails.map((item, i) => (
-                            <div key={i} className="flex items-center gap-2 text-blue-600 group">
+                            <div key={`pg-${i}`} className="flex items-center gap-2 text-blue-600 group">
                               <span>🚚</span> <span>Pengiriman ke {item.tujuan || "-"}: <strong>-{formatNumber(item.jumlah)}</strong></span>
                               {isMasterAdmin && <span className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button onClick={(e) => { e.stopPropagation(); onEditPengiriman(item); }} className="p-0.5 rounded hover:bg-blue-100 text-blue-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
@@ -393,11 +425,11 @@ export default function StockHarianPage({
                             </div>
                           ))}
                           {pkDetails.length > 0 && pkDetails.map((item, i) => (
-                            <div key={i} className="flex items-center gap-2 text-rose-600">
+                            <div key={`pk-${i}`} className="flex items-center gap-2 text-rose-600">
                               <span>📋</span> <span>Pemakaian {item.vendor}: <strong>-{formatNumber(item.total)}</strong></span>
                             </div>
                           ))}
-                          {pnDetails.length === 0 && pgDetails.length === 0 && pkDetails.length === 0 && (
+                          {pnDetails.length === 0 && incomingPgDetails.length === 0 && pgDetails.length === 0 && pkDetails.length === 0 && (
                             <div className="text-gray-400 italic">Tidak ada rincian</div>
                           )}
                         </div>

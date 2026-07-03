@@ -3177,6 +3177,7 @@ export default function App() {
                   <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Penerimaan Dari</label>
                   <select value={pnFormSumber} onChange={e => setPnFormSumber(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
                     <option value="Gudang OPT">Gudang OPT</option>
+                    {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
                     {effectiveVendors.map(v => <option key={v} value={v}>{v}</option>)}
                   </select>
                 </div>
@@ -3226,6 +3227,7 @@ export default function App() {
                   <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Pengiriman Ke</label>
                   <select value={pgFormTujuan} onChange={e => setPgFormTujuan(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
                     <option value="Gudang OPT">Gudang OPT</option>
+                    {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
                     {effectiveVendors.map(v => <option key={v} value={v}>{v}</option>)}
                   </select>
                 </div>

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
-  collection, doc, setDoc, onSnapshot, query, where,
+  collection, doc, setDoc, onSnapshot, query, where, writeBatch,
 } from "firebase/firestore";
 import { Save, Loader2, Package, RefreshCw, Edit2, Trash2 } from "lucide-react";
 import { db } from "./firebase";
@@ -67,10 +67,12 @@ export default function StockHarianPage({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
 
+  // === SEMUA NILAI DIHITUNG SECARA DINAMIS DARI LIST ===
+  // Tidak ada yang dibaca dari stockData (Firestore) selain stockAwal
+
   const computePemakaian = (pabrikLabel: string, nama: string, tanggal: string): number =>
     reports.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik.includes(pabrikLabel)).reduce((s, r) => s + r.total, 0);
 
-  // Compute penerimaan & pengiriman from pelaporan data
   // Penerimaan = data penerimaan langsung + pengiriman dari pabrik lain yang tujuannya ke sini
   const computePenerimaan = (pabrik: string, nama: string, tanggal: string): number => {
     const directPenerimaan = penerimaanList
@@ -153,6 +155,49 @@ export default function StockHarianPage({
     });
   }, [prevDayData, stockData, selectedDate]);
 
+  // === AUTO-SYNC: Update stock_harian Firestore saat penerimaan/pengiriman berubah ===
+  // Hanya update baris yang sudah pernah disimpan (ada di stockData)
+  const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!currentUser || !isMasterAdmin || loading) return;
+    const savedIds = Object.keys(stockData);
+    if (savedIds.length === 0) return;
+
+    // Debounce: tunggu 500ms setelah perubahan terakhir sebelum sync
+    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    syncTimeoutRef.current = setTimeout(async () => {
+      try {
+        const batch = writeBatch(db);
+        let updateCount = 0;
+        for (const docId of savedIds) {
+          const saved = stockData[docId];
+          if (!saved) continue;
+          const pn = computePenerimaan(saved.pabrik, saved.nama, selectedDate);
+          const pg = computePengiriman(saved.pabrik, saved.nama, selectedDate);
+          const isOPT = saved.pabrik === OPT_GUDANG;
+          const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[saved.pabrik], saved.nama, selectedDate);
+          const sk = isOPT ? saved.stockAwal + pn - pg : saved.stockAwal + pn - pg - pk;
+          // Hanya update jika nilai berubah
+          if (pn !== saved.penerimaan || pg !== saved.pengiriman || pk !== saved.pemakaian || sk !== saved.stockAkhir) {
+            batch.update(doc(db, "stock_harian", docId), {
+              penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
+              updatedAt: new Date().toISOString()
+            });
+            updateCount++;
+          }
+        }
+        if (updateCount > 0) {
+          await batch.commit();
+          console.log(`[StockHarian] Auto-synced ${updateCount} rows`);
+        }
+      } catch (e) {
+        console.error("[StockHarian] Auto-sync failed:", e);
+      }
+    }, 500);
+
+    return () => { if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current); };
+  }, [penerimaanList, pengirimanList, reports, selectedDate, stockData, currentUser, isMasterAdmin, loading]);
+
   const handleInputChange = (docId: string, value: string) => {
     if (value === "" || /^\d*$/.test(value)) setEditBuffer(p => ({ ...p, [docId]: { ...p[docId], stockAwal: value } }));
   };
@@ -216,6 +261,7 @@ export default function StockHarianPage({
     return num.toLocaleString("en-US");
   };
 
+  // getRowDisplay: SELALU hitung dari list terkini, bukan dari data tersimpan
   const getRowDisplay = (pabrik: string, nama: string, docId: string) => {
     const b = editBuffer[docId] || { stockAwal: "0" };
     const sa = parseInt(b.stockAwal) || 0;

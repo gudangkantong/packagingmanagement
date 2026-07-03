@@ -1321,7 +1321,16 @@ export default function App() {
             if (isMasterAdmin && driveToken) {
               try {
                 triggerToast("Membuat laporan Excel...", "inf");
-                const wb = await generateExcelReport(filteredReports, selectedDate, currentUser?.email, true);
+                const wb = await generateExcelReport({
+                  filteredReports,
+                  selectedDate,
+                  currentUserEmail: currentUser?.email,
+                  lockedStatus: true,
+                  penerimaanList,
+                  pengirimanList,
+                  stockData: {},
+                  reports,
+                });
                 const buffer = await wb.xlsx.writeBuffer();
                 const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
                 console.log("Excel blob size:", blob.size, "bytes");
@@ -1387,7 +1396,16 @@ export default function App() {
       triggerToast("Tidak ada data untuk diekspor pada tanggal ini", "er");
       return;
     }
-    downloadExcelReport(filteredReports, selectedDate, currentUser?.email, isSelectedDateLocked);
+    downloadExcelReport({
+      filteredReports,
+      selectedDate,
+      currentUserEmail: currentUser?.email,
+      lockedStatus: isSelectedDateLocked,
+      penerimaanList,
+      pengirimanList,
+      stockData: {},
+      reports,
+    });
   };
 
   return (

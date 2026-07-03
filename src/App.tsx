@@ -1407,7 +1407,7 @@ export default function App() {
               {authError && (
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  animate={{ opacity: 1 }}
                   className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl flex flex-col gap-2 text-xs font-semibold mb-6"
                 >
                   <div className="flex items-start gap-2.5">
@@ -1834,10 +1834,10 @@ export default function App() {
                 {activeTab === "dash" && (
                   <motion.div
                     key="dash"
-                    initial={{ opacity: 0, y: 15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -15 }}
-                    transition={{ duration: 0.2 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
                     className="space-y-8"
                   >
                     {filteredReports.length === 0 ? (
@@ -2085,10 +2085,10 @@ export default function App() {
                 {activeTab === "stock" && (
                   <motion.div
                     key="stock"
-                    initial={{ opacity: 0, y: 15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -15 }}
-                    transition={{ duration: 0.2 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
                   >
                     <StockHarianPage
                       currentUser={currentUser}
@@ -2107,10 +2107,10 @@ export default function App() {
                 {activeTab === "input" && !isGuest && (
                   <motion.div
                     key="input"
-                    initial={{ opacity: 0, y: 15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -15 }}
-                    transition={{ duration: 0.2 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
                     className="space-y-1"
                   >
                     {inputFilteredReports.length === 0 ? (
@@ -2333,10 +2333,10 @@ export default function App() {
                 {activeTab === "users" && isMasterAdmin && (
                   <motion.div
                     key="users"
-                    initial={{ opacity: 0, y: 15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -15 }}
-                    transition={{ duration: 0.2 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
                     className="grid grid-cols-1 md:grid-cols-3 gap-6"
                   >
                     {/* Authorize New Email Form */}

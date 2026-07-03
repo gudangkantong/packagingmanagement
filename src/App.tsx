@@ -198,6 +198,8 @@ export default function App() {
   const [pgFormTanggal, setPgFormTanggal] = useState(getDateString(new Date()));
   const [isSavingPenerimaan, setIsSavingPenerimaan] = useState(false);
   const [isSavingPengiriman, setIsSavingPengiriman] = useState(false);
+  const [editingPenerimaanId, setEditingPenerimaanId] = useState<string | null>(null);
+  const [editingPengirimanId, setEditingPengirimanId] = useState<string | null>(null);
 
   // User management state
   const [newAllowedEmail, setNewAllowedEmail] = useState("");
@@ -1039,7 +1041,7 @@ export default function App() {
     }
     setIsSavingPenerimaan(true);
     try {
-      const docId = `pn_${PABRIK_SHORT[pnFormPabrik] || pnFormPabrik}_${pnFormNama.replace(/\s+/g, "_")}_${pnFormTanggal}_${Date.now()}`;
+      const docId = editingPenerimaanId || `pn_${PABRIK_SHORT[pnFormPabrik] || pnFormPabrik}_${pnFormNama.replace(/\s+/g, "_")}_${pnFormTanggal}_${Date.now()}`;
       await setDoc(doc(db, "penerimaan_data", docId), {
         nama: pnFormNama,
         pabrik: pnFormPabrik,
@@ -1050,11 +1052,12 @@ export default function App() {
         createdBy: currentUser.email || "",
         createdAt: new Date().toISOString()
       });
-      triggerToast(`Penerimaan ${pnFormNama} (${PABRIK_SHORT[pnFormPabrik] || pnFormPabrik}) berhasil disimpan`, "ok");
+      triggerToast(`Penerimaan ${pnFormNama} (${PABRIK_SHORT[pnFormPabrik] || pnFormPabrik}) berhasil ${editingPenerimaanId ? "diperbarui" : "disimpan"}`, "ok");
       setPnFormJumlah("");
       setPnFormKeterangan("");
       setPnFormSumber("Gudang OPT");
       setPnFormTanggal(getDateString(new Date()));
+      setEditingPenerimaanId(null);
       setModalTab("pemakaian");
       setIsModalOpen(false);
     } catch (err) {
@@ -1075,7 +1078,7 @@ export default function App() {
     }
     setIsSavingPengiriman(true);
     try {
-      const docId = `pg_${PABRIK_SHORT[pgFormPabrik] || pgFormPabrik}_${pgFormNama.replace(/\s+/g, "_")}_${pgFormTanggal}_${Date.now()}`;
+      const docId = editingPengirimanId || `pg_${PABRIK_SHORT[pgFormPabrik] || pgFormPabrik}_${pgFormNama.replace(/\s+/g, "_")}_${pgFormTanggal}_${Date.now()}`;
       await setDoc(doc(db, "pengiriman_data", docId), {
         nama: pgFormNama,
         pabrik: pgFormPabrik,
@@ -1086,11 +1089,12 @@ export default function App() {
         createdBy: currentUser.email || "",
         createdAt: new Date().toISOString()
       });
-      triggerToast(`Pengiriman ${pgFormNama} (${PABRIK_SHORT[pgFormPabrik] || pgFormPabrik}) berhasil disimpan`, "ok");
+      triggerToast(`Pengiriman ${pgFormNama} (${PABRIK_SHORT[pgFormPabrik] || pgFormPabrik}) berhasil ${editingPengirimanId ? "diperbarui" : "disimpan"}`, "ok");
       setPgFormJumlah("");
       setPgFormKeterangan("");
       setPgFormTujuan("Gudang OPT");
       setPgFormTanggal(getDateString(new Date()));
+      setEditingPengirimanId(null);
       setModalTab("pemakaian");
       setIsModalOpen(false);
     } catch (err) {
@@ -1099,6 +1103,68 @@ export default function App() {
     } finally {
       setIsSavingPengiriman(false);
     }
+  };
+
+  // Handle delete penerimaan
+  const handleDeletePenerimaan = (id: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Hapus Data Penerimaan",
+      message: "Apakah Anda yakin ingin menghapus data penerimaan ini?",
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, "penerimaan_data", id));
+          triggerToast("Data penerimaan berhasil dihapus", "ok");
+        } catch (err) {
+          console.error("Delete penerimaan failed:", err);
+          triggerToast("Gagal menghapus data penerimaan", "er");
+        }
+      }
+    });
+  };
+
+  // Handle delete pengiriman
+  const handleDeletePengiriman = (id: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Hapus Data Pengiriman",
+      message: "Apakah Anda yakin ingin menghapus data pengiriman ini?",
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, "pengiriman_data", id));
+          triggerToast("Data pengiriman berhasil dihapus", "ok");
+        } catch (err) {
+          console.error("Delete pengiriman failed:", err);
+          triggerToast("Gagal menghapus data pengiriman", "er");
+        }
+      }
+    });
+  };
+
+  // Handle edit penerimaan (populate form and open modal)
+  const handleEditPenerimaan = (item: PenerimaanData) => {
+    setEditingPenerimaanId(item.id);
+    setPnFormNama(item.nama);
+    setPnFormPabrik(item.pabrik);
+    setPnFormJumlah(String(item.jumlah));
+    setPnFormSumber(item.sumber || "Gudang OPT");
+    setPnFormKeterangan(item.keterangan || "");
+    setPnFormTanggal(item.tanggal);
+    setModalTab("penerimaan");
+    setIsModalOpen(true);
+  };
+
+  // Handle edit pengiriman (populate form and open modal)
+  const handleEditPengiriman = (item: PengirimanData) => {
+    setEditingPengirimanId(item.id);
+    setPgFormNama(item.nama);
+    setPgFormPabrik(item.pabrik);
+    setPgFormJumlah(String(item.jumlah));
+    setPgFormTujuan(item.tujuan || "Gudang OPT");
+    setPgFormKeterangan(item.keterangan || "");
+    setPgFormTanggal(item.tanggal);
+    setModalTab("pengiriman");
+    setIsModalOpen(true);
   };
 
   // Function to initialize Google Drive Login
@@ -2099,6 +2165,10 @@ export default function App() {
                       selectedDate={selectedDate}
                       penerimaanList={penerimaanList}
                       pengirimanList={pengirimanList}
+                      onEditPenerimaan={handleEditPenerimaan}
+                      onDeletePenerimaan={handleDeletePenerimaan}
+                      onEditPengiriman={handleEditPengiriman}
+                      onDeletePengiriman={handleDeletePengiriman}
                     />
                   </motion.div>
                 )}
@@ -3177,10 +3247,10 @@ export default function App() {
                   </div>
                 </div>
                 <div className="pt-4 border-t border-[#e8e4de] flex items-center justify-end gap-2">
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="border-2 border-[#e8e4de] hover:bg-[#faf9f7] text-[#1a1814] px-4 py-2.5 rounded-xl text-xs font-bold transition-all">Batal</button>
+                  <button type="button" onClick={() => { setIsModalOpen(false); setEditingPenerimaanId(null); }} className="border-2 border-[#e8e4de] hover:bg-[#faf9f7] text-[#1a1814] px-4 py-2.5 rounded-xl text-xs font-bold transition-all">Batal</button>
                   <button type="submit" disabled={isSavingPenerimaan} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-2 disabled:opacity-50">
                     {isSavingPenerimaan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Simpan Penerimaan
+                    {editingPenerimaanId ? "Perbarui Penerimaan" : "Simpan Penerimaan"}
                   </button>
                 </div>
               </form>
@@ -3228,10 +3298,10 @@ export default function App() {
                   </div>
                 </div>
                 <div className="pt-4 border-t border-[#e8e4de] flex items-center justify-end gap-2">
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="border-2 border-[#e8e4de] hover:bg-[#faf9f7] text-[#1a1814] px-4 py-2.5 rounded-xl text-xs font-bold transition-all">Batal</button>
+                  <button type="button" onClick={() => { setIsModalOpen(false); setEditingPengirimanId(null); }} className="border-2 border-[#e8e4de] hover:bg-[#faf9f7] text-[#1a1814] px-4 py-2.5 rounded-xl text-xs font-bold transition-all">Batal</button>
                   <button type="submit" disabled={isSavingPengiriman} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-2 disabled:opacity-50">
                     {isSavingPengiriman ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Simpan Pengiriman
+                    {editingPengirimanId ? "Perbarui Pengiriman" : "Simpan Pengiriman"}
                   </button>
                 </div>
               </form>

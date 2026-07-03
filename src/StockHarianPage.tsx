@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   collection, doc, setDoc, onSnapshot, query, where,
 } from "firebase/firestore";
-import { Save, Loader2, Package, RefreshCw } from "lucide-react";
+import { Save, Loader2, Package, RefreshCw, Edit2, Trash2 } from "lucide-react";
 import { db } from "./firebase";
 import { StockHarian, LaporanKantong, AllowedUser, PenerimaanData, PengirimanData } from "./types";
 import { getDateString, formatDateDisplay } from "./utils";
@@ -32,10 +32,15 @@ interface StockHarianPageProps {
   selectedDate: string;
   penerimaanList: PenerimaanData[];
   pengirimanList: PengirimanData[];
+  onEditPenerimaan: (item: PenerimaanData) => void;
+  onDeletePenerimaan: (id: string) => void;
+  onEditPengiriman: (item: PengirimanData) => void;
+  onDeletePengiriman: (id: string) => void;
 }
 
 export default function StockHarianPage({
   currentUser, isAllowed, reports, allowedUsers, triggerToast, selectedDate, penerimaanList, pengirimanList,
+  onEditPenerimaan, onDeletePenerimaan, onEditPengiriman, onDeletePengiriman,
 }: StockHarianPageProps) {
   const currentUserData = allowedUsers.find(u => u.email === currentUser?.email?.toLowerCase());
   const userRole = currentUserData?.role || (currentUser?.isAnonymous ? "guest" : null);
@@ -273,13 +278,21 @@ export default function StockHarianPage({
                     <td colSpan={5} className="px-4 py-2">
                       <div className="pl-4 space-y-1 text-xs">
                         {pnDetails.length > 0 && pnDetails.map((item, i) => (
-                          <div key={i} className="flex items-center gap-2 text-emerald-600">
+                          <div key={i} className="flex items-center gap-2 text-emerald-600 group">
                             <span>📦</span> <span>Penerimaan dari {item.sumber || item.pabrik}: <strong>+{formatNumber(item.jumlah)}</strong></span>
+                            {isMasterAdmin && <span className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={(e) => { e.stopPropagation(); onEditPenerimaan(item); }} className="p-0.5 rounded hover:bg-emerald-100 text-emerald-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
+                              <button onClick={(e) => { e.stopPropagation(); onDeletePenerimaan(item.id); }} className="p-0.5 rounded hover:bg-red-100 text-red-500" title="Hapus"><Trash2 className="w-3 h-3" /></button>
+                            </span>}
                           </div>
                         ))}
                         {pgDetails.length > 0 && pgDetails.map((item, i) => (
-                          <div key={i} className="flex items-center gap-2 text-blue-600">
+                          <div key={i} className="flex items-center gap-2 text-blue-600 group">
                             <span>🚚</span> <span>Pengiriman dari {item.pabrik}: <strong>-{formatNumber(item.jumlah)}</strong></span>
+                            {isMasterAdmin && <span className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={(e) => { e.stopPropagation(); onEditPengiriman(item); }} className="p-0.5 rounded hover:bg-blue-100 text-blue-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
+                              <button onClick={(e) => { e.stopPropagation(); onDeletePengiriman(item.id); }} className="p-0.5 rounded hover:bg-red-100 text-red-500" title="Hapus"><Trash2 className="w-3 h-3" /></button>
+                            </span>}
                           </div>
                         ))}
                         {pnDetails.length === 0 && pgDetails.length === 0 && (
@@ -362,13 +375,21 @@ export default function StockHarianPage({
                       <td colSpan={6} className="px-4 py-2">
                         <div className="pl-4 space-y-1 text-xs">
                           {pnDetails.length > 0 && pnDetails.map((item, i) => (
-                            <div key={i} className="flex items-center gap-2 text-emerald-600">
+                            <div key={i} className="flex items-center gap-2 text-emerald-600 group">
                               <span>📦</span> <span>Penerimaan dari {item.sumber || item.pabrik}: <strong>+{formatNumber(item.jumlah)}</strong></span>
+                              {isMasterAdmin && <span className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={(e) => { e.stopPropagation(); onEditPenerimaan(item); }} className="p-0.5 rounded hover:bg-emerald-100 text-emerald-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
+                                <button onClick={(e) => { e.stopPropagation(); onDeletePenerimaan(item.id); }} className="p-0.5 rounded hover:bg-red-100 text-red-500" title="Hapus"><Trash2 className="w-3 h-3" /></button>
+                              </span>}
                             </div>
                           ))}
                           {pgDetails.length > 0 && pgDetails.map((item, i) => (
-                            <div key={i} className="flex items-center gap-2 text-blue-600">
+                            <div key={i} className="flex items-center gap-2 text-blue-600 group">
                               <span>🚚</span> <span>Pengiriman dari {item.pabrik}: <strong>-{formatNumber(item.jumlah)}</strong></span>
+                              {isMasterAdmin && <span className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={(e) => { e.stopPropagation(); onEditPengiriman(item); }} className="p-0.5 rounded hover:bg-blue-100 text-blue-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
+                                <button onClick={(e) => { e.stopPropagation(); onDeletePengiriman(item.id); }} className="p-0.5 rounded hover:bg-red-100 text-red-500" title="Hapus"><Trash2 className="w-3 h-3" /></button>
+                              </span>}
                             </div>
                           ))}
                           {pkDetails.length > 0 && pkDetails.map((item, i) => (

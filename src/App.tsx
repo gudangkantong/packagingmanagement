@@ -189,11 +189,13 @@ export default function App() {
   const [pnFormJumlah, setPnFormJumlah] = useState("");
   const [pnFormKeterangan, setPnFormKeterangan] = useState("");
   const [pnFormSumber, setPnFormSumber] = useState("Gudang OPT");
+  const [pnFormTanggal, setPnFormTanggal] = useState(getDateString(new Date()));
   const [pgFormNama, setPgFormNama] = useState(JENIS_KANTONG[0]);
-  const [pgFormPabrik, setPgFormPabrik] = useState(PABRIK_LIST[0]);
+  const [pgFormPabrik, setPgFormPabrik] = useState("Gudang OPT");
   const [pgFormJumlah, setPgFormJumlah] = useState("");
   const [pgFormKeterangan, setPgFormKeterangan] = useState("");
   const [pgFormTujuan, setPgFormTujuan] = useState("Gudang OPT");
+  const [pgFormTanggal, setPgFormTanggal] = useState(getDateString(new Date()));
   const [isSavingPenerimaan, setIsSavingPenerimaan] = useState(false);
   const [isSavingPengiriman, setIsSavingPengiriman] = useState(false);
 
@@ -893,6 +895,8 @@ export default function App() {
   const handleOpenAddForm = () => {
     setEditingId(null);
     setModalTab("pemakaian");
+    setPnFormTanggal(getDateString(new Date()));
+    setPgFormTanggal(getDateString(new Date()));
     setFormVendor(effectiveVendors[0]);
     setFormJenis(effectiveJenisKantong[0]);
     const defaultPabrik = userAllowedPabrik.length > 0 ? userAllowedPabrik[0] : effectivePabrikList[0];
@@ -1035,11 +1039,11 @@ export default function App() {
     }
     setIsSavingPenerimaan(true);
     try {
-      const docId = `pn_${PABRIK_SHORT[pnFormPabrik] || pnFormPabrik}_${pnFormNama.replace(/\s+/g, "_")}_${selectedDate}_${Date.now()}`;
+      const docId = `pn_${PABRIK_SHORT[pnFormPabrik] || pnFormPabrik}_${pnFormNama.replace(/\s+/g, "_")}_${pnFormTanggal}_${Date.now()}`;
       await setDoc(doc(db, "penerimaan_data", docId), {
         nama: pnFormNama,
         pabrik: pnFormPabrik,
-        tanggal: selectedDate,
+        tanggal: pnFormTanggal,
         jumlah: parseInt(pnFormJumlah) || 0,
         sumber: pnFormSumber,
         keterangan: pnFormKeterangan,
@@ -1050,6 +1054,7 @@ export default function App() {
       setPnFormJumlah("");
       setPnFormKeterangan("");
       setPnFormSumber("Gudang OPT");
+      setPnFormTanggal(getDateString(new Date()));
       setModalTab("pemakaian");
       setIsModalOpen(false);
     } catch (err) {
@@ -1070,11 +1075,11 @@ export default function App() {
     }
     setIsSavingPengiriman(true);
     try {
-      const docId = `pg_${PABRIK_SHORT[pgFormPabrik] || pgFormPabrik}_${pgFormNama.replace(/\s+/g, "_")}_${selectedDate}_${Date.now()}`;
+      const docId = `pg_${PABRIK_SHORT[pgFormPabrik] || pgFormPabrik}_${pgFormNama.replace(/\s+/g, "_")}_${pgFormTanggal}_${Date.now()}`;
       await setDoc(doc(db, "pengiriman_data", docId), {
         nama: pgFormNama,
         pabrik: pgFormPabrik,
-        tanggal: selectedDate,
+        tanggal: pgFormTanggal,
         jumlah: parseInt(pgFormJumlah) || 0,
         tujuan: pgFormTujuan,
         keterangan: pgFormKeterangan,
@@ -1085,6 +1090,7 @@ export default function App() {
       setPgFormJumlah("");
       setPgFormKeterangan("");
       setPgFormTujuan("Gudang OPT");
+      setPgFormTanggal(getDateString(new Date()));
       setModalTab("pemakaian");
       setIsModalOpen(false);
     } catch (err) {
@@ -3145,7 +3151,7 @@ export default function App() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Tanggal</label>
-                    <div className="px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814]">{formatDateDisplay(selectedDate)}</div>
+                    <input type="date" value={pnFormTanggal} onChange={e => setPnFormTanggal(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white" />
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Pabrik Tujuan</label>
@@ -3194,11 +3200,12 @@ export default function App() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Tanggal</label>
-                    <div className="px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814]">{formatDateDisplay(selectedDate)}</div>
+                    <input type="date" value={pgFormTanggal} onChange={e => setPgFormTanggal(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white" />
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-[#6b6560] uppercase tracking-wider mb-1.5">Pabrik Asal</label>
                     <select value={pgFormPabrik} onChange={e => setPgFormPabrik(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
+                      <option value="Gudang OPT">Gudang OPT</option>
                       {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </div>

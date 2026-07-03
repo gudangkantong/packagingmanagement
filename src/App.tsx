@@ -2927,6 +2927,7 @@ export default function App() {
               ? "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none"
               : "bg-brand-green hover:bg-brand-green-hover text-white hover:shadow-xl"
           }`}
+          style={{ boxShadow: isSelectedDateLocked && !isMasterAdmin ? 'none' : '0 8px 25px rgba(0,0,0,0.25), 0 4px 10px rgba(0,0,0,0.15)' }}}
           title="Tambah Data"
         >
           <Plus className="w-6 h-6" />

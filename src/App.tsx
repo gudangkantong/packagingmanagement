@@ -3228,7 +3228,6 @@ export default function App() {
                   <select value={pgFormTujuan} onChange={e => setPgFormTujuan(e.target.value)} className="w-full px-3 py-2 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white">
                     <option value="Gudang OPT">Gudang OPT</option>
                     {effectivePabrikList.map(p => <option key={p} value={p}>{p}</option>)}
-                    {effectiveVendors.map(v => <option key={v} value={v}>{v}</option>)}
                   </select>
                 </div>
                 <div>

@@ -2126,7 +2126,7 @@ export default function App() {
                               <div className="bg-white/20 p-0.5 rounded-md">
                                 <Plus className="w-4 h-4" />
                               </div>
-                              <span>Tambah Data Baru</span>
+                              <span>Tambah Data</span>
                             </>
                           )}
                         </button>
@@ -2214,7 +2214,7 @@ export default function App() {
                         </div>
                         <h4 className="text-sm font-extrabold text-[#1a1814]">Belum Ada Data</h4>
                         <p className="text-xs text-[#9e9892] mt-1 max-w-sm mx-auto">
-                          Belum ada laporan pemakaian kantong untuk tanggal ini{userPabrikRole ? ' untuk pabrik Anda' : ''}. Klik tombol <span className="font-bold text-brand-green">Tambah Data Baru</span> di atas untuk menginput laporan.
+                          Belum ada laporan pemakaian kantong untuk tanggal ini{userPabrikRole ? ' untuk pabrik Anda' : ''}. Klik tombol <span className="font-bold text-brand-green">Tambah Data</span> di atas untuk menginput laporan.
                         </p>
                       </div>
                     ) : (

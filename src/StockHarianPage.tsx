@@ -248,10 +248,10 @@ export default function StockHarianPage({
 
   const renderPabrikTable = (pabrik: string) => {
     const pc: Record<string, { h: string; b: string; a: string }> = {
-      "Pabrik Baturaja 1 (PBR 1)": { h: "bg-indigo-600", b: "bg-indigo-50", a: "border-indigo-200" },
-      "Pabrik Baturaja 2 (PBR 2)": { h: "bg-teal-600", b: "bg-teal-50", a: "border-teal-200" },
-      "Pabrik Palembang (PPG)": { h: "bg-amber-600", b: "bg-amber-50", a: "border-amber-200" },
-      "Pabrik Panjang (PPJ)": { h: "bg-rose-600", b: "bg-rose-50", a: "border-rose-200" },
+      "Pabrik Baturaja 1 (PBR 1)": { h: "bg-indigo-600", b: "bg-indigo-50", a: "border-[#e8e4de]" },
+      "Pabrik Baturaja 2 (PBR 2)": { h: "bg-teal-600", b: "bg-teal-50", a: "border-[#e8e4de]" },
+      "Pabrik Palembang (PPG)": { h: "bg-amber-600", b: "bg-amber-50", a: "border-[#e8e4de]" },
+      "Pabrik Panjang (PPJ)": { h: "bg-rose-600", b: "bg-rose-50", a: "border-[#e8e4de]" },
     };
     const c = pc[pabrik] || { h: "bg-gray-600", b: "bg-gray-50", a: "border-[#e8e4de]" };
     return (

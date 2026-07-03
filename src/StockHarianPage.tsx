@@ -73,20 +73,19 @@ export default function StockHarianPage({
   const computePemakaian = (pabrikLabel: string, nama: string, tanggal: string): number =>
     reports.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik.includes(pabrikLabel)).reduce((s, r) => s + r.total, 0);
 
-  // Penerimaan = data penerimaan langsung + pengiriman dari pabrik lain yang tujuannya ke sini
-  const computePenerimaan = (pabrik: string, nama: string, tanggal: string): number => {
-    const directPenerimaan = penerimaanList
+  // Penerimaan = HANYA dari vendor (data penerimaan langsung)
+  const computePenerimaan = (pabrik: string, nama: string, tanggal: string): number =>
+    penerimaanList
       .filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik)
       .reduce((s, r) => s + r.jumlah, 0);
-    const incomingPengiriman = pengirimanList
-      .filter(r => r.tanggal === tanggal && r.nama === nama && r.tujuan === pabrik)
-      .reduce((s, r) => s + r.jumlah, 0);
-    return directPenerimaan + incomingPengiriman;
-  };
 
-  // Pengiriman = data pengiriman langsung dari pabrik ini
+  // Pengiriman keluar = data pengiriman dari pabrik ini ke pabrik lain
   const computePengiriman = (pabrik: string, nama: string, tanggal: string): number =>
     pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik).reduce((s, r) => s + r.jumlah, 0);
+
+  // Pengiriman masuk = pengiriman dari pabrik lain yang tujuannya ke pabrik ini
+  const computeIncomingPengiriman = (pabrik: string, nama: string, tanggal: string): number =>
+    pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.tujuan === pabrik).reduce((s, r) => s + r.jumlah, 0);
 
   // Get detail data for expanded rows
   const getPenerimaanDetails = (pabrik: string, nama: string, tanggal: string) =>
@@ -174,9 +173,10 @@ export default function StockHarianPage({
           if (!saved) continue;
           const pn = computePenerimaan(saved.pabrik, saved.nama, selectedDate);
           const pg = computePengiriman(saved.pabrik, saved.nama, selectedDate);
+          const inc = computeIncomingPengiriman(saved.pabrik, saved.nama, selectedDate);
           const isOPT = saved.pabrik === OPT_GUDANG;
           const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[saved.pabrik], saved.nama, selectedDate);
-          const sk = isOPT ? saved.stockAwal + pn - pg : saved.stockAwal + pn - pg - pk;
+          const sk = isOPT ? saved.stockAwal + pn + inc - pg : saved.stockAwal + pn + inc - pg - pk;
           // Hanya update jika nilai berubah
           if (pn !== saved.penerimaan || pg !== saved.pengiriman || pk !== saved.pemakaian || sk !== saved.stockAkhir) {
             batch.update(doc(db, "stock_harian", docId), {
@@ -210,9 +210,10 @@ export default function StockHarianPage({
       const sa = parseInt(b.stockAwal) || 0;
       const pn = computePenerimaan(pabrik, nama, selectedDate);
       const pg = computePengiriman(pabrik, nama, selectedDate);
+      const inc = computeIncomingPengiriman(pabrik, nama, selectedDate);
       const isOPT = pabrik === OPT_GUDANG;
       const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
-      const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
+      const sk = isOPT ? sa + pn + inc - pg : sa + pn + inc - pg - pk;
       await setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
       triggerToast(`Stock ${nama} (${PABRIK_SHORT[pabrik]}) disimpan`, "ok");
     } catch (e) { console.error(e); triggerToast("Gagal simpan", "er"); }
@@ -230,8 +231,9 @@ export default function StockHarianPage({
         const sa = parseInt(b.stockAwal) || 0;
         const pn = computePenerimaan(pabrik, nama, selectedDate);
         const pg = computePengiriman(pabrik, nama, selectedDate);
+        const inc = computeIncomingPengiriman(pabrik, nama, selectedDate);
         const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
-        const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
+        const sk = isOPT ? sa + pn + inc - pg : sa + pn + inc - pg - pk;
         return setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
       }));
       triggerToast(`Semua stock ${PABRIK_SHORT[pabrik]} disimpan`, "ok");
@@ -261,16 +263,18 @@ export default function StockHarianPage({
     return num.toLocaleString("en-US");
   };
 
-  // getRowDisplay: SELALU hitung dari list terkini, bukan dari data tersimpan
+  // getRowDisplay: SELALU hitung dari list terkini
+  // stockAkhir = stockAwal + penerimaan(vendor) + incoming_pengiriman - pengiriman(keluar) - pemakaian
   const getRowDisplay = (pabrik: string, nama: string, docId: string) => {
     const b = editBuffer[docId] || { stockAwal: "0" };
     const sa = parseInt(b.stockAwal) || 0;
     const isOPT = pabrik === OPT_GUDANG;
     const pn = computePenerimaan(pabrik, nama, selectedDate);
     const pg = computePengiriman(pabrik, nama, selectedDate);
+    const inc = computeIncomingPengiriman(pabrik, nama, selectedDate);
     const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
-    const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
-    return { stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk };
+    const sk = isOPT ? sa + pn + inc - pg : sa + pn + inc - pg - pk;
+    return { stockAwal: sa, penerimaan: pn, pengiriman: pg, incomingPengiriman: inc, pemakaian: pk, stockAkhir: sk };
   };
 
   // Check if stock awal has been changed from saved value
@@ -308,7 +312,7 @@ export default function StockHarianPage({
             const pnDetails = getPenerimaanDetails(OPT_GUDANG, nama, selectedDate);
             const incomingPgDetails = getIncomingPengirimanDetails(OPT_GUDANG, nama, selectedDate);
             const pgDetails = getPengirimanDetails(OPT_GUDANG, nama, selectedDate);
-            const hasDetails = d.penerimaan > 0 || d.pengiriman > 0;
+            const hasDetails = d.penerimaan > 0 || d.pengiriman > 0 || d.incomingPengiriman > 0;
             return (
               <React.Fragment key={nama}>
                 <tr className={`border-b border-[#e8e4de] hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"} ${hasDetails ? "cursor-pointer" : ""} ${isExpanded ? "bg-gray-50" : ""}`} onClick={() => { if (hasDetails) setExpandedRows(prev => ({ ...prev, [rowKey]: !prev[rowKey] })); }}>
@@ -346,10 +350,10 @@ export default function StockHarianPage({
                           </div>
                         ))}
                         {incomingPgDetails.length > 0 && incomingPgDetails.map((item, i) => (
-                          <div key={`inc-${i}`} className="flex items-center gap-2 text-emerald-600 group">
-                            <span>📦</span> <span>Penerimaan dari {PABRIK_SHORT[item.pabrik] || item.pabrik}: <strong>+{formatNumber(item.jumlah)}</strong></span>
+                          <div key={`inc-${i}`} className="flex items-center gap-2 text-sky-600 group">
+                            <span>🚚</span> <span>Transfer masuk dari {PABRIK_SHORT[item.pabrik] || item.pabrik}: <strong>+{formatNumber(item.jumlah)}</strong></span>
                             {isMasterAdmin && <span className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={(e) => { e.stopPropagation(); onEditPengiriman(item); }} className="p-0.5 rounded hover:bg-emerald-100 text-emerald-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
+                              <button onClick={(e) => { e.stopPropagation(); onEditPengiriman(item); }} className="p-0.5 rounded hover:bg-sky-100 text-sky-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
                               <button onClick={(e) => { e.stopPropagation(); onDeletePengiriman(item.id); }} className="p-0.5 rounded hover:bg-red-100 text-red-500" title="Hapus"><Trash2 className="w-3 h-3" /></button>
                             </span>}
                           </div>
@@ -414,7 +418,7 @@ export default function StockHarianPage({
               const incomingPgDetails = getIncomingPengirimanDetails(pabrik, nama, selectedDate);
               const pgDetails = getPengirimanDetails(pabrik, nama, selectedDate);
               const pkDetails = getPemakaianDetails(PABRIK_SHORT[pabrik], nama, selectedDate);
-              const hasDetails = d.penerimaan > 0 || d.pengiriman > 0 || d.pemakaian > 0;
+              const hasDetails = d.penerimaan > 0 || d.pengiriman > 0 || d.incomingPengiriman > 0 || d.pemakaian > 0;
               return (
                 <React.Fragment key={nama}>
                   <tr className={`border-b border-[#e8e4de] hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"} ${hasDetails ? "cursor-pointer" : ""} ${isExpanded ? "bg-gray-50" : ""}`} onClick={() => { if (hasDetails) setExpandedRows(prev => ({ ...prev, [rowKey]: !prev[rowKey] })); }}>
@@ -453,10 +457,10 @@ export default function StockHarianPage({
                             </div>
                           ))}
                           {incomingPgDetails.length > 0 && incomingPgDetails.map((item, i) => (
-                            <div key={`inc-${i}`} className="flex items-center gap-2 text-emerald-600 group">
-                              <span>📦</span> <span>Penerimaan dari {PABRIK_SHORT[item.pabrik] || item.pabrik}: <strong>+{formatNumber(item.jumlah)}</strong></span>
+                            <div key={`inc-${i}`} className="flex items-center gap-2 text-sky-600 group">
+                              <span>🚚</span> <span>Transfer masuk dari {PABRIK_SHORT[item.pabrik] || item.pabrik}: <strong>+{formatNumber(item.jumlah)}</strong></span>
                               {isMasterAdmin && <span className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={(e) => { e.stopPropagation(); onEditPengiriman(item); }} className="p-0.5 rounded hover:bg-emerald-100 text-emerald-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
+                                <button onClick={(e) => { e.stopPropagation(); onEditPengiriman(item); }} className="p-0.5 rounded hover:bg-sky-100 text-sky-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
                                 <button onClick={(e) => { e.stopPropagation(); onDeletePengiriman(item.id); }} className="p-0.5 rounded hover:bg-red-100 text-red-500" title="Hapus"><Trash2 className="w-3 h-3" /></button>
                               </span>}
                             </div>

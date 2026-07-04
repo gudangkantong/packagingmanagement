@@ -126,6 +126,7 @@ export default function App() {
   const [customDateFrom, setCustomDateFrom] = useState<string>("");
   const [customDateTo, setCustomDateTo] = useState<string>("");
   const [isFetchingHistorical, setIsFetchingHistorical] = useState<boolean>(false);
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
   // Role-based check (dari Firestore allowed_users collection)
   const currentUserData = allowedUsers.find(u => u.email === currentUser?.email?.toLowerCase());
@@ -254,6 +255,55 @@ export default function App() {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 4000);
   };
+
+  // Helper: update meta timestamp untuk sync antar device
+  const bumpLastUpdate = async () => {
+    try {
+      await setDoc(doc(db, "app_meta", "last_update"), {
+        timestamp: new Date().toISOString(),
+        updatedBy: currentUser?.email || "unknown"
+      }, { merge: true });
+    } catch (err) {
+      console.error("Failed to bump last_update:", err);
+    }
+  };
+
+  // Listen to app_meta/last_update untuk auto-sync antar device
+  useEffect(() => {
+    if (!currentUser || isAllowed !== true) return;
+
+    const metaRef = doc(db, "app_meta", "last_update");
+    const unsub = onSnapshot(metaRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        const remoteTimestamp = data?.timestamp;
+        const localTimestamp = getCached<string>("last_meta_timestamp");
+
+        if (remoteTimestamp && remoteTimestamp !== localTimestamp) {
+          // Ada update dari device lain → clear cache & refresh
+          setCache("last_meta_timestamp", remoteTimestamp, 365 * 24 * 60 * 60 * 1000);
+
+          // Clear cache penerimaan & pengiriman
+          removeCache("penerimaan_data");
+          removeCache("pengiriman_data");
+
+          // Clear cache laporan per tanggal (paksa refresh)
+          // Hapus semua cache laporan_ dari localStorage
+          const keys = Object.keys(localStorage);
+          keys.forEach((key) => {
+            if (key.includes("laporan_")) localStorage.removeItem(key);
+          });
+
+          console.log("[AutoSync] Remote update detected, refreshing data...");
+          setRefreshTrigger(prev => prev + 1); // trigger data refresh
+        }
+      }
+    }, (err) => {
+      console.warn("Meta listener failed:", err.message);
+    });
+
+    return () => unsub();
+  }, [currentUser, isAllowed]);
 
   // Listen to Auth state
   useEffect(() => {
@@ -534,7 +584,7 @@ export default function App() {
     };
 
     loadHistorical();
-  }, [currentUser, isAllowed, viewMode, customDateFrom, customDateTo]);
+  }, [currentUser, isAllowed, viewMode, customDateFrom, customDateTo, refreshTrigger]);
 
   // Penerimaan: getDocs + cache (jarang berubah, hemat reads)
   useEffect(() => {
@@ -564,9 +614,7 @@ export default function App() {
       }
     };
     loadPenerimaan();
-  }, [currentUser, isAllowed]);
-
-  // Pengiriman: getDocs + cache (jarang berubah, hemat reads)
+  }, [currentUser, isAllowed, refreshTrigger]);
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setPengirimanList([]); return; }
 
@@ -594,7 +642,7 @@ export default function App() {
       }
     };
     loadPengiriman();
-  }, [currentUser, isAllowed]);
+  }, [currentUser, isAllowed, refreshTrigger]);
 
   // Listen to allowed_users collection when authorized
   useEffect(() => {
@@ -1001,6 +1049,7 @@ export default function App() {
         addedBy: currentUser?.email || "unknown"
       });
       removeCache(collectionName); // invalidate cache
+      bumpLastUpdate(); // notify other devices
       setValue("");
       triggerToast(`${label} "${trimmed}" berhasil ditambahkan`, "ok");
     } catch (err: any) {
@@ -1026,6 +1075,7 @@ export default function App() {
         try {
           await deleteDoc(doc(db, collectionName, docId));
           removeCache(collectionName); // invalidate cache
+          bumpLastUpdate(); // notify other devices
           triggerToast(`${label} "${displayName}" berhasil dihapus`, "ok");
         } catch (err) {
           console.error(`Delete ${label} failed:`, err);
@@ -1067,6 +1117,7 @@ export default function App() {
         updatedBy: currentUser?.email || "unknown"
       }, { merge: true });
       removeCache(coll); // invalidate cache
+      bumpLastUpdate(); // notify other devices
       setEditingMasterData(null);
       triggerToast(`Berhasil mengubah nama menjadi "${trimmed}"`, "ok");
     } catch (err: any) {
@@ -1185,6 +1236,7 @@ export default function App() {
     try {
       await setDoc(doc(db, "laporan_kantong", docId), entryData, { merge: true });
       removeCache(`laporan_${formTanggal}`); // invalidate cache for this date
+      bumpLastUpdate(); // notify other devices
       setIsModalOpen(false);
       triggerToast(editingId ? "Laporan diperbarui" : "Laporan ditambahkan", "ok");
     } catch (err) {
@@ -1212,6 +1264,7 @@ export default function App() {
         try {
           await deleteDoc(doc(db, "laporan_kantong", id));
           if (item?.tanggal) removeCache(`laporan_${item.tanggal}`); // invalidate cache
+          bumpLastUpdate(); // notify other devices
           triggerToast("Laporan berhasil dihapus", "ok");
         } catch (err) {
           console.error("Delete entry failed:", err);
@@ -1244,6 +1297,7 @@ export default function App() {
         createdAt: new Date().toISOString()
       });
       removeCache("penerimaan_data"); // invalidate cache
+      bumpLastUpdate(); // notify other devices
       triggerToast(`Penerimaan ${pnFormNama} (${PABRIK_SHORT[pnFormPabrik] || pnFormPabrik}) berhasil ${editingPenerimaanId ? "diperbarui" : "disimpan"}`, "ok");
       setPnFormJumlah("");
       setPnFormKeterangan("");
@@ -1282,6 +1336,7 @@ export default function App() {
         createdAt: new Date().toISOString()
       });
       removeCache("pengiriman_data"); // invalidate cache
+      bumpLastUpdate(); // notify other devices
       triggerToast(`Pengiriman ${pgFormNama} (${PABRIK_SHORT[pgFormPabrik] || pgFormPabrik}) berhasil ${editingPengirimanId ? "diperbarui" : "disimpan"}`, "ok");
       setPgFormJumlah("");
       setPgFormKeterangan("");
@@ -1308,6 +1363,7 @@ export default function App() {
         try {
           await deleteDoc(doc(db, "penerimaan_data", id));
           removeCache("penerimaan_data"); // invalidate cache
+          bumpLastUpdate(); // notify other devices
           triggerToast("Data penerimaan berhasil dihapus", "ok");
         } catch (err) {
           console.error("Delete penerimaan failed:", err);
@@ -1327,6 +1383,7 @@ export default function App() {
         try {
           await deleteDoc(doc(db, "pengiriman_data", id));
           removeCache("pengiriman_data"); // invalidate cache
+          bumpLastUpdate(); // notify other devices
           triggerToast("Data pengiriman berhasil dihapus", "ok");
         } catch (err) {
           console.error("Delete pengiriman failed:", err);
@@ -1504,6 +1561,7 @@ export default function App() {
               unlockedAt: new Date().toISOString()
             }, { merge: true });
             triggerToast(`Status tanggal ${formatDateDisplay(selectedDate)} diubah menjadi Unverified.`, "ok");
+            bumpLastUpdate();
           } else {
             await setDoc(docRef, {
               locked: true,
@@ -1511,6 +1569,7 @@ export default function App() {
               lockedAt: new Date().toISOString()
             }, { merge: true });
             triggerToast(`Status tanggal ${formatDateDisplay(selectedDate)} diubah menjadi Verified.`, "ok");
+            bumpLastUpdate();
 
             // Auto-upload to Drive for Admin Utama
             if (isMasterAdmin && driveToken) {

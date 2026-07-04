@@ -355,11 +355,7 @@ export default function App() {
     }
 
     setDataLoading(true);
-    const reportsQuery = query(
-      collection(db, "laporan_kantong"),
-      where("tanggal", "==", selectedDate),
-      orderBy("updatedAt", "desc")
-    );
+    const reportsQuery = query(collection(db, "laporan_kantong"), orderBy("updatedAt", "desc"));
     const unsubReports = onSnapshot(reportsQuery, (querySnapshot) => {
       const items: LaporanKantong[] = [];
       querySnapshot.forEach((docSnap) => {
@@ -389,7 +385,7 @@ export default function App() {
     });
 
     return () => unsubReports();
-  }, [currentUser, isAllowed, selectedDate]);
+  }, [currentUser, isAllowed]);
 
   // Listen to penerimaan_data collection when authorized
   useEffect(() => {

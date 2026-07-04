@@ -1949,7 +1949,7 @@ export default function App() {
                       }`}
                     >
                       <BarChart3 className="w-4.5 h-4.5" />
-                      Dashboard
+                      Overview
                     </button>
                     <button
                       onClick={() => setActiveTab("stock")}
@@ -3310,7 +3310,7 @@ export default function App() {
                 }`}
               >
                 <BarChart3 className="w-5 h-5" />
-                <span className="text-[11px]">Dashboard</span>
+                <span className="text-[11px]">Overview</span>
               </button>
 
               <button

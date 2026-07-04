@@ -79,9 +79,9 @@ export function useMasterData(isAllowed: boolean) {
           getDocs(collection(db, "pabrik_list")),
         ]);
 
-        const vData = vSnap.docs.map((d) => d.id);
-        const jData = jSnap.docs.map((d) => d.id);
-        const pData = pSnap.docs.map((d) => d.id);
+        const vData = vSnap.docs.map((d) => d.data().name || d.id);
+        const jData = jSnap.docs.map((d) => d.data().name || d.id);
+        const pData = pSnap.docs.map((d) => d.data().name || d.id);
 
         setVendors(vData);
         setJenisKantong(jData);
@@ -111,9 +111,9 @@ export function useMasterData(isAllowed: boolean) {
         getDocs(collection(db, "pabrik_list")),
       ]);
 
-      const vData = vSnap.docs.map((d) => d.id);
-      const jData = jSnap.docs.map((d) => d.id);
-      const pData = pSnap.docs.map((d) => d.id);
+      const vData = vSnap.docs.map((d) => d.data().name || d.id);
+      const jData = jSnap.docs.map((d) => d.data().name || d.id);
+      const pData = pSnap.docs.map((d) => d.data().name || d.id);
 
       setVendors(vData);
       setJenisKantong(jData);

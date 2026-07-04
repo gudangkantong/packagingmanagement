@@ -121,11 +121,6 @@ export default function App() {
   const [pengirimanList, setPengirimanList] = useState<PengirimanData[]>([]);
 
   // View mode: 7days (real-time) vs thisMonth/lastMonth/custom (cache + on-demand)
-  type ViewMode = "7days" | "thisMonth" | "lastMonth" | "custom";
-  const [viewMode, setViewMode] = useState<ViewMode>("7days");
-  const [customDateFrom, setCustomDateFrom] = useState<string>("");
-  const [customDateTo, setCustomDateTo] = useState<string>("");
-  const [isFetchingHistorical, setIsFetchingHistorical] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
   // Role-based check (dari Firestore allowed_users collection)
@@ -406,16 +401,27 @@ export default function App() {
     };
   }, []);
 
-  // Helper: fetch laporan by date range (one-time read)
-  const fetchReportsByRange = async (fromDate: string, toDate: string): Promise<LaporanKantong[]> => {
-    try {
-      const q = query(
-        collection(db, "laporan_kantong"),
-        where("tanggal", ">=", fromDate),
-        where("tanggal", "<=", toDate),
-        orderBy("tanggal", "desc")
-      );
-      const snap = await getDocs(q);
+  // Main reports useEffect — always7 days ending on selectedDate
+  useEffect(() => {
+    if (!currentUser || isAllowed !== true) {
+      setReports([]);
+      return;
+    }
+
+    setDataLoading(true);
+
+    //7 hari ke belakang dari selectedDate
+    const toDate = selectedDate;
+    const fromDate = getDateString(new Date(new Date(selectedDate + "T00:00:00").getTime() - 7 * 86400000));
+
+    // Real-time onSnapshot untuk7 hari
+    const reportsQuery = query(
+      collection(db, "laporan_kantong"),
+      where("tanggal", ">=", fromDate),
+      where("tanggal", "<=", toDate),
+      orderBy("tanggal", "desc")
+    );
+    const unsub = onSnapshot(reportsQuery, (snap) => {
       const items: LaporanKantong[] = [];
       snap.forEach((docSnap) => {
         const data = docSnap.data();
@@ -434,157 +440,53 @@ export default function App() {
           updatedAt: data.updatedAt || ""
         });
       });
-      return items;
-    } catch (err) {
-      console.error("Failed to fetch reports by range:", err);
-      return [];
-    }
-  };
-
-  // Helper: get date range for viewMode
-  const getDateRange = (mode: ViewMode): { from: string; to: string } => {
-    const today = new Date();
-    switch (mode) {
-      case "7days": {
-        const from = new Date(today.getTime() - 7 * 86400000);
-        return { from: getDateString(from), to: getDateString(today) };
-      }
-      case "thisMonth": {
-        const from = new Date(today.getFullYear(), today.getMonth(), 1);
-        return { from: getDateString(from), to: getDateString(today) };
-      }
-      case "lastMonth": {
-        const from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        const to = new Date(today.getFullYear(), today.getMonth(), 0);
-        return { from: getDateString(from), to: getDateString(to) };
-      }
-      case "custom": {
-        return { from: customDateFrom || getDateString(today), to: customDateTo || getDateString(today) };
-      }
-      default:
-        return { from: getDateString(new Date(today.getTime() - 7 * 86400000)), to: getDateString(today) };
-    }
-  };
-
-  // Main reports useEffect
-  useEffect(() => {
-    if (!currentUser || isAllowed !== true) {
-      setReports([]);
-      return;
-    }
-
-    const { from, to } = getDateRange(viewMode);
-
-    // Mode 7 hari: real-time onSnapshot + cache ke localStorage
-    if (viewMode === "7days") {
-      setDataLoading(true);
-      const reportsQuery = query(
-        collection(db, "laporan_kantong"),
-        where("tanggal", ">=", from),
-        where("tanggal", "<=", to),
-        orderBy("tanggal", "desc")
-      );
-      const unsub = onSnapshot(reportsQuery, (snap) => {
-        const items: LaporanKantong[] = [];
-        snap.forEach((docSnap) => {
-          const data = docSnap.data();
-          items.push({
-            id: docSnap.id,
-            vendor: data.vendor || "",
-            nama: data.nama || "",
-            pabrik: data.pabrik || "",
-            shift: Number(data.shift) || 1,
-            tanggal: data.tanggal || "",
-            utuh: Number(data.utuh) || 0,
-            pecah: Number(data.pecah) || 0,
-            sortir: Number(data.sortir) || 0,
-            total: Number(data.total) || 0,
-            createdBy: data.createdBy || "",
-            updatedAt: data.updatedAt || ""
-          });
-        });
-        setReports(items);
-        setDataLoading(false);
-
-        // Simpan ke localStorage per tanggal (untuk cache bulanan)
-        const byDate: Record<string, LaporanKantong[]> = {};
-        items.forEach((item) => {
-          if (!byDate[item.tanggal]) byDate[item.tanggal] = [];
-          byDate[item.tanggal].push(item);
-        });
-        Object.entries(byDate).forEach(([date, dateItems]) => {
-          setCache(`laporan_${date}`, dateItems, 7 * 24 * 60 * 60 * 1000); // cache 7 hari
-        });
-      }, (err) => {
-        console.error("Failed to sync reports:", err);
-        triggerToast("Gagal menyinkronkan data real-time", "er");
-        setDataLoading(false);
-        handleFirestoreError(err, OperationType.GET, "laporan_kantong");
-      });
-      return () => unsub();
-    }
-
-    // Mode lain (bulan ini / bulan lalu / custom): cache-first + one-time fetch
-    setDataLoading(true);
-    setIsFetchingHistorical(true);
-
-    const loadHistorical = async () => {
-      // Cek cache dulu per tanggal
-      const allItems: LaporanKantong[] = [];
-      const missingDates: string[] = [];
-      const fromDate = new Date(from + "T00:00:00");
-      const toDate = new Date(to + "T00:00:00");
-
-      // Iterasi setiap tanggal dalam range
-      const current = new Date(fromDate);
-      while (current <= toDate) {
-        const dateStr = getDateString(current);
-        const cached = getCached<LaporanKantong[]>(`laporan_${dateStr}`);
-        if (cached) {
-          allItems.push(...cached);
-        } else {
-          missingDates.push(dateStr);
-        }
-        current.setDate(current.getDate() + 1);
-      }
-
-      // Tampilkan data dari cache dulu
-      if (allItems.length > 0) {
-        allItems.sort((a, b) => b.tanggal.localeCompare(a.tanggal) || b.updatedAt.localeCompare(a.updatedAt));
-        setReports(allItems);
-      }
-
-      // Fetch tanggal yang belum ada di cache
-      if (missingDates.length > 0) {
-        try {
-          // Batch fetch per rentang (lebih efisien dari per-tanggal)
-          const fetched = await fetchReportsByRange(missingDates[0], missingDates[missingDates.length - 1]);
-          
-          // Simpan ke cache per tanggal
-          const byDate: Record<string, LaporanKantong[]> = {};
-          fetched.forEach((item) => {
-            if (!byDate[item.tanggal]) byDate[item.tanggal] = [];
-            byDate[item.tanggal].push(item);
-          });
-          Object.entries(byDate).forEach(([date, dateItems]) => {
-            setCache(`laporan_${date}`, dateItems, 7 * 24 * 60 * 60 * 1000);
-          });
-
-          // Gabungkan dengan data cache
-          const merged = [...allItems, ...fetched];
-          merged.sort((a, b) => b.tanggal.localeCompare(a.tanggal) || b.updatedAt.localeCompare(a.updatedAt));
-          setReports(merged);
-        } catch (err) {
-          console.error("Failed to fetch historical reports:", err);
-        }
-      }
-
+      setReports(items);
       setDataLoading(false);
-      setIsFetchingHistorical(false);
-    };
 
-    loadHistorical();
-  }, [currentUser, isAllowed, viewMode, customDateFrom, customDateTo, refreshTrigger]);
+      // Simpan SEMUA data ke localStorage per tanggal
+      const byDate: Record<string, LaporanKantong[]> = {};
+      items.forEach((item) => {
+        if (!byDate[item.tanggal]) byDate[item.tanggal] = [];
+        byDate[item.tanggal].push(item);
+      });
+      Object.entries(byDate).forEach(([date, dateItems]) => {
+        setCache(`laporan_${date}`, dateItems, 30 * 24 * 60 * 60 * 1000); // cache 30 hari
+      });
+    }, (err) => {
+      console.error("Failed to sync reports:", err);
+      triggerToast("Gagal menyinkronkan data real-time", "er");
+      setDataLoading(false);
+      handleFirestoreError(err, OperationType.GET, "laporan_kantong");
+    });
+
+    // Juga load data dari cache untuk tanggal di luar7 hari (agar tampil di halaman)
+    // Ini dilakukan sekali saat selectedDate berubah
+    const loadCachedOldData = () => {
+      // Cek apakah selectedDate di luar range7 hari real-time
+      const selectedMs = new Date(selectedDate + "T00:00:00").getTime();
+      const nowMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
+      const daysDiff = Math.floor((nowMs - selectedMs) / 86400000);
+
+      if (daysDiff > 7) {
+        // selectedDate di luar7 hari → load dari cache
+        const cached = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
+        if (cached && cached.length > 0) {
+          // Merge dengan data real-time (jangan timpa)
+          setReports(prev => {
+            const existingIds = new Set(prev.map(r => r.id));
+            const newItems = cached.filter(r => !existingIds.has(r.id));
+            if (newItems.length === 0) return prev;
+            const merged = [...prev, ...newItems];
+            merged.sort((a, b) => b.tanggal.localeCompare(a.tanggal) || b.updatedAt.localeCompare(a.updatedAt));
+            return merged;
+          });
+        }
+      }
+    };
+    loadCachedOldData();
+
+    return () => unsub();
+  }, [currentUser, isAllowed, selectedDate, refreshTrigger]);
 
   // Penerimaan: getDocs + cache (jarang berubah, hemat reads)
   useEffect(() => {
@@ -2047,58 +1949,6 @@ export default function App() {
                     >
                       <ChevronRight className="w-5 h-5" />
                     </button>
-                  </div>
-
-                  {/* View Mode Selector */}
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={viewMode}
-                      onChange={(e) => {
-                        const mode = e.target.value as ViewMode;
-                        setViewMode(mode);
-                        if (mode === "custom") {
-                          // Set default custom range to this month
-                          const today = new Date();
-                          const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-                          setCustomDateFrom(getDateString(firstDay));
-                          setCustomDateTo(getDateString(today));
-                        }
-                      }}
-                      className="border border-[#e8e4de] bg-white hover:border-brand-green/50 text-[#1a1814] px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer focus:outline-none focus:border-brand-green transition-all"
-                    >
-                      <option value="7days">📅 7 Hari Terakhir 🟢</option>
-                      <option value="thisMonth">📦 Bulan Ini</option>
-                      <option value="lastMonth">📦 Bulan Lalu</option>
-                      <option value="custom">📆 Pilih Tanggal</option>
-                    </select>
-                    {viewMode !== "7days" && (
-                      <button
-                        onClick={() => setViewMode("7days")}
-                        className="text-xs text-brand-green hover:text-brand-green-hover font-bold underline cursor-pointer"
-                      >
-                        ← Kembali Real-time
-                      </button>
-                    )}
-                    {viewMode === "custom" && (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="date"
-                          value={customDateFrom}
-                          onChange={(e) => setCustomDateFrom(e.target.value)}
-                          className="border border-[#e8e4de] bg-white rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-brand-green"
-                        />
-                        <span className="text-xs text-[#9e9892]">s/d</span>
-                        <input
-                          type="date"
-                          value={customDateTo}
-                          onChange={(e) => setCustomDateTo(e.target.value)}
-                          className="border border-[#e8e4de] bg-white rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-brand-green"
-                        />
-                      </div>
-                    )}
-                    {isFetchingHistorical && (
-                      <Loader2 className="w-4 h-4 animate-spin text-brand-green" />
-                    )}
                   </div>
 
                   {/* Today shortcuts, Excel Export & Verification Lock */}

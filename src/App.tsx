@@ -401,6 +401,95 @@ export default function App() {
     };
   }, []);
 
+  // Update last_seen setiap kali user buka app
+  useEffect(() => {
+    if (currentUser && isAllowed === true) {
+      setCache("last_seen", new Date().toISOString(), 365 * 24 * 60 * 60 * 1000);
+    }
+  }, [currentUser, isAllowed]);
+
+  // Backfill: fetch30 hari data saat pertama kali buka / setelah lama tidak buka
+  useEffect(() => {
+    if (!currentUser || isAllowed !== true) return;
+
+    const lastSeen = getCached<string>("last_seen");
+    const now = Date.now();
+    const oneDayMs = 24 * 60 * 60 * 1000;
+
+    // Cek apakah perlu backfill: belum pernah buka / sudah lebih dari1 hari
+    const needsBackfill = !lastSeen || (now - new Date(lastSeen).getTime()) > oneDayMs;
+
+    if (!needsBackfill) return;
+
+    console.log("[Backfill] User baru/kembali setelah lama, fetch30 hari data...");
+    setCache("last_seen", new Date().toISOString(), 365 * oneDayMs);
+
+    const doBackfill = async () => {
+      try {
+        const thirtyDaysAgo = getDateString(new Date(now - 30 * oneDayMs));
+        const today = getDateString(new Date());
+
+        // Fetch laporan30 hari
+        const laporanQuery = query(
+          collection(db, "laporan_kantong"),
+          where("tanggal", ">=", thirtyDaysAgo),
+          where("tanggal", "<=", today),
+          orderBy("tanggal", "desc")
+        );
+        const laporanSnap = await getDocs(laporanQuery);
+        const byDate: Record<string, LaporanKantong[]> = {};
+        laporanSnap.forEach((d) => {
+          const data = d.data();
+          const item: LaporanKantong = {
+            id: d.id,
+            vendor: data.vendor || "",
+            nama: data.nama || "",
+            pabrik: data.pabrik || "",
+            shift: Number(data.shift) || 1,
+            tanggal: data.tanggal || "",
+            utuh: Number(data.utuh) || 0,
+            pecah: Number(data.pecah) || 0,
+            sortir: Number(data.sortir) || 0,
+            total: Number(data.total) || 0,
+            createdBy: data.createdBy || "",
+            updatedAt: data.updatedAt || ""
+          };
+          if (!byDate[item.tanggal]) byDate[item.tanggal] = [];
+          byDate[item.tanggal].push(item);
+        });
+        Object.entries(byDate).forEach(([date, items]) => {
+          setCache(`laporan_${date}`, items, 30 * oneDayMs);
+        });
+
+        // Fetch penerimaan & pengiriman juga
+        const [pnSnap, pgSnap] = await Promise.all([
+          getDocs(collection(db, "penerimaan_data")),
+          getDocs(collection(db, "pengiriman_data"))
+        ]);
+
+        const pnItems: PenerimaanData[] = [];
+        pnSnap.forEach((d) => {
+          const data = d.data();
+          pnItems.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+        });
+        setCache("penerimaan_data", pnItems, 24 * oneDayMs);
+
+        const pgItems: PengirimanData[] = [];
+        pgSnap.forEach((d) => {
+          const data = d.data();
+          pgItems.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+        });
+        setCache("pengiriman_data", pgItems, 24 * oneDayMs);
+
+        console.log(`[Backfill] Selesai: ${Object.keys(byDate).length} hari laporan, ${pnItems.length} penerimaan, ${pgItems.length} pengiriman`);
+      } catch (err) {
+        console.error("[Backfill] Gagal:", err);
+      }
+    };
+
+    doBackfill();
+  }, [currentUser, isAllowed]);
+
   // Main reports useEffect — always7 days ending on selectedDate
   useEffect(() => {
     if (!currentUser || isAllowed !== true) {

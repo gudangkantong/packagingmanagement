@@ -2282,12 +2282,12 @@ export default function App() {
                                               </td>
                                             </tr>
                                             {isExpanded && Object.entries(stat.vendors).map(([vendorName, vStat]) => (
-                                              <tr key={`${name}-${vendorName}`} className="bg-[#fdfcfb]">
-                                                <td className="py-1 px-4 sm:px-6 text-[10px] text-[#9e9892] italic pl-8">↳ {vendorName}</td>
-                                                <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#9e9892]">{vStat.utuh.toLocaleString()}</td>
-                                                <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#9e9892]">{vStat.pecah.toLocaleString()}</td>
-                                                <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#9e9892]">{vStat.sortir.toLocaleString()}</td>
-                                                <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#9e9892] font-semibold">{vStat.total.toLocaleString()}</td>
+                                              <tr key={`${name}-${vendorName}`} className="bg-[#f5f8f4]">
+                                                <td className="py-1.5 px-4 sm:px-6 text-xs text-[#6b6560] italic pl-8">↳ {vendorName}</td>
+                                                <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-brand-green">{vStat.utuh.toLocaleString()}</td>
+                                                <td className="py-1.5 px-2 sm:px-px-4 text-center text-xs font-medium text-rose-500">{vStat.pecah.toLocaleString()}</td>
+                                                <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-amber-600">{vStat.sortir.toLocaleString()}</td>
+                                                <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-bold text-[#1a1814]">{vStat.total.toLocaleString()}</td>
                                               </tr>
                                             ))}
                                           </React.Fragment>
@@ -2382,12 +2382,12 @@ export default function App() {
                                                         <td className="py-1.5 px-2 sm:px-4 text-center font-extrabold text-xs text-brand-green">{stat.total.toLocaleString()}</td>
                                                       </tr>
                                                       {isShiftBagExpanded && Object.entries(stat.vendors).map(([vendorName, vStat]) => (
-                                                        <tr key={`${name}-${vendorName}`} className="bg-[#fdfcfb]">
-                                                          <td className="py-1 px-4 sm:px-6 text-[10px] text-[#9e9892] italic pl-8">↳ {vendorName}</td>
-                                                          <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#9e9892]">{vStat.utuh.toLocaleString()}</td>
-                                                          <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#9e9892]">{vStat.pecah.toLocaleString()}</td>
-                                                          <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#9e9892]">{vStat.sortir.toLocaleString()}</td>
-                                                          <td className="py-1 px-2 sm:px-4 text-center text-[10px] text-[#9e9892] font-semibold">{vStat.total.toLocaleString()}</td>
+                                                        <tr key={`${name}-${vendorName}`} className="bg-[#f5f8f4]">
+                                                          <td className="py-1.5 px-4 sm:px-6 text-xs text-[#6b6560] italic pl-8">↳ {vendorName}</td>
+                                                          <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-brand-green">{vStat.utuh.toLocaleString()}</td>
+                                                          <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-rose-500">{vStat.pecah.toLocaleString()}</td>
+                                                          <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-amber-600">{vStat.sortir.toLocaleString()}</td>
+                                                          <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-bold text-[#1a1814]">{vStat.total.toLocaleString()}</td>
                                                         </tr>
                                                       ))}
                                                     </React.Fragment>

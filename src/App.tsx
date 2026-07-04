@@ -17,8 +17,8 @@ import {
   getDoc,
   onSnapshot,
   query,
+  where,
   orderBy,
-  serverTimestamp
 } from "firebase/firestore";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -356,7 +356,15 @@ export default function App() {
     }
 
     setDataLoading(true);
-    const reportsQuery = query(collection(db, "laporan_kantong"), orderBy("updatedAt", "desc"));
+    // Filter 30 hari terakhir untuk hemat reads
+    const thirtyDaysAgo = getDateString(new Date(Date.now() - 30 * 86400000));
+    const today = getDateString(new Date());
+    const reportsQuery = query(
+      collection(db, "laporan_kantong"),
+      where("tanggal", ">=", thirtyDaysAgo),
+      where("tanggal", "<=", today),
+      orderBy("tanggal", "desc")
+    );
     const unsubReports = onSnapshot(reportsQuery, (querySnapshot) => {
       const items: LaporanKantong[] = [];
       querySnapshot.forEach((docSnap) => {

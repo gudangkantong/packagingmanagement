@@ -355,7 +355,12 @@ export default function App() {
     }
 
     setDataLoading(true);
-    const reportsQuery = query(collection(db, "laporan_kantong"), orderBy("updatedAt", "desc"));
+    let reportsQuery = query(
+      collection(db, "laporan_kantong"),
+      where("tanggal", "==", selectedDate),
+      orderBy("updatedAt", "desc")
+    );
+
     const unsubReports = onSnapshot(reportsQuery, (querySnapshot) => {
       const items: LaporanKantong[] = [];
       querySnapshot.forEach((docSnap) => {
@@ -379,13 +384,42 @@ export default function App() {
       setDataLoading(false);
     }, (err) => {
       console.error("Failed to sync reports:", err);
-      triggerToast("Gagal menyinkronkan data real-time", "er");
-      setDataLoading(false);
-      handleFirestoreError(err, OperationType.GET, "laporan_kantong");
+      
+      // Fallback: jika filter tanggal gagal karena index/permission, fallback ke full collection
+      if (err.code === 'failed-precondition' || err.message?.toLowerCase().includes('index') || err.message?.toLowerCase().includes('permission')) {
+        console.warn("[Reports] Date-filtered query failed, falling back to full collection sync");
+        const fallbackQuery = query(collection(db, "laporan_kantong"), orderBy("updatedAt", "desc"));
+        onSnapshot(fallbackQuery, (fallbackSnap) => {
+          const fallbackItems: LaporanKantong[] = [];
+          fallbackSnap.forEach((docSnap) => {
+            const data = docSnap.data();
+            fallbackItems.push({
+              id: docSnap.id,
+              vendor: data.vendor || "",
+              nama: data.nama || "",
+              pabrik: data.pabrik || "",
+              shift: Number(data.shift) || 1,
+              tanggal: data.tanggal || "",
+              utuh: Number(data.utuh) || 0,
+              pecah: Number(data.pecah) || 0,
+              sortir: Number(data.sortir) || 0,
+              total: Number(data.total) || 0,
+              createdBy: data.createdBy || "",
+              updatedAt: data.updatedAt || ""
+            });
+          });
+          setReports(fallbackItems);
+          setDataLoading(false);
+        });
+      } else {
+        triggerToast("Gagal menyinkronkan data real-time", "er");
+        setDataLoading(false);
+        handleFirestoreError(err, OperationType.GET, "laporan_kantong");
+      }
     });
 
     return () => unsubReports();
-  }, [currentUser, isAllowed]);
+  }, [currentUser, isAllowed, selectedDate]);
 
   // Listen to penerimaan_data collection when authorized
   useEffect(() => {

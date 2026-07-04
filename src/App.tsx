@@ -2473,7 +2473,7 @@ export default function App() {
 
                           return (
                             <div key={pabrikName} className="space-y-2">
-                              <h3 className="text-center text-sm font-extrabold text-[#6b6560] tracking-wide uppercase">Data Laporan {pabrikName}</h3>
+                              <h3 className="text-center text-sm font-extrabold text-[#6b6560] tracking-wide uppercase">Data Pemakaian Kantong {PABRIK_SHORT[pabrikName] || pabrikName}</h3>
                               
                               {/* Desktop Table View */}
                               <div className="hidden md:block bg-white border-2 border-[#e8e4de] rounded-3xl shadow-xs overflow-hidden">

@@ -366,17 +366,17 @@ export const generateExcelReport = async (opts: ExcelOptions): Promise<ExcelJS.W
   const ws1 = wb.addWorksheet('Pemakaian');
   writePemakaianSheet(ws1, opts);
 
-  // Sheet 2: Penerimaan
-  const ws2 = wb.addWorksheet('Penerimaan');
-  writePenerimaanSheet(ws2, opts);
+  // Sheet 2: Stock Harian
+  const ws2 = wb.addWorksheet('Stock Harian');
+  writeStockSheet(ws2, opts);
 
-  // Sheet 3: Pengiriman
-  const ws3 = wb.addWorksheet('Pengiriman');
-  writePengirimanSheet(ws3, opts);
+  // Sheet 3: Penerimaan
+  const ws3 = wb.addWorksheet('Penerimaan');
+  writePenerimaanSheet(ws3, opts);
 
-  // Sheet 4: Stock Harian
-  const ws4 = wb.addWorksheet('Stock Harian');
-  writeStockSheet(ws4, opts);
+  // Sheet 4: Pengiriman
+  const ws4 = wb.addWorksheet('Pengiriman');
+  writePengirimanSheet(ws4, opts);
 
   return wb;
 };

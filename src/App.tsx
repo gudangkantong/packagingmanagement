@@ -50,17 +50,7 @@ import {
   Save
 } from "lucide-react";
 import { auth, db, firebaseConfig } from "./firebase";
-import {
-  useMasterData,
-  useLaporanKantong,
-  usePenerimaanData,
-  usePengirimanData,
-  useAllowedUsers,
-  useLockedDates,
-  bootstrapAdmin,
-} from "./useOptimizedData";
-import { clearAllCache, removeCache } from "./utils/cache";
-
+import { getCached, setCache, removeCache } from "./utils/cache";
 import { LaporanKantong, AllowedUser, LockedDate, ROLE_MAP, PABRIK_ROLE_MAP, PenerimaanData, PengirimanData } from "./types";
 import StockHarianPage from "./StockHarianPage";
 import { getDateString, formatDateDisplay } from "./utils";
@@ -122,15 +112,20 @@ export default function App() {
   const [authError, setAuthError] = useState("");
 
   // App data state (real-time synchronized from Firestore)
-  // reports now comes from useLaporanKantong hook
-  // allowedUsers now comes from useAllowedUsers hook
-  // lockedDates now comes from useLockedDates hook
-  // dataLoading: now comes from useLaporanKantong hook as reportsLoading
-  // const [dataLoading, setDataLoading] = useState<boolean>(true); // REMOVED: handled by hook
-  // penerimaanList now comes from usePenerimaanData hook
-  // pengirimanList now comes from usePengirimanData hook
+  const [reports, setReports] = useState<LaporanKantong[]>([]);
+  const [allowedUsers, setAllowedUsers] = useState<AllowedUser[]>([]);
+  const [lockedDates, setLockedDates] = useState<Record<string, LockedDate>>({});
+  const [dataLoading, setDataLoading] = useState<boolean>(true);
+  const [penerimaanList, setPenerimaanList] = useState<PenerimaanData[]>([]);
+  const [pengirimanList, setPengirimanList] = useState<PengirimanData[]>([]);
 
-  // Role-based derivation now handled by hooks (see optimized hooks section)
+  // Role-based check (dari Firestore allowed_users collection)
+  const currentUserData = allowedUsers.find(u => u.email === currentUser?.email?.toLowerCase());
+  const userRole = currentUserData?.role || (currentUser?.isAnonymous ? 'guest' : null);
+  const userPabrikRole = currentUserData?.pabrikRole || null;
+  const isMasterAdmin = userRole === 'super_admin';
+  const isAdmin = userRole === 'super_admin' || userRole === 'admin';
+  const isGuest = userRole === 'guest' || currentUser?.isAnonymous === true || (currentUser?.email?.startsWith('guest_') ?? false);
 
   // Active page state
   const [activeTab, setActiveTab] = useState<"dash" | "stock" | "input" | "users">("dash");
@@ -217,54 +212,10 @@ export default function App() {
   const [editingUserBadge, setEditingUserBadge] = useState<string | null>(null);
   const [editingBadgeValue, setEditingBadgeValue] = useState<"" | "pbr1" | "pbr2" | "ppg" | "ppj" | "all">("");
 
-  // ============================================================
-  // OPTIMIZED HOOKS (Firebase Free Tier Friendly)
-  // ============================================================
-
-  // 1. Master data → getDocs + cache (hemat reads)
-  const {
-    vendors: dynamicVendors,
-    jenisKantong: dynamicJenisKantong,
-    pabrikList: dynamicPabrikList,
-    refreshMasterData,
-  } = useMasterData(isAllowed === true);
-
-  // 2. Laporan → REAL-TIME dengan filter 7 hari
-  const { reports, loading: reportsLoading } = useLaporanKantong(
-    currentUser,
-    isAllowed === true
-  );
-
-  // 3. Penerimaan → REAL-TIME
-  const { penerimaanList } = usePenerimaanData(
-    currentUser,
-    isAllowed === true
-  );
-
-  // 4. Pengiriman → REAL-TIME
-  const { pengirimanList } = usePengirimanData(
-    currentUser,
-    isAllowed === true
-  );
-
-  // 5. Allowed users → getDocs + cache (authenticated users only, guest tidak perlu)
-  const { allowedUsers, refreshAllowedUsers } = useAllowedUsers(
-    currentUser,
-    isAllowed === true
-  );
-
-  // 6. Locked dates → REAL-TIME (data kecil, penting untuk validasi)
-  const { lockedDates } = useLockedDates(currentUser, isAllowed === true);
-
-  // Hitung role dari allowedUsers (hasil hook)
-  const currentUserData = allowedUsers.find(u => u.email === currentUser?.email?.toLowerCase());
-  const userRole = currentUserData?.role || (currentUser?.isAnonymous ? 'guest' : null);
-  const userPabrikRole = currentUserData?.pabrikRole || null;
-  const isMasterAdmin = userRole === 'super_admin';
-  const isAdmin = userRole === 'super_admin' || userRole === 'admin';
-  const isGuest = userRole === 'guest' || currentUser?.isAnonymous === true || (currentUser?.email?.startsWith('guest_') ?? false);
-
-  // Master data lists (synced from hooks)
+  // Master data lists (synced from Firestore)
+  const [dynamicVendors, setDynamicVendors] = useState<string[]>([]);
+  const [dynamicJenisKantong, setDynamicJenisKantong] = useState<string[]>([]);
+  const [dynamicPabrikList, setDynamicPabrikList] = useState<string[]>([]);
   const [newVendor, setNewVendor] = useState("");
   const [newJenisKantong, setNewJenisKantong] = useState("");
   const [newPabrik, setNewPabrik] = useState("");
@@ -275,7 +226,7 @@ export default function App() {
     editedName: string;
   } | null>(null);
 
-  // Effective lists (dynamic from hooks, fallback to hardcoded)
+  // Effective lists (dynamic from Firestore, fallback to hardcoded)
   const effectiveVendors = dynamicVendors.length > 0 ? dynamicVendors : VENDORS;
   const effectiveJenisKantong = dynamicJenisKantong.length > 0 ? dynamicJenisKantong : JENIS_KANTONG;
   const effectivePabrikList = dynamicPabrikList.length > 0 ? dynamicPabrikList : PABRIK_LIST;
@@ -397,17 +348,241 @@ export default function App() {
     };
   }, []);
 
-  // laporan_kantong: now handled by useLaporanKantong hook (real-time + filter 7 hari)
+  // Listen to Firestore reports collection when authorized
+  useEffect(() => {
+    if (!currentUser || isAllowed !== true) {
+      setReports([]);
+      return;
+    }
 
-  // penerimaan_data: now handled by usePenerimaanData hook (real-time)
+    setDataLoading(true);
+    const reportsQuery = query(collection(db, "laporan_kantong"), orderBy("updatedAt", "desc"));
+    const unsubReports = onSnapshot(reportsQuery, (querySnapshot) => {
+      const items: LaporanKantong[] = [];
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        items.push({
+          id: docSnap.id,
+          vendor: data.vendor || "",
+          nama: data.nama || "",
+          pabrik: data.pabrik || "",
+          shift: Number(data.shift) || 1,
+          tanggal: data.tanggal || "",
+          utuh: Number(data.utuh) || 0,
+          pecah: Number(data.pecah) || 0,
+          sortir: Number(data.sortir) || 0,
+          total: Number(data.total) || 0,
+          createdBy: data.createdBy || "",
+          updatedAt: data.updatedAt || ""
+        });
+      });
+      setReports(items);
+      setDataLoading(false);
+    }, (err) => {
+      console.error("Failed to sync reports:", err);
+      triggerToast("Gagal menyinkronkan data real-time", "er");
+      setDataLoading(false);
+      handleFirestoreError(err, OperationType.GET, "laporan_kantong");
+    });
 
-  // pengiriman_data: now handled by usePengirimanData hook (real-time)
+    return () => unsubReports();
+  }, [currentUser, isAllowed]);
 
-  // allowed_users: now handled by useAllowedUsers hook (getDocs + cache, admin only)
+  // Listen to penerimaan_data collection when authorized
+  useEffect(() => {
+    if (!currentUser || isAllowed !== true) { setPenerimaanList([]); return; }
+    const pnQuery = query(collection(db, "penerimaan_data"));
+    const unsubPn = onSnapshot(pnQuery, (snap) => {
+      const items: PenerimaanData[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+      });
+      setPenerimaanList(items);
+    }, (err) => { console.error("Failed to sync penerimaan_data:", err); handleFirestoreError(err, OperationType.GET, "penerimaan_data"); });
+    return () => unsubPn();
+  }, [currentUser, isAllowed]);
 
-  // locked_dates: now handled by useLockedDates hook (real-time)
+  // Listen to pengiriman_data collection when authorized
+  useEffect(() => {
+    if (!currentUser || isAllowed !== true) { setPengirimanList([]); return; }
+    const pgQuery = query(collection(db, "pengiriman_data"));
+    const unsubPg = onSnapshot(pgQuery, (snap) => {
+      const items: PengirimanData[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+      });
+      setPengirimanList(items);
+    }, (err) => { console.error("Failed to sync pengiriman_data:", err); handleFirestoreError(err, OperationType.GET, "pengiriman_data"); });
+    return () => unsubPg();
+  }, [currentUser, isAllowed]);
 
-  // master data (vendors, jenis_kantong, pabrik_list): now handled by useMasterData hook (getDocs + cache)
+  // Listen to allowed_users collection when authorized
+  useEffect(() => {
+    if (!currentUser || isAllowed !== true || currentUser.isAnonymous) {
+      setAllowedUsers([]);
+      return;
+    }
+
+    const usersQuery = collection(db, "allowed_users");
+    const unsubUsers = onSnapshot(usersQuery, (querySnapshot) => {
+      const items: AllowedUser[] = [];
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        items.push({
+          email: data.email || docSnap.id,
+          allowed: data.allowed === true,
+          role: data.role || "admin",
+          pabrikRole: data.pabrikRole || null,
+          addedAt: data.addedAt || ""
+        });
+      });
+      setAllowedUsers(items);
+    }, (err) => {
+      console.error("Failed to sync allowed users:", err);
+      handleFirestoreError(err, OperationType.GET, "allowed_users");
+    });
+
+    return () => unsubUsers();
+  }, [currentUser, isAllowed]);
+
+  // Listen to locked_dates collection when authorized
+  useEffect(() => {
+    if (!currentUser || isAllowed !== true) {
+      setLockedDates({});
+      return;
+    }
+
+    const lockedQuery = collection(db, "locked_dates");
+    const unsubLocked = onSnapshot(lockedQuery, (querySnapshot) => {
+      const datesMap: Record<string, LockedDate> = {};
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.locked) {
+          datesMap[docSnap.id] = {
+            locked: true,
+            lockedBy: data.lockedBy || "",
+            lockedAt: data.lockedAt || ""
+          };
+        }
+      });
+      setLockedDates(datesMap);
+    }, (err) => {
+      console.error("Failed to sync locked dates:", err);
+      handleFirestoreError(err, OperationType.GET, "locked_dates");
+    });
+
+    return () => unsubLocked();
+  }, [currentUser, isAllowed]);
+
+  // Listen to master data collections (vendors, jenis_kantong, pabrik)
+  // OPTIMIZED: getDocs + cache instead of onSnapshot (hemat reads)
+  useEffect(() => {
+    if (!currentUser || isAllowed !== true) {
+      setDynamicVendors([]);
+      setDynamicJenisKantong([]);
+      setDynamicPabrikList([]);
+      return;
+    }
+
+    const bootstrapCollection = async (
+      collectionName: string,
+      defaults: string[]
+    ) => {
+      try {
+        const { getDocs, deleteDoc } = await import("firebase/firestore");
+        const snap = await getDocs(collection(db, collectionName));
+        const existingNames = new Set<string>();
+        const existingDocs: Record<string, string> = {};
+        snap.forEach((d) => {
+          const name = d.data().name;
+          if (name) {
+            existingNames.add(name);
+            existingDocs[name] = d.id;
+          }
+        });
+
+        // Add missing items from defaults
+        for (const item of defaults) {
+          if (!existingNames.has(item)) {
+            const docId = item.toLowerCase().replace(/[^a-z0-9]/g, '_');
+            await setDoc(doc(db, collectionName, docId), {
+              name: item,
+              addedAt: new Date().toISOString(),
+              addedBy: "system_sync"
+            });
+          }
+        }
+
+        // Remove items no longer in defaults
+        const defaultsSet = new Set(defaults);
+        for (const [name, docId] of Object.entries(existingDocs)) {
+          if (!defaultsSet.has(name)) {
+            await deleteDoc(doc(db, collectionName, docId));
+          }
+        }
+      } catch (e) {
+        console.error(`Bootstrap ${collectionName} failed:`, e);
+      }
+    };
+
+    const loadMasterData = async () => {
+      // Cek cache dulu
+      const cachedVendors = getCached<string[]>("vendors");
+      const cachedJenis = getCached<string[]>("jenis_kantong");
+      const cachedPabrik = getCached<string[]>("pabrik_list");
+
+      if (cachedVendors && cachedJenis && cachedPabrik) {
+        setDynamicVendors(cachedVendors);
+        setDynamicJenisKantong(cachedJenis);
+        setDynamicPabrikList(cachedPabrik);
+        return; // Skip Firestore read!
+      }
+
+      // Cache miss → bootstrap + baca dari Firestore
+      await bootstrapCollection("vendors", VENDORS);
+      await bootstrapCollection("jenis_kantong", JENIS_KANTONG);
+      await bootstrapCollection("pabrik_list", PABRIK_LIST);
+
+      try {
+        const { getDocs: getDocsFn } = await import("firebase/firestore");
+        const [vSnap, jSnap, pSnap] = await Promise.all([
+          getDocsFn(collection(db, "vendors")),
+          getDocsFn(collection(db, "jenis_kantong")),
+          getDocsFn(collection(db, "pabrik_list")),
+        ]);
+
+        const vItems: string[] = [];
+        vSnap.forEach((d) => { const name = d.data().name; if (name) vItems.push(name); });
+        const orderMapV = new Map(VENDORS.map((n, i) => [n, i]));
+        vItems.sort((a, b) => (orderMapV.get(a) ?? 999) - (orderMapV.get(b) ?? 999));
+
+        const jItems: string[] = [];
+        jSnap.forEach((d) => { const name = d.data().name; if (name) jItems.push(name); });
+        const orderMapJ = new Map(JENIS_KANTONG.map((n, i) => [n, i]));
+        jItems.sort((a, b) => (orderMapJ.get(a) ?? 999) - (orderMapJ.get(b) ?? 999));
+
+        const pItems: string[] = [];
+        pSnap.forEach((d) => { const name = d.data().name; if (name) pItems.push(name); });
+        const orderMapP = new Map(PABRIK_LIST.map((n, i) => [n, i]));
+        pItems.sort((a, b) => (orderMapP.get(a) ?? 999) - (orderMapP.get(b) ?? 999));
+
+        setDynamicVendors(vItems);
+        setDynamicJenisKantong(jItems);
+        setDynamicPabrikList(pItems);
+
+        // Simpan ke cache 24 jam
+        setCache("vendors", vItems, 24 * 60 * 60 * 1000);
+        setCache("jenis_kantong", jItems, 24 * 60 * 60 * 1000);
+        setCache("pabrik_list", pItems, 24 * 60 * 60 * 1000);
+      } catch (e) {
+        console.error("Failed to load master data:", e);
+      }
+    };
+
+    loadMasterData();
+  }, [currentUser, isAllowed]);
 
   // Prevent unauthorized access to "users" tab
   useEffect(() => {
@@ -551,7 +726,6 @@ export default function App() {
       };
       if (newPabrikRole) userData.pabrikRole = newPabrikRole;
       await setDoc(userDocRef, userData);
-      removeCache("allowed_users"); // invalidate cache
 
       setNewAllowedEmail("");
       setNewAllowedPassword("");
@@ -602,7 +776,6 @@ export default function App() {
         try {
           const userDocRef = doc(db, "allowed_users", targetEmail.toLowerCase());
           await deleteDoc(userDocRef);
-          removeCache("allowed_users"); // invalidate cache
           triggerToast(`Berhasil menghapus izin untuk ${targetEmail}`, "ok");
         } catch (err) {
           console.error("Remove user failed:", err);
@@ -622,7 +795,6 @@ export default function App() {
         // Use setDoc with merge instead of updateDoc to avoid failure if doc doesn't exist
         await setDoc(userDocRef, { pabrikRole: null }, { merge: true });
       }
-      removeCache("allowed_users"); // invalidate cache
       setEditingUserBadge(null);
       triggerToast(`Badge pabrik untuk ${targetEmail} berhasil diperbarui`, "ok");
     } catch (err) {
@@ -834,7 +1006,6 @@ export default function App() {
 
     try {
       await setDoc(doc(db, "laporan_kantong", docId), entryData, { merge: true });
-        removeCache("penerimaan_data"); removeCache("pengiriman_data"); // invalidate cache
       setIsModalOpen(false);
       triggerToast(editingId ? "Laporan diperbarui" : "Laporan ditambahkan", "ok");
     } catch (err) {
@@ -861,7 +1032,6 @@ export default function App() {
       onConfirm: async () => {
         try {
           await deleteDoc(doc(db, "laporan_kantong", id));
-          removeCache("penerimaan_data"); removeCache("pengiriman_data"); // invalidate cache
           triggerToast("Laporan berhasil dihapus", "ok");
         } catch (err) {
           console.error("Delete entry failed:", err);
@@ -893,7 +1063,6 @@ export default function App() {
         createdBy: currentUser.email || "",
         createdAt: new Date().toISOString()
       });
-      removeCache("penerimaan_data"); // invalidate cache
       triggerToast(`Penerimaan ${pnFormNama} (${PABRIK_SHORT[pnFormPabrik] || pnFormPabrik}) berhasil ${editingPenerimaanId ? "diperbarui" : "disimpan"}`, "ok");
       setPnFormJumlah("");
       setPnFormKeterangan("");
@@ -931,7 +1100,6 @@ export default function App() {
         createdBy: currentUser.email || "",
         createdAt: new Date().toISOString()
       });
-      removeCache("pengiriman_data"); // invalidate cache
       triggerToast(`Pengiriman ${pgFormNama} (${PABRIK_SHORT[pgFormPabrik] || pgFormPabrik}) berhasil ${editingPengirimanId ? "diperbarui" : "disimpan"}`, "ok");
       setPgFormJumlah("");
       setPgFormKeterangan("");
@@ -957,7 +1125,6 @@ export default function App() {
       onConfirm: async () => {
         try {
           await deleteDoc(doc(db, "penerimaan_data", id));
-          removeCache("penerimaan_data"); // invalidate cache
           triggerToast("Data penerimaan berhasil dihapus", "ok");
         } catch (err) {
           console.error("Delete penerimaan failed:", err);
@@ -976,7 +1143,6 @@ export default function App() {
       onConfirm: async () => {
         try {
           await deleteDoc(doc(db, "pengiriman_data", id));
-          removeCache("pengiriman_data"); // invalidate cache
           triggerToast("Data pengiriman berhasil dihapus", "ok");
         } catch (err) {
           console.error("Delete pengiriman failed:", err);
@@ -1750,7 +1916,7 @@ export default function App() {
               </AnimatePresence>
 
               {/* Data Loading Progress Bar */}
-              {reportsLoading && (
+              {dataLoading && (
                 <div className="bg-white border-2 border-[#e8e4de] rounded-2xl p-6 text-center shadow-xs mb-6 flex flex-col items-center justify-center gap-2">
                   <Loader2 className="w-8 h-8 text-brand-green animate-spin" />
                   <p className="text-xs text-[#6b6560] font-bold">Sinkronisasi Firestore real-time...</p>

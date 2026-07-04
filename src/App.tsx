@@ -2237,7 +2237,7 @@ export default function App() {
                               <h3 className="text-sm font-extrabold text-[#6b6560] tracking-wide uppercase mb-2 text-center [text-shadow:0_1px_0_rgba(255,255,255,0.8)]">TOTAL PEMAKAIAN KANTONG</h3>
                               <div className="border border-brand-green/30 rounded-2xl overflow-hidden bg-[#fdfcfb]">
                                 <div className="overflow-x-auto">
-                                  <table className="w-full text-left text-xs border-collapse">
+                                  <table className="w-full text-left text-sm border-collapse">
                                     <thead>
                                       <tr className="bg-[#faf9f7] text-[#6b6560] uppercase text-[10px] sm:text-xs font-semibold border-b border-[#e8e4de]">
                                         <th className="py-2.5 px-2 sm:px-4 font-semibold text-[#1a1814]">Jenis Kantong</th>
@@ -2350,7 +2350,7 @@ export default function App() {
                                         </div>
                                         {isShiftExpanded && (
                                           <div className="overflow-x-auto">
-                                            <table className="w-full text-left text-xs border-collapse">
+                                            <table className="w-full text-left text-sm border-collapse">
                                               <thead>
                                                 <tr className="bg-[#faf9f7] text-[#6b6560] uppercase text-[10px] sm:text-xs font-semibold border-b border-[#e8e4de]">
                                                   <th className="py-2 px-2 sm:px-4 font-semibold text-[#1a1814]">Jenis Kantong</th>
@@ -2478,7 +2478,7 @@ export default function App() {
                               {/* Desktop Table View */}
                               <div className="hidden md:block bg-white border-2 border-[#e8e4de] rounded-3xl shadow-xs overflow-hidden">
                                 <div className="overflow-x-auto">
-                                  <table className="w-full text-left text-xs border-collapse">
+                                  <table className="w-full text-left text-sm border-collapse">
                                     <thead>
                                       <tr className="bg-[#faf9f7] border-b border-[#e8e4de] text-[#6b6560] font-semibold uppercase text-[10px] tracking-wider">
                                         <th className="py-3 px-4 text-center w-12">No</th>
@@ -2669,7 +2669,7 @@ export default function App() {
                           <h3 className="text-center text-sm font-extrabold text-emerald-700 tracking-wide uppercase">📦 Data Penerimaan</h3>
                           <div className="bg-white border-2 border-emerald-200 rounded-3xl shadow-xs overflow-hidden">
                             <div className="overflow-x-auto">
-                              <table className="w-full text-left text-xs border-collapse">
+                              <table className="w-full text-left text-sm border-collapse">
                                 <thead>
                                   <tr className="bg-emerald-50 border-b border-emerald-200 text-emerald-800 font-semibold uppercase text-[10px] tracking-wider">
                                     <th className="py-3 px-4 text-center w-12">No</th>
@@ -2719,7 +2719,7 @@ export default function App() {
                           <h3 className="text-center text-sm font-extrabold text-blue-700 tracking-wide uppercase">🚚 Data Pengiriman</h3>
                           <div className="bg-white border-2 border-blue-200 rounded-3xl shadow-xs overflow-hidden">
                             <div className="overflow-x-auto">
-                              <table className="w-full text-left text-xs border-collapse">
+                              <table className="w-full text-left text-sm border-collapse">
                                 <thead>
                                   <tr className="bg-blue-50 border-b border-blue-200 text-blue-800 font-semibold uppercase text-[10px] tracking-wider">
                                     <th className="py-3 px-4 text-center w-12">No</th>
@@ -2884,7 +2884,7 @@ export default function App() {
 
                       {/* Desktop Table View (hidden on mobile) */}
                       <div className="hidden md:block border border-[#e8e4de] rounded-2xl overflow-hidden">
-                        <table className="w-full text-left text-xs border-collapse">
+                        <table className="w-full text-left text-sm border-collapse">
                           <thead>
                             <tr className="bg-[#faf9f7] border-b border-[#e8e4de] text-[#6b6560] font-semibold uppercase text-[10px] tracking-wider">
                               <th className="py-2.5 px-4">Alamat Email</th>

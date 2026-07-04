@@ -290,14 +290,14 @@ export default function StockHarianPage({
 
   const renderOPTTable = () => (
     <div className="rounded-3xl border-2 border-[#e8e4de] overflow-hidden mb-6 shadow-xs">
-      <div className="bg-gray-800 text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+      <div className="bg-brand-green text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2 rounded-t-3xl">
         <div className="flex items-center gap-2"><Package className="w-5 h-5" /><h3 className="font-bold text-lg">📦 {OPT_GUDANG}</h3></div>
         {isMasterAdmin && <div className="flex items-center gap-2">
         </div>}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead><tr className="bg-gray-100 text-gray-700">
+          <thead><tr className="bg-brand-green-light text-gray-700">
             <th className="px-4 py-2.5 text-left font-semibold border-b border-[#e8e4de] min-w-[180px]">Jenis Kantong</th>
             <th className="px-3 py-2.5 text-right font-semibold border-b border-[#e8e4de] min-w-[130px] whitespace-nowrap">Stock Awal</th>
             <th className="px-3 py-2.5 text-right font-semibold border-b border-[#e8e4de] min-w-[100px] whitespace-nowrap">Penerimaan</th>
@@ -386,22 +386,22 @@ export default function StockHarianPage({
 
   const renderPabrikTable = (pabrik: string) => {
     const pc: Record<string, { h: string; b: string; a: string }> = {
-      "Pabrik Baturaja 1 (PBR 1)": { h: "bg-indigo-600", b: "bg-indigo-50", a: "border-[#e8e4de]" },
-      "Pabrik Baturaja 2 (PBR 2)": { h: "bg-teal-600", b: "bg-teal-50", a: "border-[#e8e4de]" },
-      "Pabrik Palembang (PPG)": { h: "bg-amber-600", b: "bg-amber-50", a: "border-[#e8e4de]" },
-      "Pabrik Panjang (PPJ)": { h: "bg-rose-600", b: "bg-rose-50", a: "border-[#e8e4de]" },
+      "Pabrik Baturaja 1 (PBR 1)": { h: "bg-brand-green", b: "bg-brand-green-light", a: "border-[#e8e4de]" },
+      "Pabrik Baturaja 2 (PBR 2)": { h: "bg-brand-green/90", b: "bg-brand-green-light", a: "border-[#e8e4de]" },
+      "Pabrik Palembang (PPG)": { h: "bg-brand-green/80", b: "bg-brand-green-light", a: "border-[#e8e4de]" },
+      "Pabrik Panjang (PPJ)": { h: "bg-brand-green/70", b: "bg-brand-green-light", a: "border-[#e8e4de]" },
     };
     const c = pc[pabrik] || { h: "bg-gray-600", b: "bg-gray-50", a: "border-[#e8e4de]" };
     return (
       <div key={pabrik} className={`rounded-3xl border-2 ${c.a} overflow-hidden mb-6 shadow-xs`}>
-        <div className={`${c.h} text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2`}>
+        <div className={`${c.h} text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2 rounded-t-3xl`}>
           <div className="flex items-center gap-2"><Package className="w-5 h-5" /><h3 className="font-bold text-lg">🏭 {pabrik}</h3></div>
           {isMasterAdmin && <div className="flex items-center gap-2">
           </div>}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className={`${c.b} text-gray-700`}>
+            <thead><tr className="bg-brand-green-light text-gray-700">
               <th className="px-4 py-2.5 text-left font-semibold border-b border-[#e8e4de] min-w-[180px]">Jenis Kantong</th>
               <th className="px-3 py-2.5 text-right font-semibold border-b border-[#e8e4de] min-w-[130px] whitespace-nowrap">Stock Awal</th>
               <th className="px-3 py-2.5 text-right font-semibold border-b border-[#e8e4de] min-w-[100px] whitespace-nowrap">Penerimaan</th>
@@ -497,7 +497,7 @@ export default function StockHarianPage({
     );
   };
 
-  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /><span className="ml-3 text-gray-600">Memuat data stock harian...</span></div>;
+  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-brand-green" /><span className="ml-3 text-[#6b6560]">Memuat data stock harian...</span></div>;
 
   return (
     <div className="space-y-6">

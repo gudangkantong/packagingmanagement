@@ -153,6 +153,7 @@ export function useLaporanKantong(
     setLoading(true);
 
     // Filter 7 hari terakhir — hemat reads tapi tetap cover data hari ini + riwayat
+    // NOTE: Pakai single orderBy untuk hindari composite index requirement
     const sevenDaysAgo = getDateString(new Date(Date.now() - 7 * 86400000));
     const today = getDateString(new Date());
 
@@ -161,7 +162,6 @@ export function useLaporanKantong(
       where("tanggal", ">=", sevenDaysAgo),
       where("tanggal", "<=", today),
       orderBy("tanggal", "desc"),
-      orderBy("updatedAt", "desc"),
       limit(500)
     );
 

@@ -313,8 +313,7 @@ export function usePengirimanData(
 
 export function useAllowedUsers(
   currentUser: any,
-  isAllowed: boolean,
-  isAdmin: boolean
+  isAllowed: boolean
 ) {
   const [allowedUsers, setAllowedUsers] = useState<AllowedUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -327,7 +326,7 @@ export function useAllowedUsers(
     }
 
     // Guest tidak perlu data allowed_users
-    if (!isAdmin) {
+    if (currentUser.isAnonymous) {
       setAllowedUsers([]);
       setLoading(false);
       return;

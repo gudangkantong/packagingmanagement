@@ -247,12 +247,10 @@ export default function App() {
     isAllowed === true
   );
 
-  // 5. Allowed users → getDocs + cache (admin only, guest tidak perlu)
-  const tempIsMasterAdmin = currentUser?.email?.toLowerCase() === "managementpackaging@gmail.com";
+  // 5. Allowed users → getDocs + cache (authenticated users only, guest tidak perlu)
   const { allowedUsers, refreshAllowedUsers } = useAllowedUsers(
     currentUser,
-    isAllowed === true,
-    tempIsMasterAdmin
+    isAllowed === true
   );
 
   // 6. Locked dates → REAL-TIME (data kecil, penting untuk validasi)

@@ -1656,8 +1656,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#faf9f6] text-[#1a1814] flex flex-col selection:bg-brand-green selection:text-white scrollbar-hide">
       <style>{`
-        html, body { overflow: hidden; height: 100%; }
-        .scrollbar-hide { height: 100vh; overflow-y: auto; }
+        .scrollbar-hide { min-height: 100vh; }
       `}</style>
       {/* Toast Wrapper */}
       <div className="fixed top-4 right-4 left-4 sm:left-auto z-50 flex flex-col gap-2 max-w-sm sm:w-80 mx-auto sm:mx-0 pointer-events-none">

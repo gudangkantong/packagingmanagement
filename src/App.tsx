@@ -15,6 +15,7 @@ import {
   setDoc,
   deleteDoc,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
   where,
@@ -118,6 +119,13 @@ export default function App() {
   const [dataLoading, setDataLoading] = useState<boolean>(true);
   const [penerimaanList, setPenerimaanList] = useState<PenerimaanData[]>([]);
   const [pengirimanList, setPengirimanList] = useState<PengirimanData[]>([]);
+
+  // View mode: 7days (real-time) vs thisMonth/lastMonth/custom (cache + on-demand)
+  type ViewMode = "7days" | "thisMonth" | "lastMonth" | "custom";
+  const [viewMode, setViewMode] = useState<ViewMode>("7days");
+  const [customDateFrom, setCustomDateFrom] = useState<string>("");
+  const [customDateTo, setCustomDateTo] = useState<string>("");
+  const [isFetchingHistorical, setIsFetchingHistorical] = useState<boolean>(false);
 
   // Role-based check (dari Firestore allowed_users collection)
   const currentUserData = allowedUsers.find(u => u.email === currentUser?.email?.toLowerCase());
@@ -348,26 +356,18 @@ export default function App() {
     };
   }, []);
 
-  // Listen to Firestore reports collection when authorized
-  useEffect(() => {
-    if (!currentUser || isAllowed !== true) {
-      setReports([]);
-      return;
-    }
-
-    setDataLoading(true);
-    // Filter 30 hari terakhir untuk hemat reads
-    const thirtyDaysAgo = getDateString(new Date(Date.now() - 30 * 86400000));
-    const today = getDateString(new Date());
-    const reportsQuery = query(
-      collection(db, "laporan_kantong"),
-      where("tanggal", ">=", thirtyDaysAgo),
-      where("tanggal", "<=", today),
-      orderBy("tanggal", "desc")
-    );
-    const unsubReports = onSnapshot(reportsQuery, (querySnapshot) => {
+  // Helper: fetch laporan by date range (one-time read)
+  const fetchReportsByRange = async (fromDate: string, toDate: string): Promise<LaporanKantong[]> => {
+    try {
+      const q = query(
+        collection(db, "laporan_kantong"),
+        where("tanggal", ">=", fromDate),
+        where("tanggal", "<=", toDate),
+        orderBy("tanggal", "desc")
+      );
+      const snap = await getDocs(q);
       const items: LaporanKantong[] = [];
-      querySnapshot.forEach((docSnap) => {
+      snap.forEach((docSnap) => {
         const data = docSnap.data();
         items.push({
           id: docSnap.id,
@@ -384,46 +384,216 @@ export default function App() {
           updatedAt: data.updatedAt || ""
         });
       });
-      setReports(items);
-      setDataLoading(false);
-    }, (err) => {
-      console.error("Failed to sync reports:", err);
-      triggerToast("Gagal menyinkronkan data real-time", "er");
-      setDataLoading(false);
-      handleFirestoreError(err, OperationType.GET, "laporan_kantong");
-    });
+      return items;
+    } catch (err) {
+      console.error("Failed to fetch reports by range:", err);
+      return [];
+    }
+  };
 
-    return () => unsubReports();
-  }, [currentUser, isAllowed]);
+  // Helper: get date range for viewMode
+  const getDateRange = (mode: ViewMode): { from: string; to: string } => {
+    const today = new Date();
+    switch (mode) {
+      case "7days": {
+        const from = new Date(today.getTime() - 7 * 86400000);
+        return { from: getDateString(from), to: getDateString(today) };
+      }
+      case "thisMonth": {
+        const from = new Date(today.getFullYear(), today.getMonth(), 1);
+        return { from: getDateString(from), to: getDateString(today) };
+      }
+      case "lastMonth": {
+        const from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const to = new Date(today.getFullYear(), today.getMonth(), 0);
+        return { from: getDateString(from), to: getDateString(to) };
+      }
+      case "custom": {
+        return { from: customDateFrom || getDateString(today), to: customDateTo || getDateString(today) };
+      }
+      default:
+        return { from: getDateString(new Date(today.getTime() - 7 * 86400000)), to: getDateString(today) };
+    }
+  };
 
-  // Listen to penerimaan_data collection when authorized
+  // Main reports useEffect
+  useEffect(() => {
+    if (!currentUser || isAllowed !== true) {
+      setReports([]);
+      return;
+    }
+
+    const { from, to } = getDateRange(viewMode);
+
+    // Mode 7 hari: real-time onSnapshot + cache ke localStorage
+    if (viewMode === "7days") {
+      setDataLoading(true);
+      const reportsQuery = query(
+        collection(db, "laporan_kantong"),
+        where("tanggal", ">=", from),
+        where("tanggal", "<=", to),
+        orderBy("tanggal", "desc")
+      );
+      const unsub = onSnapshot(reportsQuery, (snap) => {
+        const items: LaporanKantong[] = [];
+        snap.forEach((docSnap) => {
+          const data = docSnap.data();
+          items.push({
+            id: docSnap.id,
+            vendor: data.vendor || "",
+            nama: data.nama || "",
+            pabrik: data.pabrik || "",
+            shift: Number(data.shift) || 1,
+            tanggal: data.tanggal || "",
+            utuh: Number(data.utuh) || 0,
+            pecah: Number(data.pecah) || 0,
+            sortir: Number(data.sortir) || 0,
+            total: Number(data.total) || 0,
+            createdBy: data.createdBy || "",
+            updatedAt: data.updatedAt || ""
+          });
+        });
+        setReports(items);
+        setDataLoading(false);
+
+        // Simpan ke localStorage per tanggal (untuk cache bulanan)
+        const byDate: Record<string, LaporanKantong[]> = {};
+        items.forEach((item) => {
+          if (!byDate[item.tanggal]) byDate[item.tanggal] = [];
+          byDate[item.tanggal].push(item);
+        });
+        Object.entries(byDate).forEach(([date, dateItems]) => {
+          setCache(`laporan_${date}`, dateItems, 7 * 24 * 60 * 60 * 1000); // cache 7 hari
+        });
+      }, (err) => {
+        console.error("Failed to sync reports:", err);
+        triggerToast("Gagal menyinkronkan data real-time", "er");
+        setDataLoading(false);
+        handleFirestoreError(err, OperationType.GET, "laporan_kantong");
+      });
+      return () => unsub();
+    }
+
+    // Mode lain (bulan ini / bulan lalu / custom): cache-first + one-time fetch
+    setDataLoading(true);
+    setIsFetchingHistorical(true);
+
+    const loadHistorical = async () => {
+      // Cek cache dulu per tanggal
+      const allItems: LaporanKantong[] = [];
+      const missingDates: string[] = [];
+      const fromDate = new Date(from + "T00:00:00");
+      const toDate = new Date(to + "T00:00:00");
+
+      // Iterasi setiap tanggal dalam range
+      const current = new Date(fromDate);
+      while (current <= toDate) {
+        const dateStr = getDateString(current);
+        const cached = getCached<LaporanKantong[]>(`laporan_${dateStr}`);
+        if (cached) {
+          allItems.push(...cached);
+        } else {
+          missingDates.push(dateStr);
+        }
+        current.setDate(current.getDate() + 1);
+      }
+
+      // Tampilkan data dari cache dulu
+      if (allItems.length > 0) {
+        allItems.sort((a, b) => b.tanggal.localeCompare(a.tanggal) || b.updatedAt.localeCompare(a.updatedAt));
+        setReports(allItems);
+      }
+
+      // Fetch tanggal yang belum ada di cache
+      if (missingDates.length > 0) {
+        try {
+          // Batch fetch per rentang (lebih efisien dari per-tanggal)
+          const fetched = await fetchReportsByRange(missingDates[0], missingDates[missingDates.length - 1]);
+          
+          // Simpan ke cache per tanggal
+          const byDate: Record<string, LaporanKantong[]> = {};
+          fetched.forEach((item) => {
+            if (!byDate[item.tanggal]) byDate[item.tanggal] = [];
+            byDate[item.tanggal].push(item);
+          });
+          Object.entries(byDate).forEach(([date, dateItems]) => {
+            setCache(`laporan_${date}`, dateItems, 7 * 24 * 60 * 60 * 1000);
+          });
+
+          // Gabungkan dengan data cache
+          const merged = [...allItems, ...fetched];
+          merged.sort((a, b) => b.tanggal.localeCompare(a.tanggal) || b.updatedAt.localeCompare(a.updatedAt));
+          setReports(merged);
+        } catch (err) {
+          console.error("Failed to fetch historical reports:", err);
+        }
+      }
+
+      setDataLoading(false);
+      setIsFetchingHistorical(false);
+    };
+
+    loadHistorical();
+  }, [currentUser, isAllowed, viewMode, customDateFrom, customDateTo]);
+
+  // Penerimaan: getDocs + cache (jarang berubah, hemat reads)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setPenerimaanList([]); return; }
-    const pnQuery = query(collection(db, "penerimaan_data"));
-    const unsubPn = onSnapshot(pnQuery, (snap) => {
-      const items: PenerimaanData[] = [];
-      snap.forEach((d) => {
-        const data = d.data();
-        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
-      });
-      setPenerimaanList(items);
-    }, (err) => { console.error("Failed to sync penerimaan_data:", err); handleFirestoreError(err, OperationType.GET, "penerimaan_data"); });
-    return () => unsubPn();
+
+    // Cek cache dulu
+    const cachedPn = getCached<PenerimaanData[]>("penerimaan_data");
+    if (cachedPn) {
+      setPenerimaanList(cachedPn);
+      return;
+    }
+
+    const loadPenerimaan = async () => {
+      try {
+        const pnQuery = query(collection(db, "penerimaan_data"));
+        const snap = await getDocs(pnQuery);
+        const items: PenerimaanData[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+        });
+        setPenerimaanList(items);
+        setCache("penerimaan_data", items, 24 * 60 * 60 * 1000); // cache 24 jam
+      } catch (err) {
+        console.error("Failed to load penerimaan_data:", err);
+        handleFirestoreError(err, OperationType.GET, "penerimaan_data");
+      }
+    };
+    loadPenerimaan();
   }, [currentUser, isAllowed]);
 
-  // Listen to pengiriman_data collection when authorized
+  // Pengiriman: getDocs + cache (jarang berubah, hemat reads)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setPengirimanList([]); return; }
-    const pgQuery = query(collection(db, "pengiriman_data"));
-    const unsubPg = onSnapshot(pgQuery, (snap) => {
-      const items: PengirimanData[] = [];
-      snap.forEach((d) => {
-        const data = d.data();
-        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
-      });
-      setPengirimanList(items);
-    }, (err) => { console.error("Failed to sync pengiriman_data:", err); handleFirestoreError(err, OperationType.GET, "pengiriman_data"); });
-    return () => unsubPg();
+
+    // Cek cache dulu
+    const cachedPg = getCached<PengirimanData[]>("pengiriman_data");
+    if (cachedPg) {
+      setPengirimanList(cachedPg);
+      return;
+    }
+
+    const loadPengiriman = async () => {
+      try {
+        const pgQuery = query(collection(db, "pengiriman_data"));
+        const snap = await getDocs(pgQuery);
+        const items: PengirimanData[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+        });
+        setPengirimanList(items);
+        setCache("pengiriman_data", items, 24 * 60 * 60 * 1000); // cache 24 jam
+      } catch (err) {
+        console.error("Failed to load pengiriman_data:", err);
+        handleFirestoreError(err, OperationType.GET, "pengiriman_data");
+      }
+    };
+    loadPengiriman();
   }, [currentUser, isAllowed]);
 
   // Listen to allowed_users collection when authorized
@@ -1014,6 +1184,7 @@ export default function App() {
 
     try {
       await setDoc(doc(db, "laporan_kantong", docId), entryData, { merge: true });
+      removeCache(`laporan_${formTanggal}`); // invalidate cache for this date
       setIsModalOpen(false);
       triggerToast(editingId ? "Laporan diperbarui" : "Laporan ditambahkan", "ok");
     } catch (err) {
@@ -1040,6 +1211,7 @@ export default function App() {
       onConfirm: async () => {
         try {
           await deleteDoc(doc(db, "laporan_kantong", id));
+          if (item?.tanggal) removeCache(`laporan_${item.tanggal}`); // invalidate cache
           triggerToast("Laporan berhasil dihapus", "ok");
         } catch (err) {
           console.error("Delete entry failed:", err);
@@ -1071,6 +1243,7 @@ export default function App() {
         createdBy: currentUser.email || "",
         createdAt: new Date().toISOString()
       });
+      removeCache("penerimaan_data"); // invalidate cache
       triggerToast(`Penerimaan ${pnFormNama} (${PABRIK_SHORT[pnFormPabrik] || pnFormPabrik}) berhasil ${editingPenerimaanId ? "diperbarui" : "disimpan"}`, "ok");
       setPnFormJumlah("");
       setPnFormKeterangan("");
@@ -1108,6 +1281,7 @@ export default function App() {
         createdBy: currentUser.email || "",
         createdAt: new Date().toISOString()
       });
+      removeCache("pengiriman_data"); // invalidate cache
       triggerToast(`Pengiriman ${pgFormNama} (${PABRIK_SHORT[pgFormPabrik] || pgFormPabrik}) berhasil ${editingPengirimanId ? "diperbarui" : "disimpan"}`, "ok");
       setPgFormJumlah("");
       setPgFormKeterangan("");
@@ -1133,6 +1307,7 @@ export default function App() {
       onConfirm: async () => {
         try {
           await deleteDoc(doc(db, "penerimaan_data", id));
+          removeCache("penerimaan_data"); // invalidate cache
           triggerToast("Data penerimaan berhasil dihapus", "ok");
         } catch (err) {
           console.error("Delete penerimaan failed:", err);
@@ -1151,6 +1326,7 @@ export default function App() {
       onConfirm: async () => {
         try {
           await deleteDoc(doc(db, "pengiriman_data", id));
+          removeCache("pengiriman_data"); // invalidate cache
           triggerToast("Data pengiriman berhasil dihapus", "ok");
         } catch (err) {
           console.error("Delete pengiriman failed:", err);
@@ -1812,6 +1988,58 @@ export default function App() {
                     >
                       <ChevronRight className="w-5 h-5" />
                     </button>
+                  </div>
+
+                  {/* View Mode Selector */}
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={viewMode}
+                      onChange={(e) => {
+                        const mode = e.target.value as ViewMode;
+                        setViewMode(mode);
+                        if (mode === "custom") {
+                          // Set default custom range to this month
+                          const today = new Date();
+                          const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+                          setCustomDateFrom(getDateString(firstDay));
+                          setCustomDateTo(getDateString(today));
+                        }
+                      }}
+                      className="border border-[#e8e4de] bg-white hover:border-brand-green/50 text-[#1a1814] px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer focus:outline-none focus:border-brand-green transition-all"
+                    >
+                      <option value="7days">📅 7 Hari Terakhir 🟢</option>
+                      <option value="thisMonth">📦 Bulan Ini</option>
+                      <option value="lastMonth">📦 Bulan Lalu</option>
+                      <option value="custom">📆 Pilih Tanggal</option>
+                    </select>
+                    {viewMode !== "7days" && (
+                      <button
+                        onClick={() => setViewMode("7days")}
+                        className="text-xs text-brand-green hover:text-brand-green-hover font-bold underline cursor-pointer"
+                      >
+                        ← Kembali Real-time
+                      </button>
+                    )}
+                    {viewMode === "custom" && (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="date"
+                          value={customDateFrom}
+                          onChange={(e) => setCustomDateFrom(e.target.value)}
+                          className="border border-[#e8e4de] bg-white rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-brand-green"
+                        />
+                        <span className="text-xs text-[#9e9892]">s/d</span>
+                        <input
+                          type="date"
+                          value={customDateTo}
+                          onChange={(e) => setCustomDateTo(e.target.value)}
+                          className="border border-[#e8e4de] bg-white rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-brand-green"
+                        />
+                      </div>
+                    )}
+                    {isFetchingHistorical && (
+                      <Loader2 className="w-4 h-4 animate-spin text-brand-green" />
+                    )}
                   </div>
 
                   {/* Today shortcuts, Excel Export & Verification Lock */}

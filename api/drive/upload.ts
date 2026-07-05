@@ -7,6 +7,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  // Validate origin
+  const origin = req.headers.origin || req.headers.referer || "";
+  const allowedOrigins = [
+    "https://packagingmanagement.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
+  ];
+  const isAllowedOrigin = allowedOrigins.some(o => origin.startsWith(o));
+  if (origin && !isAllowedOrigin) {
+    return res.status(403).json({ error: "Origin not allowed" });
+  }
+
   try {
     const { fileContent, fileName, accessToken, mimeType } = req.body;
 
@@ -18,8 +30,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: "File content is required" });
     }
 
-    // Setup OAuth2 client
-    const clientId = process.env.VITE_GOOGLE_CLIENT_ID || "780987725360-4k7qen9j0mh4epbo1u98tlf2eftik1n8.apps.googleusercontent.com";
+    // Setup OAuth2 client — VITE_GOOGLE_CLIENT_ID wajib diisi
+    const clientId = process.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      console.error("Missing VITE_GOOGLE_CLIENT_ID environment variable");
+      return res.status(500).json({ error: "Server configuration error" });
+    }
     const oauth2Client = new google.auth.OAuth2(clientId);
     oauth2Client.setCredentials({ access_token: accessToken });
     const drive = google.drive({ version: "v3", auth: oauth2Client });

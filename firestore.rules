@@ -7,7 +7,8 @@ service cloud.firestore {
     }
 
     function isMasterAdmin() {
-      return isAuthenticated() && request.auth.token.email == "managementpackaging@gmail.com";
+      return isAuthenticated() &&
+        request.auth.token.email == get(/databases/$(database)/documents/config/master_admin).data.email;
     }
 
     function getUserRole() {
@@ -45,17 +46,17 @@ service cloud.firestore {
            ));
     }
 
-    function isDateLocked(dateStr) {
-      return exists(/databases/$(database)/documents/locked_dates/$(dateStr)) &&
-             get(/databases/$(database)/documents/locked_dates/$(dateStr)).data.locked == true;
-    }
-
     match /allowed_users/{email} {
       allow read: if isAuthenticated();
       allow write: if isSuperAdmin();
     }
 
     match /locked_dates/{date} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
+    match /config/{doc} {
       allow read: if isAuthenticated();
       allow write: if isSuperAdmin();
     }
@@ -78,20 +79,11 @@ service cloud.firestore {
     match /laporan_kantong/{id} {
       allow read: if isAuthenticated();
 
-      allow create: if isAdmin() && (
-        isSuperAdmin() ||
-        (!isDateLocked(request.resource.data.tanggal) && canWritePabrik(request.resource.data.pabrik))
-      );
+      allow create: if isAdmin() && canWritePabrik(request.resource.data.pabrik);
 
-      allow update: if isAdmin() && (
-        isSuperAdmin() ||
-        (!isDateLocked(request.resource.data.tanggal) && canWritePabrik(request.resource.data.pabrik))
-      );
+      allow update: if isAdmin() && canWritePabrik(request.resource.data.pabrik);
 
-      allow delete: if isAdmin() && (
-        isSuperAdmin() ||
-        (!isDateLocked(resource.data.tanggal) && canWritePabrik(resource.data.pabrik))
-      );
+      allow delete: if isAdmin() && canWritePabrik(request.resource.data.pabrik);
     }
 
     // === Stock Harian Kantong ===

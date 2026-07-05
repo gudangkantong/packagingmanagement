@@ -2280,7 +2280,7 @@ export default function App() {
                                                 {stat.total.toLocaleString()}
                                               </td>
                                             </tr>
-                                            {isExpanded && Object.entries(stat.vendors).map(([vendorName, vStat]) => (
+                                            {isExpanded && Object.entries(stat.vendors).map(([vendorName, vStat]: [string, { utuh: number; pecah: number; sortir: number; total: number }]) => (
                                               <tr key={`${name}-${vendorName}`} className="bg-[#f5f8f4]">
                                                 <td className="py-1.5 px-4 sm:px-6 text-xs text-[#6b6560] italic pl-8">↳ {vendorName}</td>
                                                 <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-brand-green">{vStat.utuh.toLocaleString()}</td>
@@ -2380,7 +2380,7 @@ export default function App() {
                                                         <td className="py-1.5 px-2 sm:px-4 text-center font-semibold text-xs text-amber-600">{stat.sortir.toLocaleString()}</td>
                                                         <td className="py-1.5 px-2 sm:px-4 text-center font-extrabold text-xs text-brand-green">{stat.total.toLocaleString()}</td>
                                                       </tr>
-                                                      {isShiftBagExpanded && Object.entries(stat.vendors).map(([vendorName, vStat]) => (
+                                                      {isShiftBagExpanded && Object.entries(stat.vendors).map(([vendorName, vStat]: [string, { utuh: number; pecah: number; sortir: number; total: number }]) => (
                                                         <tr key={`${name}-${vendorName}`} className="bg-[#f5f8f4]">
                                                           <td className="py-1.5 px-4 sm:px-6 text-xs text-[#6b6560] italic pl-8">↳ {vendorName}</td>
                                                           <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-brand-green">{vStat.utuh.toLocaleString()}</td>

@@ -142,21 +142,44 @@ export default function StockHarianPage({
   }, [stockData, selectedDate]);
 
 
-  // Real-time sync: update stock awal HANYA untuk baris yang BELUM disimpan
+  // Auto-populate stockAwal from prev day's stockAkhir + AUTO-SAVE for new dates
   useEffect(() => {
-    setEditBuffer(prev => {
-      const next = { ...prev };
-      let changed = false;
-      ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
-        const id = makeDocId(p, n, selectedDate);
-        if (stockData[id]) return;
-        const prevId = makeDocId(p, n, prevDate);
-        const pv = prevDayData[prevId];
-        const newSA = pv ? String(Number(pv.stockAkhir) || 0) : "";
-        if (next[id] && next[id].stockAwal !== newSA) { next[id] = { stockAwal: newSA }; changed = true; }
-      }));
-      return changed ? next : prev;
-    });
+    if (!currentUser || !isMasterAdmin || loading) return;
+    const toSave: Array<{ pabrik: string; nama: string; docId: string; stockAwal: number }> = [];
+
+    ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
+      const id = makeDocId(p, n, selectedDate);
+      if (stockData[id]) return; // already saved, skip
+      const prevId = makeDocId(p, n, prevDate);
+      const pv = prevDayData[prevId];
+      if (!pv) return; // no prev data
+      const sa = Number(pv.stockAkhir) || 0;
+      if (sa === 0) return; // skip zero values
+      toSave.push({ pabrik: p, nama: n, docId: id, stockAwal: sa });
+    }));
+
+    if (toSave.length === 0) return;
+
+    const doAutoSave = async () => {
+      try {
+        for (const item of toSave) {
+          const pn = computePenerimaan(item.pabrik, item.nama, selectedDate);
+          const pg = computePengiriman(item.pabrik, item.nama, selectedDate);
+          const isOPT = item.pabrik === OPT_GUDANG;
+          const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[item.pabrik], item.nama, selectedDate);
+          const sk = isOPT ? item.stockAwal + pn - pg : item.stockAwal + pn - pg - pk;
+          await setDoc(doc(db, "stock_harian", item.docId), {
+            pabrik: item.pabrik, nama: item.nama, tanggal: selectedDate,
+            stockAwal: item.stockAwal, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
+            createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
+          }, { merge: true });
+        }
+        console.log(`[StockHarian] Auto-saved ${toSave.length} rows from prev day data`);
+      } catch (e) {
+        console.error("[StockHarian] Auto-save failed:", e);
+      }
+    };
+    doAutoSave();
   }, [prevDayData, stockData, selectedDate]);
 
   // === AUTO-SYNC: Update stock_harian Firestore saat penerimaan/pengiriman berubah ===

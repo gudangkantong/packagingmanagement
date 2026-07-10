@@ -16,14 +16,11 @@ const fontSub = { name: 'Calibri', size: 11, color: { argb: 'FFFFFFFF' } } as Pa
 const fontSection = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF2E7D32' } } as Partial<ExcelJS.Font>;
 const fontHeader = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } } as Partial<ExcelJS.Font>;
 const fontData = { name: 'Calibri', size: 10 } as Partial<ExcelJS.Font>;
-const fontTotal = { name: 'Calibri', size: 10, bold: true } as Partial<ExcelJS.Font>;
+const fontSubtotal = { name: 'Calibri', size: 10, bold: true } as Partial<ExcelJS.Font>;
 const fontNol = { name: 'Calibri', size: 10, color: { argb: 'FF9CA3AF' } } as Partial<ExcelJS.Font>;
 
 const fillGreen = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E7D32' } } as Partial<ExcelJS.Fill>;
 const fillGreenLight = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E9' } } as Partial<ExcelJS.Fill>;
-const fillHeaderPCH = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF44336' } } as Partial<ExcelJS.Fill>;
-const fillHeaderSRT = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF9800' } } as Partial<ExcelJS.Fill>;
-const fillGrey = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F5F5' } } as Partial<ExcelJS.Fill>;
 
 const setCell = (ws: ExcelJS.Worksheet, r: number, c: number, value: any, font?: Partial<ExcelJS.Font>, fill?: Partial<ExcelJS.Fill>, align?: string) => {
   const cell = ws.getCell(r, c);
@@ -32,7 +29,6 @@ const setCell = (ws: ExcelJS.Worksheet, r: number, c: number, value: any, font?:
   if (fill) cell.fill = fill as ExcelJS.Fill;
   if (align === 'right') cell.alignment = { horizontal: 'right' };
   else if (align === 'center') cell.alignment = { horizontal: 'center' };
-  else if (align === 'right-v') cell.alignment = { horizontal: 'right', vertical: 'middle' };
   cell.border = { bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } } };
 };
 
@@ -46,7 +42,6 @@ const setMergedCell = (ws: ExcelJS.Worksheet, r1: number, c1: number, r2: number
   else cell.alignment = { horizontal: 'center', vertical: 'middle' };
 };
 
-/** Set cell value as Excel formula */
 const setFormula = (ws: ExcelJS.Worksheet, r: number, c: number, formula: string, font?: Partial<ExcelJS.Font>, fill?: Partial<ExcelJS.Fill>, align?: string) => {
   const cell = ws.getCell(r, c);
   cell.value = { formula } as any;
@@ -57,7 +52,6 @@ const setFormula = (ws: ExcelJS.Worksheet, r: number, c: number, formula: string
   cell.border = { bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } } };
 };
 
-/** Column number (1-based) → Excel letter(s) */
 const colLetter = (col: number): string => {
   let n = col;
   let s = '';
@@ -69,11 +63,7 @@ const colLetter = (col: number): string => {
   return s;
 };
 
-/** Get total days in month */
 const daysInMonth = (year: number, month: number): number => new Date(year, month, 0).getDate();
-
-/** Format number (display via fontData, but for formulas we just use the raw formula) */
-const fmtNum = (n: number): string => n === 0 ? '-' : n.toLocaleString('en-US');
 
 export interface MonthlyExcelOptions {
   reports: LaporanKantong[];
@@ -81,11 +71,29 @@ export interface MonthlyExcelOptions {
   currentUserEmail: string | null | undefined;
 }
 
-// Per-product sheet metadata
 interface ProdSheetInfo {
   sheetName: string;
   vendors: string[];
+  prodCols: number; // columns per vendor in detail sheet (always 8: UTUH,PCH,%PCH,SRT,%SRT,MAS,LAB,TOTAL)
 }
+
+// Columns per vendor in detail sheet (0-based offset within vendor block)
+const V_UTUH = 0;
+const V_PCH = 1;
+const V_PCH_PCT = 2;
+const V_SRT = 3;
+const V_SRT_PCT = 4;
+const V_MAS = 5;
+const V_LAB = 6;
+const V_TOTAL = 7;
+const V_COLS = 8; // per vendor
+
+// Columns per product in Data Produksi summary sheet
+const DP_UTUH = 0;
+const DP_PCH = 1;
+const DP_SRT = 2;
+const DP_JUMLAH = 3;
+const DP_COLS = 4; // per product
 
 // ============================================================
 // CORE: generate monthly workbook
@@ -98,10 +106,7 @@ export const generateMonthlyReport = async (opts: MonthlyExcelOptions): Promise<
   const monthName = MONTH_NAMES[month];
   const dim = daysInMonth(year, month);
 
-  // Filter reports for this month
   const monthReports = reports.filter(r => r.tanggal.startsWith(selectedMonth));
-
-  // Group by pabrik
   const siteKeys = ['PBR 1', 'PBR 2', 'PPG', 'PPJ'];
   const wb = new ExcelJS.Workbook();
 
@@ -113,7 +118,7 @@ export const generateMonthlyReport = async (opts: MonthlyExcelOptions): Promise<
     const siteName = fullLabel.replace(/^Pabrik\s+/, '');
     const products = [...new Set(siteReports.map(r => r.nama))];
 
-    // ── 1. Create product detail sheets FIRST (so DATA PROD can reference them) ──
+    // Create product detail sheets
     const prodSheets: Record<string, ProdSheetInfo> = {};
     for (const product of products) {
       const prodReports = siteReports.filter(r => r.nama === product);
@@ -123,25 +128,26 @@ export const generateMonthlyReport = async (opts: MonthlyExcelOptions): Promise<
       const rawName = `${product} ${siteKey}`;
       const cleanName = rawName.replace(/[\\\/\?\*\[\]]/g, '_');
       const wsProd = wb.addWorksheet(cleanName);
-      writeProductSheet(wsProd, prodReports, product, siteName, vendors, dim, siteKey);
-      prodSheets[product] = { sheetName: cleanName, vendors };
+      writeProductSheet(wsProd, prodReports, product, siteName, vendors, dim);
+      prodSheets[product] = { sheetName: cleanName, vendors, prodCols: V_COLS };
     }
 
-    // ── 2. Create DATA PROD sheet with FORMULAS linking to product sheets ──
-    const ws = wb.addWorksheet(`DATA PROD ${siteKey}`);
-    writeDataProdSheet(ws, siteReports, siteName, monthName, year, month, dim, products, prodSheets, siteKey);
+    // Create Data Produksi sheet
+    const ws = wb.addWorksheet(`Data Produksi ${siteKey}`);
+    writeDataProduksi(ws, siteName, monthName, year, dim, products, prodSheets);
   }
 
   return wb;
 };
 
 // ============================================================
-// SHEET per product: vendor breakdown (SOURCE of truth)
+// DETAIL SHEET: per product × per vendor (8 cols/vendor)
+// UTUH | PCH | %PCH | SRT | %SRT | MAS | LAB | TOTAL(=UTUH+PCH+SRT+MAS+LAB)
 // ============================================================
 const writeProductSheet = (
   ws: ExcelJS.Worksheet, reports: LaporanKantong[],
   productName: string, siteName: string,
-  vendors: string[], dim: number, siteKey: string
+  vendors: string[], dim: number
 ) => {
   // Build daily × vendor data
   const daily: Map<number, Map<string, { utuh: number; pecah: number; sortir: number; total: number }>> = new Map();
@@ -161,220 +167,469 @@ const writeProductSheet = (
     }
   }
 
-  const prodCols = 6;
-  const colStart = 2;
+  const totalCols = 1 + vendors.length * V_COLS; // TGL col + all vendor blocks
+  const colGap = 1; // gap column between vendor blocks
   let row = 1;
 
-  // Row 1: Title
-  setMergedCell(ws, row, 1, row, 1 + vendors.length * prodCols, `PEMAKAIAN KANTONG ${productName.toUpperCase()} ${siteName}`, fontTitle, fillGreen);
-  row++;
-  setMergedCell(ws, row, 1, row, 1 + vendors.length * prodCols, `BULAN : ${siteKey}`, fontSub, fillGreen);
+  // Row 1: Title (merged across all cols)
+  setMergedCell(ws, row, 1, row, totalCols, `PEMAKAIAN KANTONG ${productName.toUpperCase()} ${siteName}`, fontTitle, fillGreen);
   row++;
 
-  // Row 3: Vendor headers
-  let c = colStart;
-  for (const v of vendors) {
-    setMergedCell(ws, row, c, row, c + prodCols - 1, v, fontSection, fillGreenLight);
-    c += prodCols;
-  }
+  // Row 2: Vendor names (merged over each vendor block)
+  row++; // skip row 2 as empty (matches sample)
+  // Actually looking at the sample more carefully:
+  // BIGBAG PCC PBR 2 sheet has:
+  // R1: PEMAKAIAN KANTONG BIGBAG PCC PBR 2 (merged B1:AJ1)
+  // R2: TGL | VENDOR 1 merged B2:I2 | VENDOR 2 merged K2:R2 | VENDOR 3 merged T2:AA2
+  // R3: (sub columns)
+  // R4: (KELUAR labels)
+  // R5+: data
+
+  // So let me follow this layout:
+  // Row 1: Title (merged B:last)
+  // Row 2: TGL | Vendor 1 block merged | Vendor 2 block merged | ...
+  // Row 3: sub-column headers for each vendor
+  // Row 4: (optional) TOTAL column labeled "KELUAR"
+
+  // Actually, for simplicity, let me match exactly:
+  // R1: Title (merged)
+  // R2: TGL (A2) | Vendor1 (B2:I2) | Vendor2 (K2:R2) | ...
+  // R3: sub columns (B3:UTUH, C3:PCH, D3:%PCH, etc.)
+  // R4: "KELUAR" under TOTAL column (I4, R4, AA4)
+  // R5+: data rows
+
+  // Reset:
+  row = 1;
+  setMergedCell(ws, row, 1, 1, totalCols, `PEMAKAIAN KANTONG ${productName.toUpperCase()} ${siteName}`, fontTitle, fillGreen);
+  row = 2;
+
+  // Row 2: TGL + vendor blocks
   setCell(ws, row, 1, 'TGL', fontHeader, fillGreen, 'center');
-
-  row++;
-  // Row 4: Sub-headers
-  c = colStart;
-  const subHeaders = ['UTUH', 'PCH', '%PCH', 'SRT', '%SRT', 'TOTAL'];
-  const subFills = [undefined, fillHeaderPCH, fillHeaderPCH, fillHeaderSRT, fillHeaderSRT, undefined];
+  let c = 2;
   for (let vi = 0; vi < vendors.length; vi++) {
-    for (let si = 0; si < prodCols; si++) {
-      setCell(ws, row, c, subHeaders[si], fontHeader, subFills[si], 'center');
+    const blockEnd = c + V_COLS - 1;
+    setMergedCell(ws, row, c, row, blockEnd, vendors[vi], fontSection, fillGreenLight);
+    c = blockEnd + 1 + colGap;
+  }
+
+  row = 3;
+  // Row 3: sub-column headers
+  const subHeaders = ['UTUH', 'PCH', '%PCH', 'SRT', '%SRT', 'MAS', 'LAB', 'TOTAL'];
+  c = 2;
+  for (let vi = 0; vi < vendors.length; vi++) {
+    for (let si = 0; si < V_COLS; si++) {
+      setCell(ws, row, c, subHeaders[si], fontHeader, fillGreen, 'center');
       c++;
     }
+    c++; // gap column
   }
+  setCell(ws, row, 1, '', fontHeader, fillGreen, 'center');
 
-  // ── Data rows (ALL days 1–dim) ──
-  row = 5;
-  const dataStartRow = row;
-  for (let d = 1; d <= dim; d++) {
-    const dd = daily.get(d)!;
-    setCell(ws, row, 1, d, fontData, undefined, 'center');
-    c = colStart;
-    for (const v of vendors) {
-      const data = dd.get(v)!;
-      const bg = data.total > 0 ? fillGreenLight : undefined;
-      setCell(ws, row, c, fmtNum(data.utuh), data.total > 0 ? fontData : fontNol, bg, 'right'); c++;
-      setCell(ws, row, c, fmtNum(data.pecah), data.total > 0 ? fontData : fontNol, bg, 'right'); c++;
-      setCell(ws, row, c, data.pecah > 0 && data.utuh > 0 ? ((data.pecah / data.utuh) * 100).toFixed(4) : '-', data.pecah > 0 ? fontData : fontNol, bg, 'right'); c++;
-      setCell(ws, row, c, fmtNum(data.sortir), data.total > 0 ? fontData : fontNol, bg, 'right'); c++;
-      setCell(ws, row, c, data.sortir > 0 && data.utuh > 0 ? ((data.sortir / data.utuh) * 100).toFixed(4) : '-', data.sortir > 0 ? fontData : fontNol, bg, 'right'); c++;
-      setCell(ws, row, c, fmtNum(data.total), data.total > 0 ? fontData : fontNol, bg, 'right'); c++;
-    }
-    row++;
-  }
-  const dataEndRow = row - 1;
-
-  // ── TOTAL row (SUM formulas) ──
-  row++;
-  setCell(ws, row, 1, 'TOTAL', fontTotal, fillGreenLight, 'center');
-  c = colStart;
+  row = 4;
+  // Row 4: "KELUAR" under TOTAL columns
+  c = 2 + V_TOTAL; // TOTAL is offset 7, column 2+7 = 9 = I
   for (let vi = 0; vi < vendors.length; vi++) {
-    const baseCol = colStart + vi * prodCols;
-    // UTUH
-    setFormula(ws, row, c, `SUM(${colLetter(c)}${dataStartRow}:${colLetter(c)}${dataEndRow})`, fontTotal, fillGreenLight, 'right'); c++;
-    // PCH
-    setFormula(ws, row, c, `SUM(${colLetter(c)}${dataStartRow}:${colLetter(c)}${dataEndRow})`, fontTotal, fillGreenLight, 'right'); c++;
-    // %PCH
-    const utuhCell = `${colLetter(baseCol)}${row}`;
-    const pchCell = `${colLetter(baseCol + 1)}${row}`;
-    setFormula(ws, row, c, `IF(${utuhCell}=0,"-",${pchCell}/${utuhCell}*100)`, fontTotal, fillGreenLight, 'right'); c++;
-    // SRT
-    setFormula(ws, row, c, `SUM(${colLetter(c)}${dataStartRow}:${colLetter(c)}${dataEndRow})`, fontTotal, fillGreenLight, 'right'); c++;
-    // %SRT
-    const srtCell = `${colLetter(baseCol + 3)}${row}`;
-    setFormula(ws, row, c, `IF(${utuhCell}=0,"-",${srtCell}/${utuhCell}*100)`, fontTotal, fillGreenLight, 'right'); c++;
-    // TOTAL
-    setFormula(ws, row, c, `SUM(${colLetter(c)}${dataStartRow}:${colLetter(c)}${dataEndRow})`, fontTotal, fillGreenLight, 'right'); c++;
+    setCell(ws, row, c, 'KELUAR', fontHeader, fillGreen, 'center');
+    c += V_COLS + colGap;
+  }
+  setCell(ws, row, 1, '', fontHeader, fillGreen, 'center');
+
+  // ── Data rows ──
+  const days1 = Math.min(15, dim);
+  const days2 = dim - days1;
+
+  const rowDataStart = 5;
+
+  // Days 1-15
+  let dataRow = 5;
+  const rowSubA = dataRow;
+  for (let d = 1; d <= days1; d++) {
+    setCell(ws, dataRow, 1, d, fontData, undefined, 'center');
+    const dd = daily.get(d)!;
+    c = 2;
+    for (const v of vendors) {
+      const cur = dd.get(v)!;
+      const hasData = cur.total > 0;
+      const f = hasData ? fontData : fontNol;
+      const bg = hasData ? fillGreenLight : undefined;
+
+      setCell(ws, dataRow, c, cur.utuh, f, bg, 'right'); c++; // UTUH
+      setCell(ws, dataRow, c, cur.pecah, f, bg, 'right'); c++; // PCH
+      // %PCH formula
+      const utuhCol = colLetter(c - 2);
+      const pchCol = colLetter(c - 1);
+      if (hasData && cur.utuh + cur.pecah > 0) {
+        setFormula(ws, dataRow, c, `${pchCol}${dataRow}/(${pchCol}${dataRow}+${utuhCol}${dataRow})*100`, f, bg, 'right');
+      } else {
+        setCell(ws, dataRow, c, '-', fontNol, undefined, 'right');
+      }
+      c++;
+
+      setCell(ws, dataRow, c, cur.sortir, f, bg, 'right'); c++; // SRT
+      // %SRT formula
+      const srtCol = colLetter(c - 1);
+      if (hasData && cur.utuh + cur.sortir > 0) {
+        setFormula(ws, dataRow, c, `${srtCol}${dataRow}/(${srtCol}${dataRow}+${utuhCol}${dataRow})*100`, f, bg, 'right');
+      } else {
+        setCell(ws, dataRow, c, '-', fontNol, undefined, 'right');
+      }
+      c++;
+
+      setCell(ws, dataRow, c, 0, fontNol, undefined, 'right'); c++; // MAS = 0
+      setCell(ws, dataRow, c, 0, fontNol, undefined, 'right'); c++; // LAB = 0
+      // TOTAL formula = UTUH+PCH+SRT+MAS+LAB
+      const totalUtuh = colLetter(c - 7);
+      const totalPch = colLetter(c - 6);
+      const totalSrt = colLetter(c - 4);
+      const totalMas = colLetter(c - 2);
+      const totalLab = colLetter(c - 1);
+      setFormula(ws, dataRow, c, `${totalUtuh}${dataRow}+${totalPch}${dataRow}+${totalSrt}${dataRow}+${totalMas}${dataRow}+${totalLab}${dataRow}`, f, bg, 'right');
+      c++;
+
+      c++; // gap column
+    }
+    dataRow++;
+  }
+
+  // SUB A row
+  const subARow = dataRow;
+  setCell(ws, dataRow, 1, 'SUB A', fontSubtotal, fillGreenLight, 'center');
+  c = 2;
+  for (let vi = 0; vi < vendors.length; vi++) {
+    for (let si = 0; si < V_COLS; si++) {
+      const startRow = rowSubA;
+      const endRow = subARow - 1;
+      if (si === V_PCH_PCT || si === V_SRT_PCT) {
+        // %PCH or %SRT: special formula
+        if (si === V_PCH_PCT) {
+          const utuhCol = colLetter(c - 2);
+          const pchCol = colLetter(c - 1);
+          setFormula(ws, dataRow, c, `${pchCol}${dataRow}/(${pchCol}${dataRow}+${utuhCol}${dataRow})*100`, fontSubtotal, fillGreenLight, 'right');
+        } else {
+          const utuhCol = colLetter(c - 3);
+          const srtCol = colLetter(c - 1);
+          setFormula(ws, dataRow, c, `${srtCol}${dataRow}/(${srtCol}${dataRow}+${utuhCol}${dataRow})*100`, fontSubtotal, fillGreenLight, 'right');
+        }
+      } else {
+        setFormula(ws, dataRow, c, `SUM(${colLetter(c)}${startRow}:${colLetter(c)}${endRow})`, fontSubtotal, fillGreenLight, 'right');
+      }
+      c++;
+    }
+    c++; // gap
+  }
+  dataRow++;
+
+  // Days 16-31
+  const rowSubB = dataRow;
+  for (let d = days1 + 1; d <= dim; d++) {
+    setCell(ws, dataRow, 1, d, fontData, undefined, 'center');
+    const dd = daily.get(d)!;
+    c = 2;
+    for (const v of vendors) {
+      const cur = dd.get(v)!;
+      const hasData = cur.total > 0;
+      const f = hasData ? fontData : fontNol;
+      const bg = hasData ? fillGreenLight : undefined;
+
+      setCell(ws, dataRow, c, cur.utuh, f, bg, 'right'); c++;
+      setCell(ws, dataRow, c, cur.pecah, f, bg, 'right'); c++;
+      const utuhCol = colLetter(c - 2);
+      const pchCol = colLetter(c - 1);
+      if (hasData && cur.utuh + cur.pecah > 0) {
+        setFormula(ws, dataRow, c, `${pchCol}${dataRow}/(${pchCol}${dataRow}+${utuhCol}${dataRow})*100`, f, bg, 'right');
+      } else {
+        setCell(ws, dataRow, c, '-', fontNol, undefined, 'right');
+      }
+      c++;
+
+      setCell(ws, dataRow, c, cur.sortir, f, bg, 'right'); c++;
+      const srtCol = colLetter(c - 1);
+      if (hasData && cur.utuh + cur.sortir > 0) {
+        setFormula(ws, dataRow, c, `${srtCol}${dataRow}/(${srtCol}${dataRow}+${utuhCol}${dataRow})*100`, f, bg, 'right');
+      } else {
+        setCell(ws, dataRow, c, '-', fontNol, undefined, 'right');
+      }
+      c++;
+
+      setCell(ws, dataRow, c, 0, fontNol, undefined, 'right'); c++;
+      setCell(ws, dataRow, c, 0, fontNol, undefined, 'right'); c++;
+      const totalUtuh = colLetter(c - 7);
+      const totalPch = colLetter(c - 6);
+      const totalSrt = colLetter(c - 4);
+      const totalMas = colLetter(c - 2);
+      const totalLab = colLetter(c - 1);
+      setFormula(ws, dataRow, c, `${totalUtuh}${dataRow}+${totalPch}${dataRow}+${totalSrt}${dataRow}+${totalMas}${dataRow}+${totalLab}${dataRow}`, f, bg, 'right');
+      c++;
+
+      c++; // gap
+    }
+    dataRow++;
+  }
+
+  // SUB B row
+  const subBRow = dataRow;
+  setCell(ws, dataRow, 1, 'SUB B', fontSubtotal, fillGreenLight, 'center');
+  c = 2;
+  for (let vi = 0; vi < vendors.length; vi++) {
+    for (let si = 0; si < V_COLS; si++) {
+      const startRow = rowSubB;
+      const endRow = subBRow - 1;
+      if (si === V_PCH_PCT || si === V_SRT_PCT) {
+        if (si === V_PCH_PCT) {
+          const utuhCol = colLetter(c - 2);
+          const pchCol = colLetter(c - 1);
+          setFormula(ws, dataRow, c, `${pchCol}${dataRow}/(${pchCol}${dataRow}+${utuhCol}${dataRow})*100`, fontSubtotal, fillGreenLight, 'right');
+        } else {
+          const utuhCol = colLetter(c - 3);
+          const srtCol = colLetter(c - 1);
+          setFormula(ws, dataRow, c, `${srtCol}${dataRow}/(${srtCol}${dataRow}+${utuhCol}${dataRow})*100`, fontSubtotal, fillGreenLight, 'right');
+        }
+      } else {
+        setFormula(ws, dataRow, c, `SUM(${colLetter(c)}${startRow}:${colLetter(c)}${endRow})`, fontSubtotal, fillGreenLight, 'right');
+      }
+      c++;
+    }
+    c++; // gap
+  }
+  dataRow++;
+
+  // TOTAL row
+  setCell(ws, dataRow, 1, 'TOTAL', fontSubtotal, fillGreenLight, 'center');
+  c = 2;
+  for (let vi = 0; vi < vendors.length; vi++) {
+    for (let si = 0; si < V_COLS; si++) {
+      if (si === V_PCH_PCT) {
+        const utuhCol = colLetter(c - 2);
+        const pchCol = colLetter(c - 1);
+        setFormula(ws, dataRow, c, `(${pchCol}${subARow}+${pchCol}${subBRow})/((${pchCol}${subARow}+${pchCol}${subBRow})+(${utuhCol}${subARow}+${utuhCol}${subBRow}))*100`, fontSubtotal, fillGreenLight, 'right');
+      } else if (si === V_SRT_PCT) {
+        const utuhCol = colLetter(c - 3);
+        const srtCol = colLetter(c - 1);
+        setFormula(ws, dataRow, c, `(${srtCol}${subARow}+${srtCol}${subBRow})/((${srtCol}${subARow}+${srtCol}${subBRow})+(${utuhCol}${subARow}+${utuhCol}${subBRow}))*100`, fontSubtotal, fillGreenLight, 'right');
+      } else {
+        setFormula(ws, dataRow, c, `${colLetter(c)}${subARow}+${colLetter(c)}${subBRow}`, fontSubtotal, fillGreenLight, 'right');
+      }
+      c++;
+    }
+    c++; // gap
   }
 
   // Column widths
   ws.getColumn(1).width = 5;
   for (let vi = 0; vi < vendors.length; vi++) {
-    for (let si = 0; si < prodCols; si++) {
-      const colIdx = colStart + vi * prodCols + si;
-      ws.getColumn(colIdx).width = si === 2 || si === 4 ? 10 : 14;
+    const widths = [12, 10, 9, 10, 9, 8, 8, 10]; // UTUH,PCH,%PCH,SRT,%SRT,MAS,LAB,TOTAL
+    for (let si = 0; si < V_COLS; si++) {
+      const colIdx = 2 + vi * (V_COLS + colGap) + si;
+      ws.getColumn(colIdx).width = widths[si];
     }
+    // gap column
+    const gapIdx = 2 + vi * (V_COLS + colGap) + V_COLS;
+    ws.getColumn(gapIdx).width = 2;
   }
 };
 
 // ============================================================
-// SHEET: DATA PROD [site] — FORMULAS referencing product sheets
+// DATA PRODUKSI SHEET: summary per product (4 cols/product)
+// UTUH | PCH | SRT | JUMLAH(=UTUH+PCH+SRT)
+// Formulas linking to detail sheets
 // ============================================================
-const writeDataProdSheet = (
-  ws: ExcelJS.Worksheet, reports: LaporanKantong[],
-  siteName: string, monthName: string, year: number, month: number,
+const writeDataProduksi = (
+  ws: ExcelJS.Worksheet,
+  siteName: string, monthName: string, year: number,
   dim: number, products: string[],
-  prodSheets: Record<string, ProdSheetInfo>,
-  siteKey: string
+  prodSheets: Record<string, ProdSheetInfo>
 ) => {
-  const prodCols = 6;
-  const colStart = 2;
+  const totalCols = 1 + products.length * DP_COLS;
   let row = 1;
 
-  // Row 1: Site title
-  setMergedCell(ws, row, 1, row, 1 + products.length * prodCols, `KANTONG BPP PRODUKSI ${siteName}`, fontTitle, fillGreen);
-  row++;
+  // Row 1: Title
+  setMergedCell(ws, row, 1, row, totalCols, `KANTONG BPP PRODUKSI ${siteName}`, fontTitle, fillGreen);
+  row = 2;
   // Row 2: Month
-  setMergedCell(ws, row, 1, row, 1 + products.length * prodCols, `BULAN : ${monthName} ${year}`, fontSub, fillGreen);
-  row++;
+  setMergedCell(ws, row, 1, row, totalCols, `BULAN : ${monthName} ${year}`, fontSub, fillGreen);
+  row = 3;
 
-  // Row 3: Product headers
-  let c = colStart;
-  for (const p of products) {
-    setMergedCell(ws, row, c, row, c + prodCols - 1, p.toUpperCase(), fontSection, fillGreenLight);
-    c += prodCols;
-  }
+  // Row 3: Product headers + TGL (merged with row 4)
+  ws.mergeCells(row, 1, row + 1, 1);
   setCell(ws, row, 1, 'TGL', fontHeader, fillGreen, 'center');
-  // merge TGL cell
-  ws.mergeCells(3, 1, 4, 1);
-  setCell(ws, 4, 1, '', fontHeader, fillGreen, 'center');
+  let c = 2;
+  for (const p of products) {
+    setMergedCell(ws, row, c, row, c + DP_COLS - 1, p.toUpperCase(), fontSection, fillGreenLight);
+    c += DP_COLS;
+  }
 
   row = 4;
   // Row 4: Sub-headers
-  c = colStart;
-  const subHeaders = ['UTUH', 'PCH', '%PCH', 'SRT', '%SRT', 'TOTAL'];
-  const subFills = [undefined, fillHeaderPCH, fillHeaderPCH, fillHeaderSRT, fillHeaderSRT, undefined];
+  const subHeaders = ['UTUH', 'PCH', 'SRT', 'JUMLAH'];
+  c = 2;
   for (let pi = 0; pi < products.length; pi++) {
-    for (let si = 0; si < prodCols; si++) {
-      setCell(ws, row, c, subHeaders[si], fontHeader, subFills[si], 'center');
+    for (let si = 0; si < DP_COLS; si++) {
+      setCell(ws, row, c, subHeaders[si], fontHeader, fillGreen, 'center');
       c++;
     }
   }
 
-  // ── Data rows with FORMULAS (ALL days 1–dim) ──
-  row = 5;
-  const dataStartRow = row;
-  for (let d = 1; d <= dim; d++) {
-    const dataRow = dataStartRow + (d - 1); // row in DATA PROD
-    setCell(ws, dataRow, 1, d, fontData, undefined, 'center');
+  // ── Data rows ──
+  const days1 = Math.min(15, dim);
+  const days2 = dim - days1;
 
-    c = colStart;
+  const dataStartRow = 5;
+  let dataRow = 5;
+
+  // Days 1-15
+  const rowSubA = dataRow;
+  for (let d = 1; d <= days1; d++) {
+    setCell(ws, dataRow, 1, d, fontData, undefined, 'center');
+    c = 2;
     for (const product of products) {
       const info = prodSheets[product];
-      const blockStart = c;
-
       if (info && info.vendors.length > 0) {
-        // Ref row in detail sheet: row 4 = header, data starts row 5
-        const detailRow = 4 + d;
+        const detailRow = 4 + d; // detail sheet: row 4 is header, data starts row 5
         const sn = info.sheetName;
-        const fun = (vendorSubCol: number) => {
-          // SUM of this sub-column across all vendors — SUM ignores text ("-")
-          const parts = info.vendors.map((_, vi) => {
-            const refCol = colLetter(colStart + vi * prodCols + vendorSubCol);
+
+        // Build cross-sheet SUM formulas per metric
+        const sumFormula = (vendorSubCol: number): string => {
+          const refs = info.vendors.map((_, vi) => {
+            const refCol = colLetter(2 + vi * (V_COLS + 1) + vendorSubCol);
             return `'${sn}'!${refCol}${detailRow}`;
           });
-          return `SUM(${parts.join(',')})`;
+          return `SUM(${refs.join(',')})`;
         };
 
-        // UTUH (vendorSubCol=0)
-        setFormula(ws, dataRow, c, fun(0), fontData, undefined, 'right'); c++;
-        // PCH (vendorSubCol=1)
-        setFormula(ws, dataRow, c, fun(1), fontData, undefined, 'right'); c++;
-        // %PCH
-        const utuhRef = `${colLetter(blockStart)}${dataRow}`;
-        const pchRef = `${colLetter(blockStart + 1)}${dataRow}`;
-        setFormula(ws, dataRow, c, `IF(${utuhRef}=0,"-",${pchRef}/${utuhRef}*100)`, fontData, undefined, 'right'); c++;
-        // SRT (vendorSubCol=3)
-        setFormula(ws, dataRow, c, fun(3), fontData, undefined, 'right'); c++;
-        // %SRT
-        const srtRef = `${colLetter(blockStart + 3)}${dataRow}`;
-        setFormula(ws, dataRow, c, `IF(${utuhRef}=0,"-",${srtRef}/${utuhRef}*100)`, fontData, undefined, 'right'); c++;
-        // TOTAL (vendorSubCol=5)
-        setFormula(ws, dataRow, c, fun(5), fontData, undefined, 'right'); c++;
+        // UTUH
+        setFormula(ws, dataRow, c, sumFormula(V_UTUH), fontData, undefined, 'right'); c++;
+        // PCH
+        setFormula(ws, dataRow, c, sumFormula(V_PCH), fontData, undefined, 'right'); c++;
+        // SRT
+        setFormula(ws, dataRow, c, sumFormula(V_SRT), fontData, undefined, 'right'); c++;
+        // JUMLAH = UTUH + PCH + SRT
+        const colUtuh = colLetter(c - 3);
+        const colPch = colLetter(c - 2);
+        const colSrt = colLetter(c - 1);
+        setFormula(ws, dataRow, c, `${colUtuh}${dataRow}+${colPch}${dataRow}+${colSrt}${dataRow}`, fontData, undefined, 'right'); c++;
       } else {
-        // No detail sheet for this product → show zeros
-        for (let si = 0; si < prodCols; si++) {
+        // No detail sheet
+        for (let si = 0; si < DP_COLS; si++) {
           setCell(ws, dataRow, c, 0, fontNol, undefined, 'right');
           c++;
         }
       }
     }
+    dataRow++;
   }
-  const dataEndRow = row + dim - 1;
 
-  // ── TOTAL row with SUM formulas ──
-  row = dataEndRow + 2;
-  setCell(ws, row, 1, 'TOTAL', fontTotal, fillGreenLight, 'center');
-  c = colStart;
-  for (let pi = 0; pi < products.length; pi++) {
-    const blockStart = c;
-    // UTUH
-    setFormula(ws, row, c, `SUM(${colLetter(c)}${dataStartRow}:${colLetter(c)}${dataEndRow})`, fontTotal, fillGreenLight, 'right'); c++;
-    // PCH
-    setFormula(ws, row, c, `SUM(${colLetter(c)}${dataStartRow}:${colLetter(c)}${dataEndRow})`, fontTotal, fillGreenLight, 'right'); c++;
-    // %PCH
-    const utuhRef = `${colLetter(blockStart)}${row}`;
-    const pchRef = `${colLetter(blockStart + 1)}${row}`;
-    setFormula(ws, row, c, `IF(${utuhRef}=0,"-",${pchRef}/${utuhRef}*100)`, fontTotal, fillGreenLight, 'right'); c++;
-    // SRT
-    setFormula(ws, row, c, `SUM(${colLetter(c)}${dataStartRow}:${colLetter(c)}${dataEndRow})`, fontTotal, fillGreenLight, 'right'); c++;
-    // %SRT
-    const srtRef = `${colLetter(blockStart + 3)}${row}`;
-    setFormula(ws, row, c, `IF(${utuhRef}=0,"-",${srtRef}/${utuhRef}*100)`, fontTotal, fillGreenLight, 'right'); c++;
-    // TOTAL
-    setFormula(ws, row, c, `SUM(${colLetter(c)}${dataStartRow}:${colLetter(c)}${dataEndRow})`, fontTotal, fillGreenLight, 'right'); c++;
+  // SUB A row (if dim > 15)
+  if (days1 > 0) {
+    const subARow = dataRow;
+    setCell(ws, dataRow, 1, 'SUB A', fontSubtotal, fillGreenLight, 'center');
+    c = 2;
+    for (let pi = 0; pi < products.length; pi++) {
+      for (let si = 0; si < DP_COLS; si++) {
+        // For JUMLAH, use formula
+        if (si === DP_JUMLAH) {
+          const colUtuh = colLetter(c - 3);
+          const colPch = colLetter(c - 2);
+          const colSrt = colLetter(c - 1);
+          setFormula(ws, dataRow, c, `${colUtuh}${dataRow}+${colPch}${dataRow}+${colSrt}${dataRow}`, fontSubtotal, fillGreenLight, 'right');
+        } else {
+          setFormula(ws, dataRow, c, `SUM(${colLetter(c)}${rowSubA}:${colLetter(c)}${subARow - 1})`, fontSubtotal, fillGreenLight, 'right');
+        }
+        c++;
+      }
+    }
+    dataRow++;
+  }
+
+  // Days 16-31
+  const rowSubB = dataRow;
+  for (let d = days1 + 1; d <= dim; d++) {
+    setCell(ws, dataRow, 1, d, fontData, undefined, 'center');
+    c = 2;
+    for (const product of products) {
+      const info = prodSheets[product];
+      if (info && info.vendors.length > 0) {
+        const detailRow = 4 + d;
+        const sn = info.sheetName;
+
+        const sumFormula = (vendorSubCol: number): string => {
+          const refs = info.vendors.map((_, vi) => {
+            const refCol = colLetter(2 + vi * (V_COLS + 1) + vendorSubCol);
+            return `'${sn}'!${refCol}${detailRow}`;
+          });
+          return `SUM(${refs.join(',')})`;
+        };
+
+        setFormula(ws, dataRow, c, sumFormula(V_UTUH), fontData, undefined, 'right'); c++;
+        setFormula(ws, dataRow, c, sumFormula(V_PCH), fontData, undefined, 'right'); c++;
+        setFormula(ws, dataRow, c, sumFormula(V_SRT), fontData, undefined, 'right'); c++;
+        const colUtuh = colLetter(c - 3);
+        const colPch = colLetter(c - 2);
+        const colSrt = colLetter(c - 1);
+        setFormula(ws, dataRow, c, `${colUtuh}${dataRow}+${colPch}${dataRow}+${colSrt}${dataRow}`, fontData, undefined, 'right'); c++;
+      } else {
+        for (let si = 0; si < DP_COLS; si++) {
+          setCell(ws, dataRow, c, 0, fontNol, undefined, 'right');
+          c++;
+        }
+      }
+    }
+    dataRow++;
+  }
+
+  // SUB B row
+  if (days2 > 0) {
+    const subBRow = dataRow;
+    setCell(ws, dataRow, 1, 'SUB B', fontSubtotal, fillGreenLight, 'center');
+    c = 2;
+    for (let pi = 0; pi < products.length; pi++) {
+      for (let si = 0; si < DP_COLS; si++) {
+        if (si === DP_JUMLAH) {
+          const colUtuh = colLetter(c - 3);
+          const colPch = colLetter(c - 2);
+          const colSrt = colLetter(c - 1);
+          setFormula(ws, dataRow, c, `${colUtuh}${dataRow}+${colPch}${dataRow}+${colSrt}${dataRow}`, fontSubtotal, fillGreenLight, 'right');
+        } else {
+          setFormula(ws, dataRow, c, `SUM(${colLetter(c)}${rowSubB}:${colLetter(c)}${subBRow - 1})`, fontSubtotal, fillGreenLight, 'right');
+        }
+        c++;
+      }
+    }
+    dataRow++;
+  }
+
+  // TOTAL row
+  if (days1 > 0 || days2 > 0) {
+    setCell(ws, dataRow, 1, 'TOTAL', fontSubtotal, fillGreenLight, 'center');
+    c = 2;
+    for (let pi = 0; pi < products.length; pi++) {
+      for (let si = 0; si < DP_COLS; si++) {
+        if (si === DP_JUMLAH) {
+          const colUtuh = colLetter(c - 3);
+          const colPch = colLetter(c - 2);
+          const colSrt = colLetter(c - 1);
+          setFormula(ws, dataRow, c, `${colUtuh}${dataRow}+${colPch}${dataRow}+${colSrt}${dataRow}`, fontSubtotal, fillGreenLight, 'right');
+        } else {
+          const sumA = rowSubA > 0 ? `${colLetter(c)}${rowSubA}` : '0';
+          const sumB = rowSubB > 0 ? `${colLetter(c)}${rowSubB}` : '0';
+          setFormula(ws, dataRow, c, `${sumA}+${sumB}`, fontSubtotal, fillGreenLight, 'right');
+        }
+        c++;
+      }
+    }
   }
 
   // Column widths
   ws.getColumn(1).width = 5;
   for (let pi = 0; pi < products.length; pi++) {
-    for (let si = 0; si < prodCols; si++) {
-      const colIdx = colStart + pi * prodCols + si;
-      ws.getColumn(colIdx).width = si === 2 || si === 4 ? 10 : 12;
+    for (let si = 0; si < DP_COLS; si++) {
+      const colIdx = 2 + pi * DP_COLS + si;
+      ws.getColumn(colIdx).width = si === DP_JUMLAH ? 10 : 12;
     }
   }
 };
 
 // ============================================================
-// Download monthly report
+// Download
 // ============================================================
 export const downloadMonthlyReport = async (opts: MonthlyExcelOptions): Promise<void> => {
   const wb = await generateMonthlyReport(opts);

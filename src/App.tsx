@@ -1660,11 +1660,6 @@ export default function App() {
 
   const handleSelectBulanan = () => {
     setShowExportOption(false);
-    const m = exportMonth || selectedDate.substring(0, 7);
-    if (reports.filter(r => r.tanggal.startsWith(m)).length === 0) {
-      triggerToast(`Tidak ada data untuk bulan ${m}`, "er");
-      return;
-    }
     setExportPreviewType("bulanan");
     setShowExportPreview(true);
   };

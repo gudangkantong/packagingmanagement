@@ -370,14 +370,6 @@ export const generateExcelReport = async (opts: ExcelOptions): Promise<ExcelJS.W
   const ws2 = wb.addWorksheet('Stock Harian');
   writeStockSheet(ws2, opts);
 
-  // Sheet 3: Penerimaan
-  const ws3 = wb.addWorksheet('Penerimaan');
-  writePenerimaanSheet(ws3, opts);
-
-  // Sheet 4: Pengiriman
-  const ws4 = wb.addWorksheet('Pengiriman');
-  writePengirimanSheet(ws4, opts);
-
   return wb;
 };
 

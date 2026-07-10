@@ -139,24 +139,17 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState<string>(getDateString(new Date()));
   const [showLockedAlert, setShowLockedAlert] = useState(false);
   const [driveToken, setDriveToken] = useState<string | null>(localStorage.getItem("smbr_drive_token"));
-  const [showExportMenu, setShowExportMenu] = useState(false);
-  const exportMenuRef = useRef<HTMLDivElement>(null);
   const [isDriveUploading, setIsDriveUploading] = useState(false);
+
+  // Export modal states
+  const [showExportOption, setShowExportOption] = useState(false);
+  const [showExportPreview, setShowExportPreview] = useState(false);
+  const [exportPreviewType, setExportPreviewType] = useState<"harian" | "bulanan" | null>(null);
+  const [exportMonth, setExportMonth] = useState(() => selectedDate.substring(0, 7));
 
   useEffect(() => {
     setSelectedDate(getDateString(new Date()));
   }, []);
-
-  // Close export menu on outside click
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
-        setShowExportMenu(false);
-      }
-    };
-    if (showExportMenu) document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [showExportMenu]);
 
   // Derived state
   const isSelectedDateLocked = !!lockedDates[selectedDate]?.locked;
@@ -1649,43 +1642,58 @@ export default function App() {
     { utuh: 0, pecah: 0, sortir: 0, total: 0 }
   );
 
-  // Excel Export — toggle menu
-  const handleExportClick = () => {
-    setShowExportMenu(prev => !prev);
+  // Excel Export — modals flow
+  const handleOpenExportOption = () => {
+    setExportMonth(selectedDate.substring(0, 7));
+    setShowExportOption(true);
   };
 
-  // Export Harian (existing daily report)
-  const handleExportHarian = () => {
-    setShowExportMenu(false);
+  const handleSelectHarian = () => {
+    setShowExportOption(false);
     if (filteredReports.length === 0) {
       triggerToast("Tidak ada data untuk diekspor pada tanggal ini", "er");
       return;
     }
-    downloadExcelReport({
-      filteredReports,
-      selectedDate,
-      currentUserEmail: currentUser?.email,
-      lockedStatus: isSelectedDateLocked,
-      penerimaanList,
-      pengirimanList,
-      stockData: {},
-      reports,
-    });
+    setExportPreviewType("harian");
+    setShowExportPreview(true);
   };
 
-  // Export Bulanan (monthly report)
-  const handleExportBulanan = (month?: string) => {
-    setShowExportMenu(false);
-    const m = month || selectedDate.substring(0, 7); // "YYYY-MM"
+  const handleSelectBulanan = () => {
+    setShowExportOption(false);
+    const m = exportMonth || selectedDate.substring(0, 7);
     if (reports.filter(r => r.tanggal.startsWith(m)).length === 0) {
       triggerToast(`Tidak ada data untuk bulan ${m}`, "er");
       return;
     }
-    downloadMonthlyReport({
-      reports,
-      selectedMonth: m,
-      currentUserEmail: currentUser?.email,
-    });
+    setExportPreviewType("bulanan");
+    setShowExportPreview(true);
+  };
+
+  const handleDownloadFromPreview = () => {
+    if (exportPreviewType === "harian") {
+      downloadExcelReport({
+        filteredReports,
+        selectedDate,
+        currentUserEmail: currentUser?.email,
+        lockedStatus: isSelectedDateLocked,
+        penerimaanList,
+        pengirimanList,
+        stockData: {},
+        reports,
+      });
+    } else if (exportPreviewType === "bulanan") {
+      downloadMonthlyReport({
+        reports,
+        selectedMonth: exportMonth,
+        currentUserEmail: currentUser?.email,
+      });
+    }
+    triggerToast(`Laporan ${exportPreviewType === "harian" ? "Harian" : "Bulanan"} berhasil didownload`, "ok");
+  };
+
+  const handleClosePreview = () => {
+    setShowExportPreview(false);
+    setExportPreviewType(null);
   };
 
   return (
@@ -2100,53 +2108,13 @@ export default function App() {
                         {driveToken ? "Drive Connected" : "Connect Drive"}
                       </button>
                     )}
-                    <div ref={exportMenuRef} className="relative">
-                      <button
-                        onClick={handleExportClick}
+                    <button
+                        onClick={handleOpenExportOption}
                         className="border border-[#e8e4de] bg-[#e8f0e6] hover:bg-brand-green-light text-brand-green px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
                       >
                         <Download className="w-4 h-4" />
                         Export Excel
                       </button>
-                      {showExportMenu && (
-                        <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg min-w-[200px] overflow-hidden">
-                          <button
-                            onClick={handleExportHarian}
-                            className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-[#e8f0e6] transition-colors text-left"
-                          >
-                            <span className="text-lg">📄</span>
-                            <div>
-                              <div className="font-semibold text-gray-800">Harian</div>
-                              <div className="text-[11px] text-gray-500">Laporan pemakaian + stock harian</div>
-                            </div>
-                          </button>
-                          <div className="border-t border-gray-100" />
-                          <div className="px-4 py-2">
-                            <div className="flex items-center gap-3">
-                              <span className="text-lg">📊</span>
-                              <div className="flex-1">
-                                <div className="font-semibold text-gray-800 text-sm">Bulanan</div>
-                                <input
-                                  type="month"
-                                  defaultValue={selectedDate.substring(0, 7)}
-                                  className="mt-1 w-full text-xs border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-green"
-                                  id="month-picker"
-                                />
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => {
-                                const picker = document.getElementById('month-picker') as HTMLInputElement;
-                                handleExportBulanan(picker?.value || selectedDate.substring(0, 7));
-                              }}
-                              className="mt-2 w-full bg-[#2E7D32] hover:bg-[#1b5e20] text-white text-xs font-semibold py-1.5 px-3 rounded-lg transition-colors"
-                            >
-                              Download Laporan Bulanan
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
 
                     {/* Verification status badge or action */}
                     {isMasterAdmin ? (
@@ -3792,6 +3760,222 @@ export default function App() {
                   className="px-4 py-2 bg-brand-green hover:bg-brand-green-hover text-white rounded-xl text-xs font-bold shadow-xs transition-all"
                 >
                   Ya, Lanjutkan
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ===== EXPORT OPTION MODAL ===== */}
+      <AnimatePresence>
+        {showExportOption && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowExportOption(false)}
+              className="absolute inset-0 bg-[#1a1814]/40 backdrop-blur-xs"
+            />
+            <motion.div
+              initial={{ y: 50, opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 50, opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="bg-white border-2 border-[#e8e4de] rounded-2xl shadow-xl w-full max-w-sm relative overflow-hidden z-10 p-5 flex flex-col gap-4"
+            >
+              <div className="text-center">
+                <h3 className="font-extrabold text-[#1a1814] text-lg">📊 Export Laporan</h3>
+                <p className="text-xs text-[#6b6560] mt-1">Pilih jenis laporan yang akan diexport</p>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={handleSelectHarian}
+                  className="flex items-center gap-4 w-full p-4 rounded-xl border-2 border-[#e8e4de] hover:border-brand-green hover:bg-[#e8f0e6] transition-all text-left active:scale-[0.98]"
+                >
+                  <span className="text-2xl">📄</span>
+                  <div>
+                    <div className="font-bold text-gray-800 text-sm">Laporan Harian</div>
+                    <div className="text-[11px] text-gray-500">Pemakaian kantong & stock harian per tanggal</div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleSelectBulanan}
+                  className="flex items-center gap-4 w-full p-4 rounded-xl border-2 border-[#e8e4de] hover:border-brand-green hover:bg-[#e8f0e6] transition-all text-left active:scale-[0.98]"
+                >
+                  <span className="text-2xl">📊</span>
+                  <div>
+                    <div className="font-bold text-gray-800 text-sm">Laporan Bulanan</div>
+                    <div className="text-[11px] text-gray-500">Rekap pemakaian kantong per bulan</div>
+                  </div>
+                </button>
+              </div>
+
+              <button
+                onClick={() => setShowExportOption(false)}
+                className="w-full border-2 border-[#e8e4de] hover:bg-[#faf9f7] text-[#6b6560] py-2.5 rounded-xl text-xs font-bold transition-all"
+              >
+                Batal
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ===== EXPORT PREVIEW MODAL ===== */}
+      <AnimatePresence>
+        {showExportPreview && exportPreviewType && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={handleClosePreview}
+              className="absolute inset-0 bg-[#1a1814]/40 backdrop-blur-xs"
+            />
+            <motion.div
+              initial={{ y: 50, opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 50, opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="bg-white border-2 border-[#e8e4de] rounded-2xl shadow-xl w-full max-w-md relative overflow-hidden z-10 p-5 flex flex-col gap-4 max-h-[90vh]"
+            >
+              <div className="text-center">
+                <h3 className="font-extrabold text-[#1a1814] text-lg">
+                  {exportPreviewType === "harian" ? "📄 Preview Laporan Harian" : "📊 Preview Laporan Bulanan"}
+                </h3>
+                <p className="text-xs text-[#6b6560] mt-1">
+                  {exportPreviewType === "harian"
+                    ? `Tanggal: ${formatDateDisplay(selectedDate)}`
+                    : `Bulan: ${exportMonth}`
+                  }
+                </p>
+              </div>
+
+              {/* Bulanan: month picker */}
+              {exportPreviewType === "bulanan" && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-[#6b6560] whitespace-nowrap">Pilih Bulan:</span>
+                  <input
+                    type="month"
+                    value={exportMonth}
+                    onChange={e => setExportMonth(e.target.value)}
+                    className="flex-1 px-3 py-1.5 bg-[#faf9f7] border-2 border-[#e8e4de] rounded-xl text-xs font-bold text-[#1a1814] focus:outline-none focus:border-brand-green focus:bg-white"
+                  />
+                </div>
+              )}
+
+              {/* Preview table */}
+              <div className="overflow-y-auto max-h-[50vh] border border-[#e8e4de] rounded-xl">
+                {exportPreviewType === "harian" ? (
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-brand-green-light">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-bold text-gray-700">Pabrik</th>
+                        <th className="px-3 py-2 text-right font-bold text-gray-700">UTUH</th>
+                        <th className="px-3 py-2 text-right font-bold text-gray-700">PCH</th>
+                        <th className="px-3 py-2 text-right font-bold text-gray-700">SRT</th>
+                        <th className="px-3 py-2 text-right font-bold text-gray-700">TOTAL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(filteredReports.length > 0 ? (() => {
+                        const byPabrik: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> = {};
+                        filteredReports.forEach(r => {
+                          if (!byPabrik[r.pabrik]) byPabrik[r.pabrik] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
+                          byPabrik[r.pabrik].utuh += r.utuh;
+                          byPabrik[r.pabrik].pecah += r.pecah;
+                          byPabrik[r.pabrik].sortir += r.sortir;
+                          byPabrik[r.pabrik].total += r.total;
+                        });
+                        const entries = Object.entries(byPabrik);
+                        const grandTotal = entries.reduce((s, [, v]) => ({ utuh: s.utuh + v.utuh, pecah: s.pecah + v.pecah, sortir: s.sortir + v.sortir, total: s.total + v.total }), { utuh: 0, pecah: 0, sortir: 0, total: 0 });
+                        return entries.map(([pabrik, v]) => (
+                          <tr key={pabrik} className="border-b border-[#e8e4de] hover:bg-gray-50">
+                            <td className="px-3 py-1.5 font-semibold text-gray-800">{pabrik}</td>
+                            <td className="px-3 py-1.5 text-right text-gray-700">{v.utuh.toLocaleString("en-US")}</td>
+                            <td className="px-3 py-1.5 text-right text-gray-700">{v.pecah.toLocaleString("en-US")}</td>
+                            <td className="px-3 py-1.5 text-right text-gray-700">{v.sortir.toLocaleString("en-US")}</td>
+                            <td className="px-3 py-1.5 text-right font-bold text-gray-800">{v.total.toLocaleString("en-US")}</td>
+                          </tr>
+                        )).concat(
+                          <tr key="__grand" className="bg-brand-green-light/50 font-bold">
+                            <td className="px-3 py-1.5 text-gray-800">TOTAL</td>
+                            <td className="px-3 py-1.5 text-right text-gray-800">{grandTotal.utuh.toLocaleString("en-US")}</td>
+                            <td className="px-3 py-1.5 text-right text-gray-800">{grandTotal.pecah.toLocaleString("en-US")}</td>
+                            <td className="px-3 py-1.5 text-right text-gray-800">{grandTotal.sortir.toLocaleString("en-US")}</td>
+                            <td className="px-3 py-1.5 text-right text-emerald-700">{grandTotal.total.toLocaleString("en-US")}</td>
+                          </tr>
+                        );
+                      })() : (
+                        <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-400 italic">Tidak ada data</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-brand-green-light">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-bold text-gray-700">Pabrik</th>
+                        <th className="px-3 py-2 text-right font-bold text-gray-700">UTUH</th>
+                        <th className="px-3 py-2 text-right font-bold text-gray-700">PCH</th>
+                        <th className="px-3 py-2 text-right font-bold text-gray-700">SRT</th>
+                        <th className="px-3 py-2 text-right font-bold text-gray-700">TOTAL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const monthData = reports.filter(r => r.tanggal.startsWith(exportMonth));
+                        if (monthData.length === 0) return <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-400 italic">Tidak ada data</td></tr>;
+                        const byPabrik: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> = {};
+                        monthData.forEach(r => {
+                          if (!byPabrik[r.pabrik]) byPabrik[r.pabrik] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
+                          byPabrik[r.pabrik].utuh += r.utuh;
+                          byPabrik[r.pabrik].pecah += r.pecah;
+                          byPabrik[r.pabrik].sortir += r.sortir;
+                          byPabrik[r.pabrik].total += r.total;
+                        });
+                        const entries = Object.entries(byPabrik);
+                        const grandTotal = entries.reduce((s, [, v]) => ({ utuh: s.utuh + v.utuh, pecah: s.pecah + v.pecah, sortir: s.sortir + v.sortir, total: s.total + v.total }), { utuh: 0, pecah: 0, sortir: 0, total: 0 });
+                        return entries.map(([pabrik, v]) => (
+                          <tr key={pabrik} className="border-b border-[#e8e4de] hover:bg-gray-50">
+                            <td className="px-3 py-1.5 font-semibold text-gray-800">{pabrik}</td>
+                            <td className="px-3 py-1.5 text-right text-gray-700">{v.utuh.toLocaleString("en-US")}</td>
+                            <td className="px-3 py-1.5 text-right text-gray-700">{v.pecah.toLocaleString("en-US")}</td>
+                            <td className="px-3 py-1.5 text-right text-gray-700">{v.sortir.toLocaleString("en-US")}</td>
+                            <td className="px-3 py-1.5 text-right font-bold text-gray-800">{v.total.toLocaleString("en-US")}</td>
+                          </tr>
+                        )).concat(
+                          <tr key="__grand" className="bg-brand-green-light/50 font-bold">
+                            <td className="px-3 py-1.5 text-gray-800">TOTAL</td>
+                            <td className="px-3 py-1.5 text-right text-gray-800">{grandTotal.utuh.toLocaleString("en-US")}</td>
+                            <td className="px-3 py-1.5 text-right text-gray-800">{grandTotal.pecah.toLocaleString("en-US")}</td>
+                            <td className="px-3 py-1.5 text-right text-gray-800">{grandTotal.sortir.toLocaleString("en-US")}</td>
+                            <td className="px-3 py-1.5 text-right text-emerald-700">{grandTotal.total.toLocaleString("en-US")}</td>
+                          </tr>
+                        );
+                      })()}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleClosePreview}
+                  className="flex-1 border-2 border-[#e8e4de] hover:bg-[#faf9f7] text-[#6b6560] py-2.5 rounded-xl text-xs font-bold transition-all"
+                >
+                  Tutup
+                </button>
+                <button
+                  onClick={handleDownloadFromPreview}
+                  className="flex-1 bg-brand-green hover:bg-brand-green-hover text-white py-2.5 rounded-xl text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Download className="w-4 h-4" />
+                  Download {exportPreviewType === "harian" ? "Excel" : "Laporan"}
                 </button>
               </div>
             </motion.div>

@@ -639,6 +639,11 @@ export const downloadMonthlyReport = async (opts: MonthlyExcelOptions): Promise<
   const a = document.createElement('a');
   a.href = url;
   a.download = `Laporan_Bulanan_${opts.selectedMonth}.xlsx`;
+  a.style.display = 'none';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 1000);
 };

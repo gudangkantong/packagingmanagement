@@ -382,8 +382,13 @@ export const downloadExcelReport = async (opts: ExcelOptions): Promise<void> => 
   const a = document.createElement('a');
   a.href = url;
   a.download = `Laporan_Packaging_${opts.selectedDate}.xlsx`;
+  a.style.display = 'none';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 1000);
 };
 
 // Get Excel as base64 (for Drive upload)

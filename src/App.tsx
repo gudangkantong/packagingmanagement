@@ -1669,26 +1669,30 @@ export default function App() {
     setShowExportPreview(true);
   };
 
-  const handleDownloadFromPreview = () => {
-    if (exportPreviewType === "harian") {
-      downloadExcelReport({
-        filteredReports,
-        selectedDate,
-        currentUserEmail: currentUser?.email,
-        lockedStatus: isSelectedDateLocked,
-        penerimaanList,
-        pengirimanList,
-        stockData: {},
-        reports,
-      });
-    } else if (exportPreviewType === "bulanan") {
-      downloadMonthlyReport({
-        reports,
-        selectedMonth: exportMonth,
-        currentUserEmail: currentUser?.email,
-      });
+  const handleDownloadFromPreview = async () => {
+    try {
+      if (exportPreviewType === "harian") {
+        await downloadExcelReport({
+          filteredReports,
+          selectedDate,
+          currentUserEmail: currentUser?.email,
+          lockedStatus: isSelectedDateLocked,
+          penerimaanList,
+          pengirimanList,
+          stockData: {},
+          reports,
+        });
+      } else if (exportPreviewType === "bulanan") {
+        await downloadMonthlyReport({
+          reports,
+          selectedMonth: exportMonth,
+          currentUserEmail: currentUser?.email,
+        });
+      }
+      triggerToast(`Laporan ${exportPreviewType === "harian" ? "Harian" : "Bulanan"} berhasil didownload`, "ok");
+    } catch (e) {
+      triggerToast(`Gagal mendownload: ${e instanceof Error ? e.message : "unknown error"}`, "error");
     }
-    triggerToast(`Laporan ${exportPreviewType === "harian" ? "Harian" : "Bulanan"} berhasil didownload`, "ok");
   };
 
   const handleClosePreview = () => {

@@ -4029,7 +4029,7 @@ export default function App() {
                     const dd = daily.get(d)!;
                     dayRows.push(
                       <tr key={`d${d}`} className="border-b border-[#e8e4de] hover:bg-gray-50">
-                        <td className="px-2 py-1 text-center text-gray-700 font-semibold border-r border-gray-200">{d}</td>
+                        <td className="px-1 py-1 text-center text-gray-700 font-semibold border-r border-gray-200 text-[10px]">{d}</td>
                         {products.map(p => { const v = dd.get(p)!; const h = v.total > 0; return (<React.Fragment key={p}>
                           <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.utuh.toLocaleString('en-US'):'-'}</td>
                           <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.pecah.toLocaleString('en-US'):'-'}</td>
@@ -4039,7 +4039,7 @@ export default function App() {
                       </tr>
                     );
                   }
-                  dayRows.push(<tr key="subA" className="bg-brand-green-light/30 font-bold"><td className="px-2 py-1 text-center text-gray-700 border-r border-gray-200">SUB A</td>{products.map(p => (<React.Fragment key={p}>
+                  dayRows.push(<tr key="subA" className="bg-brand-green-light/30 font-bold"><td className="px-1 py-1 text-center text-gray-700 border-r border-gray-200 text-[10px]">SUB A</td>{products.map(p => (<React.Fragment key={p}>
                     <td className="px-1 py-1 text-right text-gray-800">{subA[p].utuh.toLocaleString('en-US')}</td>
                     <td className="px-1 py-1 text-right text-gray-800">{subA[p].pecah.toLocaleString('en-US')}</td>
                     <td className="px-1 py-1 text-right text-gray-800">{subA[p].sortir.toLocaleString('en-US')}</td>
@@ -4048,7 +4048,7 @@ export default function App() {
                   if (dim > days1) {
                     for (let d = days1 + 1; d <= dim; d++) {
                       const dd = daily.get(d)!;
-                      dayRows.push(<tr key={`d${d}`} className="border-b border-[#e8e4de] hover:bg-gray-50"><td className="px-2 py-1 text-center text-gray-700 font-semibold border-r border-gray-200">{d}</td>
+                      dayRows.push(<tr key={`d${d}`} className="border-b border-[#e8e4de] hover:bg-gray-50"><td className="px-1 py-1 text-center text-gray-700 font-semibold border-r border-gray-200 text-[10px]">{d}</td>
                         {products.map(p => { const v = dd.get(p)!; const h = v.total > 0; return (<React.Fragment key={p}>
                           <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.utuh.toLocaleString('en-US'):'-'}</td>
                           <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.pecah.toLocaleString('en-US'):'-'}</td>
@@ -4056,14 +4056,14 @@ export default function App() {
                           <td className={`px-1 py-1 text-right font-semibold ${h?'text-gray-800':'text-gray-300'} border-r border-gray-200`}>{h?v.total.toLocaleString('en-US'):'-'}</td>
                         </React.Fragment>);})}</tr>);
                     }
-                    dayRows.push(<tr key="subB" className="bg-brand-green-light/30 font-bold"><td className="px-2 py-1 text-center text-gray-700 border-r border-gray-200">SUB B</td>{products.map(p => (<React.Fragment key={p}>
+                    dayRows.push(<tr key="subB" className="bg-brand-green-light/30 font-bold"><td className="px-1 py-1 text-center text-gray-700 border-r border-gray-200 text-[10px]">SUB B</td>{products.map(p => (<React.Fragment key={p}>
                       <td className="px-1 py-1 text-right text-gray-800">{subB[p].utuh.toLocaleString('en-US')}</td>
                       <td className="px-1 py-1 text-right text-gray-800">{subB[p].pecah.toLocaleString('en-US')}</td>
                       <td className="px-1 py-1 text-right text-gray-800">{subB[p].sortir.toLocaleString('en-US')}</td>
                       <td className="px-1 py-1 text-right text-gray-800 border-r border-gray-200">{subB[p].total.toLocaleString('en-US')}</td>
                     </React.Fragment>))}</tr>);
                   }
-                  dayRows.push(<tr key="total" className="bg-brand-green-light/50 font-bold"><td className="px-2 py-1 text-center text-emerald-700 border-r border-gray-200">TOTAL</td>{products.map(p => (<React.Fragment key={p}>
+                  dayRows.push(<tr key="total" className="bg-brand-green-light/50 font-bold"><td className="px-1 py-1 text-center text-emerald-700 border-r border-gray-200 text-[10px]">TOTAL</td>{products.map(p => (<React.Fragment key={p}>
                     <td className="px-1 py-1 text-right text-emerald-700">{totalAll[p].utuh.toLocaleString('en-US')}</td>
                     <td className="px-1 py-1 text-right text-emerald-700">{totalAll[p].pecah.toLocaleString('en-US')}</td>
                     <td className="px-1 py-1 text-right text-emerald-700">{totalAll[p].sortir.toLocaleString('en-US')}</td>
@@ -4077,13 +4077,13 @@ export default function App() {
                         className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all ${fn === currentFactory ? 'bg-brand-green text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{short}</button>);
                     })}</div>)}
                     <div className="px-2 pt-1 pb-0.5 text-[11px] font-bold text-[#6b6560]">{factoryShort} — {products.length} produk</div>
-                    <table className="text-xs" style={{ minWidth: 500 }}>
+                    <table className="text-xs" style={{ minWidth: 350 }}>
                       <thead className="sticky top-0 bg-brand-green-light z-10">
                         {(() => {
                           // Check if product names are long and might need a second header row
                           const longProducts = products.filter(p => p.length > 12);
                           if (longProducts.length === 0) {
-                            return (<><tr><th rowSpan={2} className="px-2 py-1.5 font-bold text-gray-700 border-r border-gray-200 min-w-[40px]">TGL</th>{products.map(p => (
+                            return (<><tr><th rowSpan={2} className="px-1 py-1.5 font-bold text-gray-700 border-r border-gray-200 w-[22px] min-w-[22px]">TGL</th>{products.map(p => (
                               <th key={p} colSpan={4} className="px-1 py-1.5 text-center font-bold text-gray-700 border-r border-gray-200 text-[10px] leading-tight">{p}</th>
                             ))}</tr><tr>{products.map(p => (<React.Fragment key={p}>
                               <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">UTUH</th>
@@ -4092,7 +4092,7 @@ export default function App() {
                               <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px] border-r border-gray-200">JML</th>
                             </React.Fragment>))}</tr></>);
                           }
-                          return (<><tr><th rowSpan={2} className="px-2 py-1.5 font-bold text-gray-700 border-r border-gray-200 min-w-[40px]">TGL</th>{products.map(p => (
+                          return (<><tr><th rowSpan={2} className="px-1 py-1.5 font-bold text-gray-700 border-r border-gray-200 w-[22px] min-w-[22px]">TGL</th>{products.map(p => (
                             <th key={p} colSpan={4} className="px-1 py-1.5 text-center font-bold text-gray-700 border-r border-gray-200"><div className="text-[10px] leading-tight">{p}</div></th>
                           ))}</tr><tr>{products.map(p => (<React.Fragment key={p}>
                             <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">UTUH</th>

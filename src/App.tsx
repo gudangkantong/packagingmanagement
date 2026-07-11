@@ -3900,7 +3900,7 @@ export default function App() {
                 <p className="text-xs text-[#6b6560] mt-1">
                   {exportPreviewType === "harian"
                     ? `Tanggal: ${formatDateDisplay(selectedDate)}`
-                    : `Bulan: ${exportMonth}`
+                    : ""
                   }
                 </p>
               </div>

@@ -171,10 +171,6 @@ const writeProductSheet = (
   const colGap = 1; // gap column between vendor blocks
   let row = 1;
 
-  // Row 1: Title (merged across all cols)
-  setMergedCell(ws, row, 1, row, totalCols, `PEMAKAIAN KANTONG ${productName.toUpperCase()} ${siteName}`, fontTitle, fillGreen);
-  row++;
-
   // Row 2: Vendor names (merged over each vendor block)
   row++; // skip row 2 as empty (matches sample)
   // Actually looking at the sample more carefully:

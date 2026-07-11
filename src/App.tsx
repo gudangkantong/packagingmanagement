@@ -3919,7 +3919,7 @@ export default function App() {
               )}
 
               {/* Preview table */}
-              <div className="overflow-y-auto max-h-[50vh] border border-[#e8e4de] rounded-xl">
+              <div className="overflow-y-auto overflow-x-auto max-h-[50vh] border border-[#e8e4de] rounded-xl">
                 {exportPreviewType === "harian" ? (
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-brand-green-light">
@@ -3965,53 +3965,198 @@ export default function App() {
                       ))}
                     </tbody>
                   </table>
-                ) : (
-                  <table className="w-full text-xs">
-                    <thead className="sticky top-0 bg-brand-green-light">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-bold text-gray-700">Pabrik</th>
-                        <th className="px-3 py-2 text-right font-bold text-gray-700">UTUH</th>
-                        <th className="px-3 py-2 text-right font-bold text-gray-700">PCH</th>
-                        <th className="px-3 py-2 text-right font-bold text-gray-700">SRT</th>
-                        <th className="px-3 py-2 text-right font-bold text-gray-700">TOTAL</th>
+                ) : monthlyLoading ? (
+                  <div className="px-3 py-8 text-center text-gray-400 italic">Memuat data...</div>
+                ) : (() => {
+                  if (monthlyData.length === 0) return <div className="px-3 py-8 text-center text-gray-400 italic">Tidak ada data</div>;
+                  const [yearStr, monthStr] = exportMonth.split('-');
+                  const year = parseInt(yearStr);
+                  const month = parseInt(monthStr);
+                  const dim = new Date(year, month, 0).getDate();
+                  const factories = [
+                    { short: 'PBR 1', full: 'Pabrik Baturaja 1 (PBR 1)' },
+                    { short: 'PBR 2', full: 'Pabrik Baturaja 2 (PBR 2)' },
+                    { short: 'PPG', full: 'Pabrik Palembang (PPG)' },
+                    { short: 'PPJ', full: 'Pabrik Panjang (PPJ)' },
+                  ];
+                  // Build daily × factory data
+                  const daily: Map<number, Map<string, { utuh: number; pecah: number; sortir: number; total: number }>> = new Map();
+                  for (let d = 1; d <= dim; d++) {
+                    const m = new Map();
+                    for (const f of factories) m.set(f.full, { utuh: 0, pecah: 0, sortir: 0, total: 0 });
+                    daily.set(d, m);
+                  }
+                  for (const r of monthlyData) {
+                    const day = parseInt(r.tanggal.split('-')[2]);
+                    if (!daily.has(day)) continue;
+                    const dd = daily.get(day)!;
+                    if (dd.has(r.pabrik)) {
+                      const cur = dd.get(r.pabrik)!;
+                      cur.utuh += r.utuh; cur.pecah += r.pecah; cur.sortir += r.sortir; cur.total += r.total;
+                    }
+                  }
+                  // Factory grand totals (for TOTAL row)
+                  const grandTotals: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> = {};
+                  for (const f of factories) grandTotals[f.full] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
+                  for (let d = 1; d <= dim; d++) {
+                    const dd = daily.get(d)!;
+                    for (const f of factories) {
+                      const cur = dd.get(f.full)!;
+                      const gt = grandTotals[f.full];
+                      gt.utuh += cur.utuh; gt.pecah += cur.pecah; gt.sortir += cur.sortir; gt.total += cur.total;
+                    }
+                  }
+                  // Compute subtotal for a range of days
+                  const subtotal = (from: number, to: number) => {
+                    const result: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> = {};
+                    for (const f of factories) result[f.full] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
+                    for (let d = from; d <= to; d++) {
+                      const dd = daily.get(d);
+                      if (!dd) continue;
+                      for (const f of factories) {
+                        const cur = dd.get(f.full)!;
+                        const r = result[f.full];
+                        r.utuh += cur.utuh; r.pecah += cur.pecah; r.sortir += cur.sortir; r.total += cur.total;
+                      }
+                    }
+                    return result;
+                  };
+                  const days1 = Math.min(15, dim);
+                  const subA = subtotal(1, days1);
+                  const subB = subtotal(days1 + 1, dim);
+                  const totalCab = (a: typeof subA, b: typeof subB) => {
+                    const result: typeof subA = {};
+                    for (const f of factories) result[f.full] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
+                    for (const f of factories) {
+                      result[f.full].utuh = a[f.full].utuh + b[f.full].utuh;
+                      result[f.full].pecah = a[f.full].pecah + b[f.full].pecah;
+                      result[f.full].sortir = a[f.full].sortir + b[f.full].sortir;
+                      result[f.full].total = a[f.full].total + b[f.full].total;
+                    }
+                    return result;
+                  };
+                  const totalAll = totalCab(subA, subB);
+                  // Day rows
+                  const dayRows: JSX.Element[] = [];
+                  // Days 1-15
+                  for (let d = 1; d <= days1; d++) {
+                    const dd = daily.get(d)!;
+                    dayRows.push(
+                      <tr key={`d${d}`} className="border-b border-[#e8e4de] hover:bg-gray-50">
+                        <td className="px-2 py-1 text-center text-gray-700 font-semibold border-r border-gray-200">{d}</td>
+                        {factories.map(f => {
+                          const v = dd.get(f.full)!;
+                          const hasData = v.total > 0;
+                          return (
+                            <React.Fragment key={f.short}>
+                              <td className={`px-1 py-1 text-right ${hasData ? 'text-gray-700' : 'text-gray-300'}`}>{hasData ? v.utuh.toLocaleString('en-US') : '-'}</td>
+                              <td className={`px-1 py-1 text-right ${hasData ? 'text-gray-700' : 'text-gray-300'}`}>{hasData ? v.pecah.toLocaleString('en-US') : '-'}</td>
+                              <td className={`px-1 py-1 text-right ${hasData ? 'text-gray-700' : 'text-gray-300'}`}>{hasData ? v.sortir.toLocaleString('en-US') : '-'}</td>
+                              <td className={`px-1 py-1 text-right font-semibold ${hasData ? 'text-gray-800' : 'text-gray-300'} border-r border-gray-200`}>{hasData ? v.total.toLocaleString('en-US') : '-'}</td>
+                            </React.Fragment>
+                          );
+                        })}
                       </tr>
-                    </thead>
-                    <tbody>
-                      {monthlyLoading ? (
-                        <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-400 italic">Memuat data...</td></tr>
-                      ) : (() => {
-                        if (monthlyData.length === 0) return <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-400 italic">Tidak ada data</td></tr>;
-                        const byPabrik: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> = {};
-                        monthlyData.forEach(r => {
-                          if (!byPabrik[r.pabrik]) byPabrik[r.pabrik] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
-                          byPabrik[r.pabrik].utuh += r.utuh;
-                          byPabrik[r.pabrik].pecah += r.pecah;
-                          byPabrik[r.pabrik].sortir += r.sortir;
-                          byPabrik[r.pabrik].total += r.total;
-                        });
-                        const entries = Object.entries(byPabrik);
-                        const grandTotal = entries.reduce((s, [, v]) => ({ utuh: s.utuh + v.utuh, pecah: s.pecah + v.pecah, sortir: s.sortir + v.sortir, total: s.total + v.total }), { utuh: 0, pecah: 0, sortir: 0, total: 0 });
-                        return entries.map(([pabrik, v]) => (
-                          <tr key={pabrik} className="border-b border-[#e8e4de] hover:bg-gray-50">
-                            <td className="px-3 py-1.5 font-semibold text-gray-800">{pabrik}</td>
-                            <td className="px-3 py-1.5 text-right text-gray-700">{v.utuh.toLocaleString("en-US")}</td>
-                            <td className="px-3 py-1.5 text-right text-gray-700">{v.pecah.toLocaleString("en-US")}</td>
-                            <td className="px-3 py-1.5 text-right text-gray-700">{v.sortir.toLocaleString("en-US")}</td>
-                            <td className="px-3 py-1.5 text-right font-bold text-gray-800">{v.total.toLocaleString("en-US")}</td>
-                          </tr>
-                        )).concat(
-                          <tr key="__grand" className="bg-brand-green-light/50 font-bold">
-                            <td className="px-3 py-1.5 text-gray-800">TOTAL</td>
-                            <td className="px-3 py-1.5 text-right text-gray-800">{grandTotal.utuh.toLocaleString("en-US")}</td>
-                            <td className="px-3 py-1.5 text-right text-gray-800">{grandTotal.pecah.toLocaleString("en-US")}</td>
-                            <td className="px-3 py-1.5 text-right text-gray-800">{grandTotal.sortir.toLocaleString("en-US")}</td>
-                            <td className="px-3 py-1.5 text-right text-emerald-700">{grandTotal.total.toLocaleString("en-US")}</td>
-                          </tr>
+                    );
+                  }
+                  // SUB A
+                  dayRows.push(
+                    <tr key="subA" className="bg-brand-green-light/30 font-bold">
+                      <td className="px-2 py-1 text-center text-gray-700 border-r border-gray-200">SUB A</td>
+                      {factories.map(f => {
+                        const v = subA[f.full];
+                        return (
+                          <React.Fragment key={f.short}>
+                            <td className="px-1 py-1 text-right text-gray-800">{v.utuh.toLocaleString('en-US')}</td>
+                            <td className="px-1 py-1 text-right text-gray-800">{v.pecah.toLocaleString('en-US')}</td>
+                            <td className="px-1 py-1 text-right text-gray-800">{v.sortir.toLocaleString('en-US')}</td>
+                            <td className="px-1 py-1 text-right text-gray-800 border-r border-gray-200">{v.total.toLocaleString('en-US')}</td>
+                          </React.Fragment>
                         );
-                      })()}
-                    </tbody>
-                  </table>
-                )}
+                      })}
+                    </tr>
+                  );
+                  // Days 16-31
+                  if (dim > days1) {
+                    for (let d = days1 + 1; d <= dim; d++) {
+                      const dd = daily.get(d)!;
+                      dayRows.push(
+                        <tr key={`d${d}`} className="border-b border-[#e8e4de] hover:bg-gray-50">
+                          <td className="px-2 py-1 text-center text-gray-700 font-semibold border-r border-gray-200">{d}</td>
+                          {factories.map(f => {
+                            const v = dd.get(f.full)!;
+                            const hasData = v.total > 0;
+                            return (
+                              <React.Fragment key={f.short}>
+                                <td className={`px-1 py-1 text-right ${hasData ? 'text-gray-700' : 'text-gray-300'}`}>{hasData ? v.utuh.toLocaleString('en-US') : '-'}</td>
+                                <td className={`px-1 py-1 text-right ${hasData ? 'text-gray-700' : 'text-gray-300'}`}>{hasData ? v.pecah.toLocaleString('en-US') : '-'}</td>
+                                <td className={`px-1 py-1 text-right ${hasData ? 'text-gray-700' : 'text-gray-300'}`}>{hasData ? v.sortir.toLocaleString('en-US') : '-'}</td>
+                                <td className={`px-1 py-1 text-right font-semibold ${hasData ? 'text-gray-800' : 'text-gray-300'} border-r border-gray-200`}>{hasData ? v.total.toLocaleString('en-US') : '-'}</td>
+                              </React.Fragment>
+                            );
+                          })}
+                        </tr>
+                      );
+                    }
+                    // SUB B
+                    dayRows.push(
+                      <tr key="subB" className="bg-brand-green-light/30 font-bold">
+                        <td className="px-2 py-1 text-center text-gray-700 border-r border-gray-200">SUB B</td>
+                        {factories.map(f => {
+                          const v = subB[f.full];
+                          return (
+                            <React.Fragment key={f.short}>
+                              <td className="px-1 py-1 text-right text-gray-800">{v.utuh.toLocaleString('en-US')}</td>
+                              <td className="px-1 py-1 text-right text-gray-800">{v.pecah.toLocaleString('en-US')}</td>
+                              <td className="px-1 py-1 text-right text-gray-800">{v.sortir.toLocaleString('en-US')}</td>
+                              <td className="px-1 py-1 text-right text-gray-800 border-r border-gray-200">{v.total.toLocaleString('en-US')}</td>
+                            </React.Fragment>
+                          );
+                        })}
+                      </tr>
+                    );
+                  }
+                  // TOTAL
+                  dayRows.push(
+                    <tr key="total" className="bg-brand-green-light/50 font-bold">
+                      <td className="px-2 py-1 text-center text-emerald-700 border-r border-gray-200">TOTAL</td>
+                      {factories.map(f => {
+                        const v = totalAll[f.full];
+                        return (
+                          <React.Fragment key={f.short}>
+                            <td className="px-1 py-1 text-right text-emerald-700">{v.utuh.toLocaleString('en-US')}</td>
+                            <td className="px-1 py-1 text-right text-emerald-700">{v.pecah.toLocaleString('en-US')}</td>
+                            <td className="px-1 py-1 text-right text-emerald-700">{v.sortir.toLocaleString('en-US')}</td>
+                            <td className="px-1 py-1 text-right text-emerald-700 border-r border-gray-200">{v.total.toLocaleString('en-US')}</td>
+                          </React.Fragment>
+                        );
+                      })}
+                    </tr>
+                  );
+                  return (
+                    <table className="text-xs" style={{ minWidth: 700 }}>
+                      <thead className="sticky top-0 bg-brand-green-light z-10">
+                        <tr>
+                          <th rowSpan={2} className="px-2 py-1.5 font-bold text-gray-700 border-r border-gray-200 min-w-[40px]">TGL</th>
+                          {factories.map(f => (
+                            <th key={f.short} colSpan={4} className="px-1 py-1.5 text-center font-bold text-gray-700 border-r border-gray-200">{f.short}</th>
+                          ))}
+                        </tr>
+                        <tr>
+                          {factories.map(f => (
+                            <React.Fragment key={f.short}>
+                              <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">UTUH</th>
+                              <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">PCH</th>
+                              <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">SRT</th>
+                              <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px] border-r border-gray-200">JML</th>
+                            </React.Fragment>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>{dayRows}</tbody>
+                    </table>
+                  );
+                })()}
               </div>
 
               <div className="flex items-center gap-2">

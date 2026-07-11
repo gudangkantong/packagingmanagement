@@ -550,7 +550,7 @@ const writeDataProduksi = (
     for (const product of products) {
       const info = prodSheets[product];
       if (info && info.vendors.length > 0) {
-        const detailRow = 4 + d;
+        const detailRow = 5 + d; // +1 for SUB A row shift in detail sheet
         const sn = info.sheetName;
 
         const sumFormula = (vendorSubCol: number): string => {

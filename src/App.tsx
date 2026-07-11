@@ -3945,8 +3945,7 @@ export default function App() {
                           byPabrik[r.pabrik].sortir += r.sortir;
                           byPabrik[r.pabrik].total += r.total;
                         });
-                        const entries = Object.entries(byPabrik);
-                        const grandTotal = entries.reduce((s, [, v]) => ({ utuh: s.utuh + v.utuh, pecah: s.pecah + v.pecah, sortir: s.sortir + v.sortir, total: s.total + v.total }), { utuh: 0, pecah: 0, sortir: 0, total: 0 });
+                        const entries = Object.entries(byPabrik).sort(([a], [b]) => PABRIK_LIST.indexOf(a) - PABRIK_LIST.indexOf(b));
                         return entries.map(([pabrik, v]) => (
                           <tr key={pabrik} className="border-b border-[#e8e4de] hover:bg-gray-50">
                             <td className="px-3 py-1.5 font-semibold text-gray-800">{pabrik}</td>
@@ -3955,15 +3954,7 @@ export default function App() {
                             <td className="px-3 py-1.5 text-right text-gray-700">{v.sortir.toLocaleString("en-US")}</td>
                             <td className="px-3 py-1.5 text-right font-bold text-gray-800">{v.total.toLocaleString("en-US")}</td>
                           </tr>
-                        )).concat(
-                          <tr key="__grand" className="bg-brand-green-light/50 font-bold">
-                            <td className="px-3 py-1.5 text-gray-800">TOTAL</td>
-                            <td className="px-3 py-1.5 text-right text-gray-800">{grandTotal.utuh.toLocaleString("en-US")}</td>
-                            <td className="px-3 py-1.5 text-right text-gray-800">{grandTotal.pecah.toLocaleString("en-US")}</td>
-                            <td className="px-3 py-1.5 text-right text-gray-800">{grandTotal.sortir.toLocaleString("en-US")}</td>
-                            <td className="px-3 py-1.5 text-right text-emerald-700">{grandTotal.total.toLocaleString("en-US")}</td>
-                          </tr>
-                        );
+                        ));
                       })() : (
                         <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-400 italic">Tidak ada data</td></tr>
                       ))}

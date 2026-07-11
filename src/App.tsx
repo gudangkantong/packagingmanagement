@@ -149,6 +149,7 @@ export default function App() {
   const [monthlyData, setMonthlyData] = useState<LaporanKantong[]>([]);
   const [monthlyLoading, setMonthlyLoading] = useState(false);
   const [selectedFactory, setSelectedFactory] = useState<string>("Pabrik Baturaja 1 (PBR 1)");
+  const [expandedFactory, setExpandedFactory] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedDate(getDateString(new Date()));
@@ -3928,6 +3929,7 @@ export default function App() {
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-brand-green-light">
                       <tr>
+                        <th className="w-5 px-1 py-2"></th>
                         <th className="px-3 py-2 text-left font-bold text-gray-700">Pabrik</th>
                         <th className="px-3 py-2 text-right font-bold text-gray-700">UTUH</th>
                         <th className="px-3 py-2 text-right font-bold text-gray-700">PCH</th>
@@ -3946,17 +3948,59 @@ export default function App() {
                           byPabrik[r.pabrik].total += r.total;
                         });
                         const entries = Object.entries(byPabrik).sort(([a], [b]) => PABRIK_LIST.indexOf(a) - PABRIK_LIST.indexOf(b));
-                        return entries.map(([pabrik, v]) => (
-                          <tr key={pabrik} className="border-b border-[#e8e4de] hover:bg-gray-50">
-                            <td className="px-3 py-1.5 font-semibold text-gray-800">{pabrik}</td>
-                            <td className="px-3 py-1.5 text-right text-gray-700">{v.utuh.toLocaleString("en-US")}</td>
-                            <td className="px-3 py-1.5 text-right text-gray-700">{v.pecah.toLocaleString("en-US")}</td>
-                            <td className="px-3 py-1.5 text-right text-gray-700">{v.sortir.toLocaleString("en-US")}</td>
-                            <td className="px-3 py-1.5 text-right font-bold text-gray-800">{v.total.toLocaleString("en-US")}</td>
-                          </tr>
-                        ));
+                        // Build per-product detail for each factory
+                        const byPabrikDetail: Record<string, Record<string, { utuh: number; pecah: number; sortir: number; total: number }>> = {};
+                        filteredReports.forEach(r => {
+                          if (!byPabrikDetail[r.pabrik]) byPabrikDetail[r.pabrik] = {};
+                          if (!byPabrikDetail[r.pabrik][r.nama]) byPabrikDetail[r.pabrik][r.nama] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
+                          byPabrikDetail[r.pabrik][r.nama].utuh += r.utuh;
+                          byPabrikDetail[r.pabrik][r.nama].pecah += r.pecah;
+                          byPabrikDetail[r.pabrik][r.nama].sortir += r.sortir;
+                          byPabrikDetail[r.pabrik][r.nama].total += r.total;
+                        });
+                        return entries.map(([pabrik, v]) => {
+                          const detailEntries = Object.entries(byPabrikDetail[pabrik] || {}).sort(([a], [b]) => {
+                            const aBig = a.startsWith('BIGBAG');
+                            const bBig = b.startsWith('BIGBAG');
+                            if (aBig && !bBig) return 1;
+                            if (!aBig && bBig) return -1;
+                            return a.localeCompare(b);
+                          });
+                          const isExpanded = expandedFactory === pabrik;
+                          return (
+                            <React.Fragment key={pabrik}>
+                              <tr className="border-b border-[#e8e4de] hover:bg-gray-50">
+                                <td className="px-2 py-1.5 text-center w-5">
+                                  {detailEntries.length > 0 && (
+                                    <button
+                                      onClick={() => setExpandedFactory(isExpanded ? null : pabrik)}
+                                      className="text-gray-400 hover:text-gray-700 focus:outline-none text-xs font-mono leading-none"
+                                    >
+                                      {isExpanded ? '−' : '+'}
+                                    </button>
+                                  )}
+                                </td>
+                                <td className="px-3 py-1.5 font-semibold text-gray-800">{pabrik}</td>
+                                <td className="px-3 py-1.5 text-right text-gray-700">{v.utuh.toLocaleString("en-US")}</td>
+                                <td className="px-3 py-1.5 text-right text-gray-700">{v.pecah.toLocaleString("en-US")}</td>
+                                <td className="px-3 py-1.5 text-right text-gray-700">{v.sortir.toLocaleString("en-US")}</td>
+                                <td className="px-3 py-1.5 text-right font-bold text-gray-800">{v.total.toLocaleString("en-US")}</td>
+                              </tr>
+                              {isExpanded && detailEntries.map(([produk, pv]) => (
+                                <tr key={`${pabrik}-${produk}`} className="bg-gray-50/70 border-b border-gray-200 text-[11px]">
+                                  <td></td>
+                                  <td className="px-3 py-1 pl-6 text-gray-500 italic">{produk}</td>
+                                  <td className="px-3 py-1 text-right text-gray-500">{pv.utuh.toLocaleString("en-US")}</td>
+                                  <td className="px-3 py-1 text-right text-gray-500">{pv.pecah.toLocaleString("en-US")}</td>
+                                  <td className="px-3 py-1 text-right text-gray-500">{pv.sortir.toLocaleString("en-US")}</td>
+                                  <td className="px-3 py-1 text-right text-gray-600 font-medium">{pv.total.toLocaleString("en-US")}</td>
+                                </tr>
+                              ))}
+                            </React.Fragment>
+                          );
+                        });
                       })() : (
-                        <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-400 italic">Tidak ada data</td></tr>
+                        <tr><td colSpan={6} className="px-3 py-4 text-center text-gray-400 italic">Tidak ada data</td></tr>
                       ))}
                     </tbody>
                   </table>

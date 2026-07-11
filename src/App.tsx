@@ -3983,7 +3983,11 @@ export default function App() {
                   const factoryShort = PABRIK_SHORT[currentFactory] || currentFactory;
                   // Filter + products for selected factory
                   const factoryReports = monthlyData.filter(r => r.pabrik === currentFactory);
-                  const products = [...new Set(factoryReports.map(r => r.nama))].sort();
+                  const products = [...new Set(factoryReports.map(r => r.nama))].sort((a, b) => {
+                    if (a === 'BIGBAG OPC') return 1;
+                    if (b === 'BIGBAG OPC') return -1;
+                    return a.localeCompare(b);
+                  });
                   if (products.length === 0) return <div className="px-3 py-8 text-center text-gray-400 italic">Tidak ada produk</div>;
                   // Build daily × product data
                   const daily: Map<number, Map<string, { utuh: number; pecah: number; sortir: number; total: number }>> = new Map();

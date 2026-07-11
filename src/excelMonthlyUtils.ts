@@ -249,6 +249,9 @@ const writePreviewSheet = (
       ws.getColumn(2 + pi * DP_COLS + si).width = si === DP_JUMLAH ? 10 : 12;
     }
   }
+
+  // Freeze header rows (R1:title, R2:TGL+product, R3:sub-headers)
+  ws.views = [{ state: 'frozen', ySplit: 3 }];
 };
 
 // ============================================================
@@ -588,6 +591,9 @@ const writeProductSheet = (
     const gapIdx = 2 + vi * (V_COLS + colGap) + V_COLS;
     ws.getColumn(gapIdx).width = 2;
   }
+
+  // Freeze header rows (R1:title, R2:vendor, R3:sub-columns, R4:KELUAR)
+  ws.views = [{ state: 'frozen', ySplit: 4 }];
 };
 
 // ============================================================

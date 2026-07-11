@@ -148,6 +148,7 @@ export default function App() {
   const [exportMonth, setExportMonth] = useState(() => selectedDate.substring(0, 7));
   const [monthlyData, setMonthlyData] = useState<LaporanKantong[]>([]);
   const [monthlyLoading, setMonthlyLoading] = useState(false);
+  const [selectedFactory, setSelectedFactory] = useState<string>("Pabrik Baturaja 1 (PBR 1)");
 
   useEffect(() => {
     setSelectedDate(getDateString(new Date()));
@@ -1678,6 +1679,9 @@ export default function App() {
         });
       });
       setMonthlyData(items);
+      // Auto-select first factory with data
+      const firstWithData = PABRIK_LIST.find(f => items.some(r => r.pabrik === f));
+      setSelectedFactory(firstWithData || "Pabrik Baturaja 1 (PBR 1)");
     } catch (e) {
       console.error("fetch monthly data error:", e);
       setMonthlyData([]);
@@ -3973,189 +3977,128 @@ export default function App() {
                   const year = parseInt(yearStr);
                   const month = parseInt(monthStr);
                   const dim = new Date(year, month, 0).getDate();
-                  const factories = [
-                    { short: 'PBR 1', full: 'Pabrik Baturaja 1 (PBR 1)' },
-                    { short: 'PBR 2', full: 'Pabrik Baturaja 2 (PBR 2)' },
-                    { short: 'PPG', full: 'Pabrik Palembang (PPG)' },
-                    { short: 'PPJ', full: 'Pabrik Panjang (PPJ)' },
-                  ];
-                  // Build daily × factory data
+                  // Factory tabs
+                  const factoryFullNames = [...new Set(monthlyData.map(r => r.pabrik))].filter(f => PABRIK_LIST.includes(f)).sort((a, b) => PABRIK_LIST.indexOf(a) - PABRIK_LIST.indexOf(b));
+                  const currentFactory = factoryFullNames.includes(selectedFactory) ? selectedFactory : factoryFullNames[0];
+                  const factoryShort = PABRIK_SHORT[currentFactory] || currentFactory;
+                  // Filter + products for selected factory
+                  const factoryReports = monthlyData.filter(r => r.pabrik === currentFactory);
+                  const products = [...new Set(factoryReports.map(r => r.nama))].sort();
+                  if (products.length === 0) return <div className="px-3 py-8 text-center text-gray-400 italic">Tidak ada produk</div>;
+                  // Build daily × product data
                   const daily: Map<number, Map<string, { utuh: number; pecah: number; sortir: number; total: number }>> = new Map();
                   for (let d = 1; d <= dim; d++) {
                     const m = new Map();
-                    for (const f of factories) m.set(f.full, { utuh: 0, pecah: 0, sortir: 0, total: 0 });
+                    for (const p of products) m.set(p, { utuh: 0, pecah: 0, sortir: 0, total: 0 });
                     daily.set(d, m);
                   }
-                  for (const r of monthlyData) {
+                  for (const r of factoryReports) {
                     const day = parseInt(r.tanggal.split('-')[2]);
                     if (!daily.has(day)) continue;
                     const dd = daily.get(day)!;
-                    if (dd.has(r.pabrik)) {
-                      const cur = dd.get(r.pabrik)!;
+                    if (dd.has(r.nama)) {
+                      const cur = dd.get(r.nama)!;
                       cur.utuh += r.utuh; cur.pecah += r.pecah; cur.sortir += r.sortir; cur.total += r.total;
                     }
                   }
-                  // Factory grand totals (for TOTAL row)
-                  const grandTotals: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> = {};
-                  for (const f of factories) grandTotals[f.full] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
-                  for (let d = 1; d <= dim; d++) {
-                    const dd = daily.get(d)!;
-                    for (const f of factories) {
-                      const cur = dd.get(f.full)!;
-                      const gt = grandTotals[f.full];
-                      gt.utuh += cur.utuh; gt.pecah += cur.pecah; gt.sortir += cur.sortir; gt.total += cur.total;
-                    }
-                  }
-                  // Compute subtotal for a range of days
+                  // Subtotals
                   const subtotal = (from: number, to: number) => {
                     const result: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> = {};
-                    for (const f of factories) result[f.full] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
+                    for (const p of products) result[p] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
                     for (let d = from; d <= to; d++) {
                       const dd = daily.get(d);
                       if (!dd) continue;
-                      for (const f of factories) {
-                        const cur = dd.get(f.full)!;
-                        const r = result[f.full];
-                        r.utuh += cur.utuh; r.pecah += cur.pecah; r.sortir += cur.sortir; r.total += cur.total;
-                      }
+                      for (const p of products) { const cur = dd.get(p)!; result[p].utuh += cur.utuh; result[p].pecah += cur.pecah; result[p].sortir += cur.sortir; result[p].total += cur.total; }
                     }
                     return result;
                   };
                   const days1 = Math.min(15, dim);
                   const subA = subtotal(1, days1);
                   const subB = subtotal(days1 + 1, dim);
-                  const totalCab = (a: typeof subA, b: typeof subB) => {
-                    const result: typeof subA = {};
-                    for (const f of factories) result[f.full] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
-                    for (const f of factories) {
-                      result[f.full].utuh = a[f.full].utuh + b[f.full].utuh;
-                      result[f.full].pecah = a[f.full].pecah + b[f.full].pecah;
-                      result[f.full].sortir = a[f.full].sortir + b[f.full].sortir;
-                      result[f.full].total = a[f.full].total + b[f.full].total;
-                    }
-                    return result;
-                  };
-                  const totalAll = totalCab(subA, subB);
-                  // Day rows
+                  const totalAll: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> = {};
+                  for (const p of products) totalAll[p] = { utuh: subA[p].utuh + subB[p].utuh, pecah: subA[p].pecah + subB[p].pecah, sortir: subA[p].sortir + subB[p].sortir, total: subA[p].total + subB[p].total };
+                  // Rows
                   const dayRows: JSX.Element[] = [];
-                  // Days 1-15
                   for (let d = 1; d <= days1; d++) {
                     const dd = daily.get(d)!;
                     dayRows.push(
                       <tr key={`d${d}`} className="border-b border-[#e8e4de] hover:bg-gray-50">
                         <td className="px-2 py-1 text-center text-gray-700 font-semibold border-r border-gray-200">{d}</td>
-                        {factories.map(f => {
-                          const v = dd.get(f.full)!;
-                          const hasData = v.total > 0;
-                          return (
-                            <React.Fragment key={f.short}>
-                              <td className={`px-1 py-1 text-right ${hasData ? 'text-gray-700' : 'text-gray-300'}`}>{hasData ? v.utuh.toLocaleString('en-US') : '-'}</td>
-                              <td className={`px-1 py-1 text-right ${hasData ? 'text-gray-700' : 'text-gray-300'}`}>{hasData ? v.pecah.toLocaleString('en-US') : '-'}</td>
-                              <td className={`px-1 py-1 text-right ${hasData ? 'text-gray-700' : 'text-gray-300'}`}>{hasData ? v.sortir.toLocaleString('en-US') : '-'}</td>
-                              <td className={`px-1 py-1 text-right font-semibold ${hasData ? 'text-gray-800' : 'text-gray-300'} border-r border-gray-200`}>{hasData ? v.total.toLocaleString('en-US') : '-'}</td>
-                            </React.Fragment>
-                          );
-                        })}
+                        {products.map(p => { const v = dd.get(p)!; const h = v.total > 0; return (<React.Fragment key={p}>
+                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.utuh.toLocaleString('en-US'):'-'}</td>
+                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.pecah.toLocaleString('en-US'):'-'}</td>
+                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.sortir.toLocaleString('en-US'):'-'}</td>
+                          <td className={`px-1 py-1 text-right font-semibold ${h?'text-gray-800':'text-gray-300'} border-r border-gray-200`}>{h?v.total.toLocaleString('en-US'):'-'}</td>
+                        </React.Fragment>);})}
                       </tr>
                     );
                   }
-                  // SUB A
-                  dayRows.push(
-                    <tr key="subA" className="bg-brand-green-light/30 font-bold">
-                      <td className="px-2 py-1 text-center text-gray-700 border-r border-gray-200">SUB A</td>
-                      {factories.map(f => {
-                        const v = subA[f.full];
-                        return (
-                          <React.Fragment key={f.short}>
-                            <td className="px-1 py-1 text-right text-gray-800">{v.utuh.toLocaleString('en-US')}</td>
-                            <td className="px-1 py-1 text-right text-gray-800">{v.pecah.toLocaleString('en-US')}</td>
-                            <td className="px-1 py-1 text-right text-gray-800">{v.sortir.toLocaleString('en-US')}</td>
-                            <td className="px-1 py-1 text-right text-gray-800 border-r border-gray-200">{v.total.toLocaleString('en-US')}</td>
-                          </React.Fragment>
-                        );
-                      })}
-                    </tr>
-                  );
-                  // Days 16-31
+                  dayRows.push(<tr key="subA" className="bg-brand-green-light/30 font-bold"><td className="px-2 py-1 text-center text-gray-700 border-r border-gray-200">SUB A</td>{products.map(p => (<React.Fragment key={p}>
+                    <td className="px-1 py-1 text-right text-gray-800">{subA[p].utuh.toLocaleString('en-US')}</td>
+                    <td className="px-1 py-1 text-right text-gray-800">{subA[p].pecah.toLocaleString('en-US')}</td>
+                    <td className="px-1 py-1 text-right text-gray-800">{subA[p].sortir.toLocaleString('en-US')}</td>
+                    <td className="px-1 py-1 text-right text-gray-800 border-r border-gray-200">{subA[p].total.toLocaleString('en-US')}</td>
+                  </React.Fragment>))}</tr>);
                   if (dim > days1) {
                     for (let d = days1 + 1; d <= dim; d++) {
                       const dd = daily.get(d)!;
-                      dayRows.push(
-                        <tr key={`d${d}`} className="border-b border-[#e8e4de] hover:bg-gray-50">
-                          <td className="px-2 py-1 text-center text-gray-700 font-semibold border-r border-gray-200">{d}</td>
-                          {factories.map(f => {
-                            const v = dd.get(f.full)!;
-                            const hasData = v.total > 0;
-                            return (
-                              <React.Fragment key={f.short}>
-                                <td className={`px-1 py-1 text-right ${hasData ? 'text-gray-700' : 'text-gray-300'}`}>{hasData ? v.utuh.toLocaleString('en-US') : '-'}</td>
-                                <td className={`px-1 py-1 text-right ${hasData ? 'text-gray-700' : 'text-gray-300'}`}>{hasData ? v.pecah.toLocaleString('en-US') : '-'}</td>
-                                <td className={`px-1 py-1 text-right ${hasData ? 'text-gray-700' : 'text-gray-300'}`}>{hasData ? v.sortir.toLocaleString('en-US') : '-'}</td>
-                                <td className={`px-1 py-1 text-right font-semibold ${hasData ? 'text-gray-800' : 'text-gray-300'} border-r border-gray-200`}>{hasData ? v.total.toLocaleString('en-US') : '-'}</td>
-                              </React.Fragment>
-                            );
-                          })}
-                        </tr>
-                      );
+                      dayRows.push(<tr key={`d${d}`} className="border-b border-[#e8e4de] hover:bg-gray-50"><td className="px-2 py-1 text-center text-gray-700 font-semibold border-r border-gray-200">{d}</td>
+                        {products.map(p => { const v = dd.get(p)!; const h = v.total > 0; return (<React.Fragment key={p}>
+                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.utuh.toLocaleString('en-US'):'-'}</td>
+                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.pecah.toLocaleString('en-US'):'-'}</td>
+                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.sortir.toLocaleString('en-US'):'-'}</td>
+                          <td className={`px-1 py-1 text-right font-semibold ${h?'text-gray-800':'text-gray-300'} border-r border-gray-200`}>{h?v.total.toLocaleString('en-US'):'-'}</td>
+                        </React.Fragment>);})}</tr>);
                     }
-                    // SUB B
-                    dayRows.push(
-                      <tr key="subB" className="bg-brand-green-light/30 font-bold">
-                        <td className="px-2 py-1 text-center text-gray-700 border-r border-gray-200">SUB B</td>
-                        {factories.map(f => {
-                          const v = subB[f.full];
-                          return (
-                            <React.Fragment key={f.short}>
-                              <td className="px-1 py-1 text-right text-gray-800">{v.utuh.toLocaleString('en-US')}</td>
-                              <td className="px-1 py-1 text-right text-gray-800">{v.pecah.toLocaleString('en-US')}</td>
-                              <td className="px-1 py-1 text-right text-gray-800">{v.sortir.toLocaleString('en-US')}</td>
-                              <td className="px-1 py-1 text-right text-gray-800 border-r border-gray-200">{v.total.toLocaleString('en-US')}</td>
-                            </React.Fragment>
-                          );
-                        })}
-                      </tr>
-                    );
+                    dayRows.push(<tr key="subB" className="bg-brand-green-light/30 font-bold"><td className="px-2 py-1 text-center text-gray-700 border-r border-gray-200">SUB B</td>{products.map(p => (<React.Fragment key={p}>
+                      <td className="px-1 py-1 text-right text-gray-800">{subB[p].utuh.toLocaleString('en-US')}</td>
+                      <td className="px-1 py-1 text-right text-gray-800">{subB[p].pecah.toLocaleString('en-US')}</td>
+                      <td className="px-1 py-1 text-right text-gray-800">{subB[p].sortir.toLocaleString('en-US')}</td>
+                      <td className="px-1 py-1 text-right text-gray-800 border-r border-gray-200">{subB[p].total.toLocaleString('en-US')}</td>
+                    </React.Fragment>))}</tr>);
                   }
-                  // TOTAL
-                  dayRows.push(
-                    <tr key="total" className="bg-brand-green-light/50 font-bold">
-                      <td className="px-2 py-1 text-center text-emerald-700 border-r border-gray-200">TOTAL</td>
-                      {factories.map(f => {
-                        const v = totalAll[f.full];
-                        return (
-                          <React.Fragment key={f.short}>
-                            <td className="px-1 py-1 text-right text-emerald-700">{v.utuh.toLocaleString('en-US')}</td>
-                            <td className="px-1 py-1 text-right text-emerald-700">{v.pecah.toLocaleString('en-US')}</td>
-                            <td className="px-1 py-1 text-right text-emerald-700">{v.sortir.toLocaleString('en-US')}</td>
-                            <td className="px-1 py-1 text-right text-emerald-700 border-r border-gray-200">{v.total.toLocaleString('en-US')}</td>
-                          </React.Fragment>
-                        );
-                      })}
-                    </tr>
-                  );
-                  return (
-                    <table className="text-xs" style={{ minWidth: 700 }}>
+                  dayRows.push(<tr key="total" className="bg-brand-green-light/50 font-bold"><td className="px-2 py-1 text-center text-emerald-700 border-r border-gray-200">TOTAL</td>{products.map(p => (<React.Fragment key={p}>
+                    <td className="px-1 py-1 text-right text-emerald-700">{totalAll[p].utuh.toLocaleString('en-US')}</td>
+                    <td className="px-1 py-1 text-right text-emerald-700">{totalAll[p].pecah.toLocaleString('en-US')}</td>
+                    <td className="px-1 py-1 text-right text-emerald-700">{totalAll[p].sortir.toLocaleString('en-US')}</td>
+                    <td className="px-1 py-1 text-right text-emerald-700 border-r border-gray-200">{totalAll[p].total.toLocaleString('en-US')}</td>
+                  </React.Fragment>))}</tr>);
+                  return (<>
+                    {/* Factory tabs */}
+                    {factoryFullNames.length > 1 && (<div className="flex gap-1 px-2 pt-2 pb-1 overflow-x-auto border-b border-[#e8e4de]">{factoryFullNames.map(fn => {
+                      const short = PABRIK_SHORT[fn] || fn;
+                      return (<button key={fn} onClick={() => setSelectedFactory(fn)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all ${fn === currentFactory ? 'bg-brand-green text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{short}</button>);
+                    })}</div>)}
+                    <div className="px-2 pt-1 pb-0.5 text-[11px] font-bold text-[#6b6560]">{factoryShort} — {products.length} produk</div>
+                    <table className="text-xs" style={{ minWidth: 500 }}>
                       <thead className="sticky top-0 bg-brand-green-light z-10">
-                        <tr>
-                          <th rowSpan={2} className="px-2 py-1.5 font-bold text-gray-700 border-r border-gray-200 min-w-[40px]">TGL</th>
-                          {factories.map(f => (
-                            <th key={f.short} colSpan={4} className="px-1 py-1.5 text-center font-bold text-gray-700 border-r border-gray-200">{f.short}</th>
-                          ))}
-                        </tr>
-                        <tr>
-                          {factories.map(f => (
-                            <React.Fragment key={f.short}>
+                        {(() => {
+                          // Check if product names are long and might need a second header row
+                          const longProducts = products.filter(p => p.length > 12);
+                          if (longProducts.length === 0) {
+                            return (<><tr><th rowSpan={2} className="px-2 py-1.5 font-bold text-gray-700 border-r border-gray-200 min-w-[40px]">TGL</th>{products.map(p => (
+                              <th key={p} colSpan={4} className="px-1 py-1.5 text-center font-bold text-gray-700 border-r border-gray-200 text-[10px] leading-tight">{p}</th>
+                            ))}</tr><tr>{products.map(p => (<React.Fragment key={p}>
                               <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">UTUH</th>
                               <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">PCH</th>
                               <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">SRT</th>
                               <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px] border-r border-gray-200">JML</th>
-                            </React.Fragment>
-                          ))}
-                        </tr>
+                            </React.Fragment>))}</tr></>);
+                          }
+                          return (<><tr><th rowSpan={2} className="px-2 py-1.5 font-bold text-gray-700 border-r border-gray-200 min-w-[40px]">TGL</th>{products.map(p => (
+                            <th key={p} colSpan={4} className="px-1 py-1.5 text-center font-bold text-gray-700 border-r border-gray-200"><div className="text-[10px] leading-tight">{p}</div></th>
+                          ))}</tr><tr>{products.map(p => (<React.Fragment key={p}>
+                            <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">UTUH</th>
+                            <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">PCH</th>
+                            <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">SRT</th>
+                            <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px] border-r border-gray-200">JML</th>
+                          </React.Fragment>))}</tr></>);
+                        })()}
                       </thead>
                       <tbody>{dayRows}</tbody>
                     </table>
-                  );
+                  </>);
                 })()}
               </div>
 

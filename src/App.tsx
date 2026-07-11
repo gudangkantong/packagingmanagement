@@ -146,6 +146,8 @@ export default function App() {
   const [showExportPreview, setShowExportPreview] = useState(false);
   const [exportPreviewType, setExportPreviewType] = useState<"harian" | "bulanan" | null>(null);
   const [exportMonth, setExportMonth] = useState(() => selectedDate.substring(0, 7));
+  const [monthlyData, setMonthlyData] = useState<LaporanKantong[]>([]);
+  const [monthlyLoading, setMonthlyLoading] = useState(false);
 
   useEffect(() => {
     setSelectedDate(getDateString(new Date()));
@@ -1642,6 +1644,55 @@ export default function App() {
     { utuh: 0, pecah: 0, sortir: 0, total: 0 }
   );
 
+  // Fetch full month data for monthly preview
+  const fetchMonthlyData = async (month: string) => {
+    if (!month || !currentUser || isAllowed !== true) return;
+    setMonthlyLoading(true);
+    try {
+      const [year, m] = month.split('-');
+      const startDate = `${year}-${m}-01`;
+      const lastDay = new Date(parseInt(year), parseInt(m), 0).getDate();
+      const endDate = `${year}-${m}-${String(lastDay).padStart(2, '0')}`;
+      const q = query(
+        collection(db, "laporan_kantong"),
+        where("tanggal", ">=", startDate),
+        where("tanggal", "<=", endDate),
+      );
+      const snap = await getDocs(q);
+      const items: LaporanKantong[] = [];
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        items.push({
+          id: docSnap.id,
+          vendor: data.vendor || "",
+          nama: data.nama || "",
+          pabrik: data.pabrik || "",
+          shift: Number(data.shift) || 1,
+          tanggal: data.tanggal || "",
+          utuh: Number(data.utuh) || 0,
+          pecah: Number(data.pecah) || 0,
+          sortir: Number(data.sortir) || 0,
+          total: Number(data.total) || 0,
+          createdBy: data.createdBy || "",
+          updatedAt: data.updatedAt || ""
+        });
+      });
+      setMonthlyData(items);
+    } catch (e) {
+      console.error("fetch monthly data error:", e);
+      setMonthlyData([]);
+    } finally {
+      setMonthlyLoading(false);
+    }
+  };
+
+  // Re-fetch monthly data on mount or when month changes
+  useEffect(() => {
+    if (showExportPreview && exportPreviewType === "bulanan" && exportMonth) {
+      fetchMonthlyData(exportMonth);
+    }
+  }, [showExportPreview, exportPreviewType, exportMonth]);
+
   // Excel Export — modals flow
   const handleOpenExportOption = () => {
     setExportMonth(selectedDate.substring(0, 7));
@@ -1679,7 +1730,7 @@ export default function App() {
         });
       } else if (exportPreviewType === "bulanan") {
         await downloadMonthlyReport({
-          reports,
+          reports: monthlyData,
           selectedMonth: exportMonth,
           currentUserEmail: currentUser?.email,
         });
@@ -3926,11 +3977,12 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(() => {
-                        const monthData = reports.filter(r => r.tanggal.startsWith(exportMonth));
-                        if (monthData.length === 0) return <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-400 italic">Tidak ada data</td></tr>;
+                      {monthlyLoading ? (
+                        <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-400 italic">Memuat data...</td></tr>
+                      ) : (() => {
+                        if (monthlyData.length === 0) return <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-400 italic">Tidak ada data</td></tr>;
                         const byPabrik: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> = {};
-                        monthData.forEach(r => {
+                        monthlyData.forEach(r => {
                           if (!byPabrik[r.pabrik]) byPabrik[r.pabrik] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
                           byPabrik[r.pabrik].utuh += r.utuh;
                           byPabrik[r.pabrik].pecah += r.pecah;

@@ -22,6 +22,11 @@ const fontNol = { name: 'Calibri', size: 10, color: { argb: 'FF9CA3AF' } } as Pa
 const fillGreen = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E7D32' } } as Partial<ExcelJS.Fill>;
 const fillGreenLight = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E9' } } as Partial<ExcelJS.Fill>;
 
+// Blue styles for summary sheets (preview layout)
+const fillBlue = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1565C0' } } as Partial<ExcelJS.Fill>;
+const fillBlueLight = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE3F2FD' } } as Partial<ExcelJS.Fill>;
+const fontWhite = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } } as Partial<ExcelJS.Font>;
+
 const setCell = (ws: ExcelJS.Worksheet, r: number, c: number, value: any, font?: Partial<ExcelJS.Font>, fill?: Partial<ExcelJS.Fill>, align?: string) => {
   const cell = ws.getCell(r, c);
   cell.value = value;
@@ -96,6 +101,157 @@ const DP_JUMLAH = 3;
 const DP_COLS = 4; // per product
 
 // ============================================================
+// PREVIEW SHEET: per-factory summary (matches React preview layout)
+// ============================================================
+const writePreviewSheet = (
+  ws: ExcelJS.Worksheet,
+  reports: LaporanKantong[],
+  products: string[],
+  siteName: string,
+  monthName: string,
+  year: number,
+  dim: number
+) => {
+  // Build daily × product data (aggregate across vendors)
+  const daily: Map<number, Map<string, { utuh: number; pecah: number; sortir: number; total: number }>> = new Map();
+  for (let d = 1; d <= dim; d++) {
+    daily.set(d, new Map());
+    for (const p of products) {
+      daily.get(d)!.set(p, { utuh: 0, pecah: 0, sortir: 0, total: 0 });
+    }
+  }
+  for (const r of reports) {
+    const day = parseInt(r.tanggal.split('-')[2]);
+    if (!daily.has(day)) continue;
+    const dd = daily.get(day)!;
+    if (dd.has(r.nama)) {
+      const cur = dd.get(r.nama)!;
+      cur.utuh += r.utuh; cur.pecah += r.pecah; cur.sortir += r.sortir; cur.total += r.total;
+    }
+  }
+
+  const totalCols = 1 + products.length * DP_COLS;
+  let row = 1;
+
+  // R1: Title
+  setMergedCell(ws, row, 1, row, totalCols, `PEMAKAIAN KANTONG ${siteName.toUpperCase()} ${monthName} ${year}`, { name: 'Calibri', size: 14, bold: true, color: { argb: 'FFFFFFFF' } }, fillBlue, 'center');
+  row++;
+
+  // R2: TGL + product headers
+  setCell(ws, row, 1, 'TGL', fontWhite, fillBlue, 'center');
+  let c = 2;
+  for (const p of products) {
+    setMergedCell(ws, row, c, row, c + DP_COLS - 1, p, fontWhite, fillBlue, 'center');
+    c += DP_COLS;
+  }
+  row++;
+
+  // R3: Sub-headers
+  setCell(ws, row, 1, '', null, fillBlueLight, 'center');
+  c = 2;
+  for (const _p of products) {
+    setCell(ws, row, c, 'UTUH', fontSubtotal, fillBlueLight, 'center'); c++;
+    setCell(ws, row, c, 'PCH', fontSubtotal, fillBlueLight, 'center'); c++;
+    setCell(ws, row, c, 'SRT', fontSubtotal, fillBlueLight, 'center'); c++;
+    setCell(ws, row, c, 'JML', fontSubtotal, fillBlueLight, 'center'); c++;
+  }
+  row++;
+
+  // Data rows
+  const days1 = Math.min(15, dim);
+  const days2 = dim - days1;
+
+  // Days 1-15
+  for (let d = 1; d <= days1; d++) {
+    setCell(ws, row, 1, d, fontData, undefined, 'center');
+    c = 2;
+    for (const p of products) {
+      const v = daily.get(d)!.get(p)!;
+      const h = v.total > 0;
+      setCell(ws, row, c, h ? v.utuh : 0, fontData, undefined, 'right'); c++;
+      setCell(ws, row, c, h ? v.pecah : 0, fontData, undefined, 'right'); c++;
+      setCell(ws, row, c, h ? v.sortir : 0, fontData, undefined, 'right'); c++;
+      setCell(ws, row, c, h ? v.total : 0, fontData, undefined, 'right'); c++;
+    }
+    row++;
+  }
+
+  // SUB A
+  if (days1 > 0) {
+    setCell(ws, row, 1, 'SUB A', fontSubtotal, fillBlueLight, 'center');
+    c = 2;
+    for (const p of products) {
+      let su = 0, sp = 0, ss = 0, st = 0;
+      for (let d = 1; d <= days1; d++) {
+        const v = daily.get(d)!.get(p)!;
+        su += v.utuh; sp += v.pecah; ss += v.sortir; st += v.total;
+      }
+      setCell(ws, row, c, su, fontSubtotal, fillBlueLight, 'right'); c++;
+      setCell(ws, row, c, sp, fontSubtotal, fillBlueLight, 'right'); c++;
+      setCell(ws, row, c, ss, fontSubtotal, fillBlueLight, 'right'); c++;
+      setCell(ws, row, c, st, fontSubtotal, fillBlueLight, 'right'); c++;
+    }
+    row++;
+  }
+
+  // Days 16-31
+  for (let d = days1 + 1; d <= dim; d++) {
+    setCell(ws, row, 1, d, fontData, undefined, 'center');
+    c = 2;
+    for (const p of products) {
+      const v = daily.get(d)!.get(p)!;
+      const h = v.total > 0;
+      setCell(ws, row, c, h ? v.utuh : 0, fontData, undefined, 'right'); c++;
+      setCell(ws, row, c, h ? v.pecah : 0, fontData, undefined, 'right'); c++;
+      setCell(ws, row, c, h ? v.sortir : 0, fontData, undefined, 'right'); c++;
+      setCell(ws, row, c, h ? v.total : 0, fontData, undefined, 'right'); c++;
+    }
+    row++;
+  }
+
+  // SUB B
+  if (days2 > 0) {
+    setCell(ws, row, 1, 'SUB B', fontSubtotal, fillBlueLight, 'center');
+    c = 2;
+    for (const p of products) {
+      let su = 0, sp = 0, ss = 0, st = 0;
+      for (let d = days1 + 1; d <= dim; d++) {
+        const v = daily.get(d)!.get(p)!;
+        su += v.utuh; sp += v.pecah; ss += v.sortir; st += v.total;
+      }
+      setCell(ws, row, c, su, fontSubtotal, fillBlueLight, 'right'); c++;
+      setCell(ws, row, c, sp, fontSubtotal, fillBlueLight, 'right'); c++;
+      setCell(ws, row, c, ss, fontSubtotal, fillBlueLight, 'right'); c++;
+      setCell(ws, row, c, st, fontSubtotal, fillBlueLight, 'right'); c++;
+    }
+    row++;
+  }
+
+  // TOTAL
+  setCell(ws, row, 1, 'TOTAL', { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF1565C0' } }, fillBlueLight, 'center');
+  c = 2;
+  for (const p of products) {
+    let su = 0, sp = 0, ss = 0, st = 0;
+    for (let d = 1; d <= dim; d++) {
+      const v = daily.get(d)!.get(p)!;
+      su += v.utuh; sp += v.pecah; ss += v.sortir; st += v.total;
+    }
+    setCell(ws, row, c, su, fontSubtotal, fillBlueLight, 'right'); c++;
+    setCell(ws, row, c, sp, fontSubtotal, fillBlueLight, 'right'); c++;
+    setCell(ws, row, c, ss, fontSubtotal, fillBlueLight, 'right'); c++;
+    setCell(ws, row, c, st, fontSubtotal, fillBlueLight, 'right'); c++;
+  }
+
+  // Column widths
+  ws.getColumn(1).width = 5;
+  for (let pi = 0; pi < products.length; pi++) {
+    for (let si = 0; si < DP_COLS; si++) {
+      ws.getColumn(2 + pi * DP_COLS + si).width = si === DP_JUMLAH ? 10 : 12;
+    }
+  }
+};
+
+// ============================================================
 // CORE: generate monthly workbook
 // ============================================================
 export const generateMonthlyReport = async (opts: MonthlyExcelOptions): Promise<ExcelJS.Workbook> => {
@@ -110,6 +266,8 @@ export const generateMonthlyReport = async (opts: MonthlyExcelOptions): Promise<
   const siteKeys = ['PBR 1', 'PBR 2', 'PPG', 'PPJ'];
   const wb = new ExcelJS.Workbook();
 
+  // PASS 1: Summary sheets (blue, matches preview) — sheets 1-4
+  const allSites: { reports: LaporanKantong[]; siteKey: string; siteName: string; products: string[] }[] = [];
   for (const siteKey of siteKeys) {
     const fullLabel = Object.entries(PABRIK_SHORT).find(([, v]) => v === siteKey)?.[0] || siteKey;
     const siteReports = monthReports.filter(r => r.pabrik === fullLabel);
@@ -124,23 +282,25 @@ export const generateMonthlyReport = async (opts: MonthlyExcelOptions): Promise<
       return a.localeCompare(b);
     });
 
-    // Create product detail sheets
-    const prodSheets: Record<string, ProdSheetInfo> = {};
-    for (const product of products) {
-      const prodReports = siteReports.filter(r => r.nama === product);
+    // Summary sheet (blue, data langsung seperti preview)
+    const ws = wb.addWorksheet(siteKey);
+    writePreviewSheet(ws, siteReports, products, siteName, monthName, year, dim);
+
+    allSites.push({ reports: siteReports, siteKey, siteName, products });
+  }
+
+  // PASS 2: Product detail sheets — sheets 5+
+  for (const site of allSites) {
+    for (const product of site.products) {
+      const prodReports = site.reports.filter(r => r.nama === product);
       const vendors = [...new Set(prodReports.map(r => r.vendor))].sort();
       if (vendors.length === 0) continue;
 
-      const rawName = `${product} ${siteKey}`;
+      const rawName = `${product} ${site.siteKey}`;
       const cleanName = rawName.replace(/[\\\/\?\*\[\]]/g, '_');
       const wsProd = wb.addWorksheet(cleanName);
-      writeProductSheet(wsProd, prodReports, product, siteName, vendors, dim);
-      prodSheets[product] = { sheetName: cleanName, vendors, prodCols: V_COLS };
+      writeProductSheet(wsProd, prodReports, product, site.siteName, vendors, dim);
     }
-
-    // Create Data Produksi sheet
-    const ws = wb.addWorksheet(`Data Produksi ${siteKey}`);
-    writeDataProduksi(ws, siteName, monthName, year, dim, products, prodSheets);
   }
 
   return wb;

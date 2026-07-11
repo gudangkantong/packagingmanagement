@@ -153,7 +153,7 @@ const writePreviewSheet = (
     setCell(ws, row, c, 'UTUH', fontSubtotal, fillBlueLight, 'center'); c++;
     setCell(ws, row, c, 'PCH', fontSubtotal, fillBlueLight, 'center'); c++;
     setCell(ws, row, c, 'SRT', fontSubtotal, fillBlueLight, 'center'); c++;
-    setCell(ws, row, c, 'JML', fontSubtotal, fillBlueLight, 'center'); c++;
+    setCell(ws, row, c, 'TOT', fontSubtotal, fillBlueLight, 'center'); c++;
   }
   row++;
 

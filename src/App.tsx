@@ -4089,7 +4089,7 @@ export default function App() {
                               <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">UTUH</th>
                               <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">PCH</th>
                               <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">SRT</th>
-                              <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px] border-r border-gray-200">JML</th>
+                              <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px] border-r border-gray-200">TOT</th>
                             </React.Fragment>))}</tr></>);
                           }
                           return (<><tr><th rowSpan={2} className="px-1 py-1.5 font-bold text-gray-700 border-r border-gray-200 w-[22px] min-w-[22px]">TGL</th>{products.map(p => (
@@ -4098,7 +4098,7 @@ export default function App() {
                             <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">UTUH</th>
                             <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">PCH</th>
                             <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px]">SRT</th>
-                            <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px] border-r border-gray-200">JML</th>
+                            <th className="px-1 py-1 text-right font-bold text-gray-600 text-[10px] border-r border-gray-200">TOT</th>
                           </React.Fragment>))}</tr></>);
                         })()}
                       </thead>

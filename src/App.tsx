@@ -3984,8 +3984,10 @@ export default function App() {
                   // Filter + products for selected factory
                   const factoryReports = monthlyData.filter(r => r.pabrik === currentFactory);
                   const products = [...new Set(factoryReports.map(r => r.nama))].sort((a, b) => {
-                    if (a === 'BIGBAG OPC') return 1;
-                    if (b === 'BIGBAG OPC') return -1;
+                    const aBig = a.startsWith('BIGBAG');
+                    const bBig = b.startsWith('BIGBAG');
+                    if (aBig && !bBig) return 1;
+                    if (!aBig && bBig) return -1;
                     return a.localeCompare(b);
                   });
                   if (products.length === 0) return <div className="px-3 py-8 text-center text-gray-400 italic">Tidak ada produk</div>;

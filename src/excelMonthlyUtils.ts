@@ -117,8 +117,10 @@ export const generateMonthlyReport = async (opts: MonthlyExcelOptions): Promise<
 
     const siteName = fullLabel.replace(/^Pabrik\s+/, '');
     const products = [...new Set(siteReports.map(r => r.nama))].sort((a, b) => {
-      if (a === 'BIGBAG OPC') return 1;
-      if (b === 'BIGBAG OPC') return -1;
+      const aBig = a.startsWith('BIGBAG');
+      const bBig = b.startsWith('BIGBAG');
+      if (aBig && !bBig) return 1;
+      if (!aBig && bBig) return -1;
       return a.localeCompare(b);
     });
 

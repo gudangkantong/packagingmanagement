@@ -58,6 +58,23 @@ const setFormula = (ws: ExcelJS.Worksheet, r: number, c: number, formula: string
   cell.border = { top: { style: 'thin', color: { argb: 'FFD0D0D0' } }, bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } }, left: { style: 'thin', color: { argb: 'FFD0D0D0' } }, right: { style: 'thin', color: { argb: 'FFD0D0D0' } } };
 };
 
+const blockBorder = { style: 'medium', color: { argb: 'FFB0B0B0' } } as const;
+
+const applyBlockBorder = (ws: ExcelJS.Worksheet, r1: number, c1: number, r2: number, c2: number) => {
+  for (let r = r1; r <= r2; r++) {
+    const left = ws.getCell(r, c1);
+    const right = ws.getCell(r, c2);
+    left.border = { ...left.border, left: blockBorder };
+    right.border = { ...right.border, right: blockBorder };
+  }
+  for (let c = c1; c <= c2; c++) {
+    const top = ws.getCell(r1, c);
+    const bottom = ws.getCell(r2, c);
+    top.border = { ...top.border, top: blockBorder };
+    bottom.border = { ...bottom.border, bottom: blockBorder };
+  }
+};
+
 const colLetter = (col: number): string => {
   let n = col;
   let s = '';
@@ -134,8 +151,9 @@ const writePreviewSheet = (
   const totalCols = 1 + products.length * DP_COLS;
   let row = 1;
 
-  // R1: Title
+  // Row 1: Title
   setMergedCell(ws, row, 1, row, totalCols, `PEMAKAIAN KANTONG ${siteName.toUpperCase()} ${monthName} ${year}`, { name: 'Calibri', size: 14, bold: true, color: { argb: 'FFFFFFFF' } }, fillBlue, 'center');
+  const previewBlockStart = row;
   row++;
 
   // R2: TGL + product headers
@@ -253,6 +271,7 @@ const writePreviewSheet = (
 
   // Freeze header rows (R1:title, R2:TGL+product, R3:sub-headers)
   ws.views = [{ state: 'frozen', ySplit: 3 }];
+  applyBlockBorder(ws, previewBlockStart, 1, row - 1, totalCols);
 };
 
 // ============================================================

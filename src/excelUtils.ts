@@ -71,6 +71,23 @@ const setCell = (ws: ExcelJS.Worksheet, r: number, c: number, value: any, font?:
   cell.border = { top: { style: 'thin', color: { argb: 'FFE0E0E0' } }, bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } }, left: { style: 'thin', color: { argb: 'FFE0E0E0' } }, right: { style: 'thin', color: { argb: 'FFE0E0E0' } } };
 };
 
+const blockBorder = { style: 'medium', color: { argb: 'FFB0B0B0' } } as const;
+
+const applyBlockBorder = (ws: ExcelJS.Worksheet, r1: number, c1: number, r2: number, c2: number) => {
+  for (let r = r1; r <= r2; r++) {
+    const left = ws.getCell(r, c1);
+    const right = ws.getCell(r, c2);
+    left.border = { ...left.border, left: blockBorder };
+    right.border = { ...right.border, right: blockBorder };
+  }
+  for (let c = c1; c <= c2; c++) {
+    const top = ws.getCell(r1, c);
+    const bottom = ws.getCell(r2, c);
+    top.border = { ...top.border, top: blockBorder };
+    bottom.border = { ...bottom.border, bottom: blockBorder };
+  }
+};
+
 // === SHEET 1: PEMAKAIAN KANTONG ===
 const writePemakaianSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
   const { filteredReports, selectedDate, lockedStatus } = opts;
@@ -106,6 +123,7 @@ const writePemakaianSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
 
     ws.mergeCells(`A${row}:E${row}`);
     setCell(ws, row, 1, `🏭 ${pabrikName}`, fontPabrik, fillPabrik);
+    const blockStart = row;
     row++;
     ['JENIS KANTONG', 'UTUH', 'PECAH', 'SORTIR', 'TOTAL'].forEach((h, i) => {
       setCell(ws, row, i + 1, h, fontTableHeader, fillHeader, i > 0 ? 'right' : 'left');
@@ -131,6 +149,7 @@ const writePemakaianSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
         });
       }
     });
+    applyBlockBorder(ws, blockStart, 1, row - 1, 5);
     row++;
   };
 
@@ -155,6 +174,7 @@ const writePemakaianSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
       if (shiftReports.length === 0) return;
       ws.mergeCells(`A${row}:E${row}`);
       setCell(ws, row, 1, `⏰ ${shift.label} (${shift.time})`, fontShiftTitle, fillShift);
+      const shiftBlockStart = row;
       row++;
       ['VENDOR / JENIS KANTONG', 'UTUH', 'PECAH', 'SORTIR', 'TOTAL'].forEach((h, i) => {
         setCell(ws, row, i + 1, h, fontTableHeader, fillHeader, i > 0 ? 'right' : 'left');
@@ -188,6 +208,7 @@ const writePemakaianSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
           row++;
         });
       });
+      applyBlockBorder(ws, shiftBlockStart, 1, row - 1, 5);
       row++;
     });
   };

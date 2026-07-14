@@ -30,7 +30,7 @@ const fontWhite = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFF
 const setCell = (ws: ExcelJS.Worksheet, r: number, c: number, value: any, font?: Partial<ExcelJS.Font>, fill?: Partial<ExcelJS.Fill>, align?: string) => {
   const cell = ws.getCell(r, c);
   cell.value = value;
-  if (typeof value === 'number') cell.numFmt = '#\,##0';
+  if (typeof value === 'number') cell.numFmt = '#' + String.fromCharCode(92) + ',' + '##0';
   if (font) cell.font = font as ExcelJS.Font;
   if (fill) cell.fill = fill as ExcelJS.Fill;
   if (align === 'right') cell.alignment = { horizontal: 'right' };
@@ -52,7 +52,7 @@ const setFormula = (ws: ExcelJS.Worksheet, r: number, c: number, formula: string
   const cell = ws.getCell(r, c);
   cell.value = { formula } as any;
   // Percentage formulas contain *100 → format as percent; else thousands separator
-  cell.numFmt = formula.includes('*100') ? '0.0"%"' : '#\,##0';
+  cell.numFmt = formula.includes('*100') ? '0.0"%"' : '#' + String.fromCharCode(92) + ',' + '##0';
   if (font) cell.font = font as ExcelJS.Font;
   if (fill) cell.fill = fill as ExcelJS.Fill;
   if (align === 'right') cell.alignment = { horizontal: 'right' };

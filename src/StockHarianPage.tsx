@@ -33,6 +33,8 @@ interface StockHarianPageProps {
   selectedDate: string;
   penerimaanList: PenerimaanData[];
   pengirimanList: PengirimanData[];
+  bumpLastUpdate: () => Promise<void>;
+  refreshTrigger: number;
   onEditPenerimaan: (item: PenerimaanData) => void;
   onDeletePenerimaan: (id: string) => void;
   onEditPengiriman: (item: PengirimanData) => void;
@@ -40,7 +42,7 @@ interface StockHarianPageProps {
 }
 
 export default function StockHarianPage({
-  currentUser, isAllowed, reports, allowedUsers, triggerToast, selectedDate, penerimaanList, pengirimanList,
+  currentUser, isAllowed, reports, allowedUsers, triggerToast, selectedDate, penerimaanList, pengirimanList, bumpLastUpdate, refreshTrigger,
   onEditPenerimaan, onDeletePenerimaan, onEditPengiriman, onDeletePengiriman,
 }: StockHarianPageProps) {
   const currentUserData = allowedUsers.find(u => u.email === currentUser?.email?.toLowerCase());
@@ -232,7 +234,7 @@ export default function StockHarianPage({
 
             if (lastDate >= today) continue; // already up to date
 
-            // Batch-fetch all existing docs for this item between lastDate and today
+            // Batch-fetch ALL existing docs for this item between lastDate and today
             const rangeStart = searchId + "_" + addDays(lastDate, 1);
             const rangeEnd = searchId + "_" + addDays(today, 1); // exclusive upper bound
             const existingSnap = await getDocs(query(
@@ -243,7 +245,8 @@ export default function StockHarianPage({
             const existingDocs = new Map<string, any>();
             existingSnap.forEach(d => existingDocs.set(d.id, d.data()));
 
-            // Fill forward: from day after lastDate to today
+            // Cascade forward: recalculate each day from last known to today
+            // This ensures changes to past stock akhir propagate to all future days
             let prevStockAkhir = lastStockAkhir;
             let cursor = addDays(lastDate, 1);
 
@@ -261,13 +264,24 @@ export default function StockHarianPage({
               const sa = existingData ? Number(existingData.stockAwal) || 0 : prevStockAkhir;
               const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
 
-              await setDoc(doc(db, "stock_harian", cursorDocId), {
-                pabrik, nama, tanggal: cursor,
-                stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
-                createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
-              }, { merge: true });
+              // Only write if values changed (avoids unnecessary Firestore writes)
+              const existingPn = existingData ? Number(existingData.penerimaan) || 0 : -1;
+              const existingPg = existingData ? Number(existingData.pengiriman) || 0 : -1;
+              const existingPk = existingData ? Number(existingData.pemakaian) || 0 : -1;
+              const existingSk = existingData ? Number(existingData.stockAkhir) || 0 : -1;
+              const needsWrite = !existingData
+                || pn !== existingPn || pg !== existingPg
+                || pk !== existingPk || sk !== existingSk;
 
-              totalSaved++;
+              if (needsWrite) {
+                await setDoc(doc(db, "stock_harian", cursorDocId), {
+                  pabrik, nama, tanggal: cursor,
+                  stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
+                  createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
+                }, { merge: true });
+                totalSaved++;
+              }
+
               prevStockAkhir = sk;
               cursor = addDays(cursor, 1);
             }
@@ -285,7 +299,7 @@ export default function StockHarianPage({
     };
 
     doFullSync();
-  }, [currentUser, isMasterAdmin, loading, selectedDate, penerimaanList, pengirimanList, reports]);
+  }, [currentUser, isMasterAdmin, loading, selectedDate, penerimaanList, pengirimanList, reports, refreshTrigger]);
 
 
 
@@ -306,6 +320,7 @@ export default function StockHarianPage({
       const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
       const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
       await setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
+      await bumpLastUpdate(); // notify other devices
       triggerToast(`Stock ${nama} (${PABRIK_SHORT[pabrik]}) disimpan`, "ok");
     } catch (e) { console.error(e); triggerToast("Gagal simpan", "er"); }
     finally { setSaving(null); }
@@ -326,6 +341,7 @@ export default function StockHarianPage({
         const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
         return setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
       }));
+      await bumpLastUpdate(); // notify other devices
       triggerToast(`Semua stock ${PABRIK_SHORT[pabrik]} disimpan`, "ok");
     } catch (e) { console.error(e); triggerToast("Gagal simpan", "er"); }
     finally { setSaving(null); }

@@ -293,6 +293,12 @@ export default function App() {
           removeCache("penerimaan_data");
           removeCache("pengiriman_data");
 
+          // Clear stock harian cache (force re-read)
+          const stockKeys = Object.keys(localStorage);
+          stockKeys.forEach((key) => {
+            if (key.includes("stock_harian_")) localStorage.removeItem(key);
+          });
+
           // Clear cache laporan per tanggal (paksa refresh)
           // Hapus semua cache laporan_ dari localStorage
           const keys = Object.keys(localStorage);
@@ -2551,6 +2557,8 @@ export default function App() {
                       selectedDate={selectedDate}
                       penerimaanList={penerimaanList}
                       pengirimanList={pengirimanList}
+                      bumpLastUpdate={bumpLastUpdate}
+                      refreshTrigger={refreshTrigger}
                       onEditPenerimaan={handleEditPenerimaan}
                       onDeletePenerimaan={handleDeletePenerimaan}
                       onEditPengiriman={handleEditPengiriman}

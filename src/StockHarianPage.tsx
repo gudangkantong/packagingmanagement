@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  collection, doc, setDoc, onSnapshot, query, where, writeBatch, getDocs, orderBy, limit,
+  collection, doc, setDoc, onSnapshot, query, where, getDocs, orderBy, limit,
 } from "firebase/firestore";
 import { Save, Loader2, Package, RefreshCw, Edit2, Trash2 } from "lucide-react";
 import { db } from "./firebase";
@@ -156,136 +156,107 @@ export default function StockHarianPage({
   }, [stockData, prevDayData, prevDayLoaded, selectedDate]);
 
 
-  // Auto-populate stockAwal from prev day's stockAkhir + AUTO-SAVE for new dates
-  // Falls back to search backwards if prevDate has no data (multi-day gap)
+  // === HELPER: add days to YYYY-MM-DD string ===
+  const addDays = (dateStr: string, days: number): string => {
+    const d = new Date(dateStr + "T00:00:00");
+    d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+
+  // === FULL SYNC: Fill all gaps from last known stock to today ===
+  // Runs on page load, date change, and when source data changes
+  const syncRunningRef = useRef(false);
   useEffect(() => {
-    if (!currentUser || !isMasterAdmin || loading || !prevDayLoaded) return;
+    if (!currentUser || !isMasterAdmin || loading) return;
+    if (syncRunningRef.current) return;
 
-    const toSave: Array<{ pabrik: string; nama: string; docId: string; stockAwal: number }> = [];
-    const needsFallback: Array<{ pabrik: string; nama: string; docId: string }> = [];
-
-    ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
-      const id = makeDocId(p, n, selectedDate);
-      if (stockData[id]) return; // already saved, skip
-      const prevId = makeDocId(p, n, prevDate);
-      const pv = prevDayData[prevId];
-      if (pv) {
-        const sa = Number(pv.stockAkhir) || 0;
-        if (sa !== 0) toSave.push({ pabrik: p, nama: n, docId: id, stockAwal: sa });
-      } else {
-        // No data for yesterday — need to search backwards
-        needsFallback.push({ pabrik: p, nama: n, docId: id });
-      }
-    }));
-
-    // If some items need fallback, search backwards in Firestore
-    const doAutoSave = async () => {
+    const doFullSync = async () => {
+      syncRunningRef.current = true;
       try {
-        // Handle fallback items: search backwards for most recent stock akhir
-        if (needsFallback.length > 0) {
-          const fallbackResults = new Map<string, number>();
+        const today = selectedDate;
+        let totalSaved = 0;
 
-          // Search for each item individually (could be optimized but keeps it clear)
-          for (const item of needsFallback) {
-            const saved = stockData[item.docId];
-            if (saved) continue; // already saved during this effect
+        for (const pabrik of ALL_LOCATIONS) {
+          for (const nama of JENIS_KANTONG) {
+            const todayDocId = makeDocId(pabrik, nama, today);
 
-            const nama = item.nama;
-            const pKey = PABRIK_SHORT[item.pabrik] || item.pabrik;
+            // Find last known stock for this item before today
+            const pKey = PABRIK_SHORT[pabrik] || pabrik;
             const searchId = `${pKey}_${nama.replace(/\s+/g, "_")}`;
-
-            // Query: get most recent stock_harian for this item before selectedDate
-            // Doc ID format: {pKey}_{nama}_{tanggal} — lexicographic order = date order for YYYY-MM-DD
             const q = query(
               collection(db, "stock_harian"),
               where("__name__", ">=", searchId + "_"),
-              where("__name__", "<", searchId + "_" + selectedDate),
+              where("__name__", "<", searchId + "_" + today),
               orderBy("__name__", "desc"),
               limit(1)
             );
             const snap = await getDocs(q);
-            if (!snap.empty) {
-              const latestDoc = snap.docs[0];
-              const data = latestDoc.data();
-              const sa = Number(data.stockAkhir) || 0;
-              if (sa !== 0) {
-                fallbackResults.set(item.docId, sa);
-                toSave.push({ pabrik: item.pabrik, nama: nama, docId: item.docId, stockAwal: sa });
-              }
+
+            if (snap.empty) continue; // no data at all for this item
+
+            const lastDoc = snap.docs[0];
+            const lastData = lastDoc.data();
+            const lastDate = lastData.tanggal;
+            const lastStockAkhir = Number(lastData.stockAkhir) || 0;
+
+            if (lastDate >= today) continue; // already up to date
+
+            // Batch-fetch all existing docs for this item between lastDate and today
+            const rangeStart = searchId + "_" + addDays(lastDate, 1);
+            const rangeEnd = searchId + "_" + addDays(today, 1); // exclusive upper bound
+            const existingSnap = await getDocs(query(
+              collection(db, "stock_harian"),
+              where("__name__", ">=", rangeStart),
+              where("__name__", "<", rangeEnd)
+            ));
+            const existingDocs = new Map<string, any>();
+            existingSnap.forEach(d => existingDocs.set(d.id, d.data()));
+
+            // Fill forward: from day after lastDate to today
+            let prevStockAkhir = lastStockAkhir;
+            let cursor = addDays(lastDate, 1);
+
+            while (cursor <= today) {
+              const cursorDocId = makeDocId(pabrik, nama, cursor);
+              const existingData = existingDocs.get(cursorDocId) || null;
+
+              // Compute values for this day
+              const pn = computePenerimaan(pabrik, nama, cursor);
+              const pg = computePengiriman(pabrik, nama, cursor);
+              const isOPT = pabrik === OPT_GUDANG;
+              const pk = isOPT ? 0 : computePemakaian(pKey, nama, cursor);
+
+              // If document exists, preserve manual stockAwal; only recalculate dependent fields
+              const sa = existingData ? Number(existingData.stockAwal) || 0 : prevStockAkhir;
+              const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
+
+              await setDoc(doc(db, "stock_harian", cursorDocId), {
+                pabrik, nama, tanggal: cursor,
+                stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
+                createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
+              }, { merge: true });
+
+              totalSaved++;
+              prevStockAkhir = sk;
+              cursor = addDays(cursor, 1);
             }
           }
-
-          if (fallbackResults.size > 0) {
-            console.log(`[StockHarian] Found ${fallbackResults.size} items from backward search`);
-          }
         }
 
-        if (toSave.length === 0) return;
-
-        for (const item of toSave) {
-          // Double-check: don't overwrite if another effect already saved it
-          if (stockData[item.docId]) continue;
-          const pn = computePenerimaan(item.pabrik, item.nama, selectedDate);
-          const pg = computePengiriman(item.pabrik, item.nama, selectedDate);
-          const isOPT = item.pabrik === OPT_GUDANG;
-          const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[item.pabrik], item.nama, selectedDate);
-          const sk = isOPT ? item.stockAwal + pn - pg : item.stockAwal + pn - pg - pk;
-          await setDoc(doc(db, "stock_harian", item.docId), {
-            pabrik: item.pabrik, nama: item.nama, tanggal: selectedDate,
-            stockAwal: item.stockAwal, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
-            createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
-          }, { merge: true });
+        if (totalSaved > 0) {
+          console.log(`[StockHarian] Full sync: filled ${totalSaved} rows`);
         }
-        console.log(`[StockHarian] Auto-saved ${toSave.length} rows (${needsFallback.length} via backward search)`);
       } catch (e) {
-        console.error("[StockHarian] Auto-save failed:", e);
+        console.error("[StockHarian] Full sync failed:", e);
+      } finally {
+        syncRunningRef.current = false;
       }
     };
-    doAutoSave();
-  }, [prevDayData, stockData, selectedDate]);
 
-  // === AUTO-SYNC: Update stock_harian Firestore saat penerimaan/pengiriman berubah ===
-  // Hanya update baris yang sudah pernah disimpan (ada di stockData)
-  const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (!currentUser || !isMasterAdmin || loading) return;
-    const savedIds = Object.keys(stockData);
-    if (savedIds.length === 0) return;
+    doFullSync();
+  }, [currentUser, isMasterAdmin, loading, selectedDate, penerimaanList, pengirimanList, reports]);
 
-    // Debounce: tunggu 500ms setelah perubahan terakhir sebelum sync
-    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-    syncTimeoutRef.current = setTimeout(async () => {
-      try {
-        const batch = writeBatch(db);
-        let updateCount = 0;
-        for (const docId of savedIds) {
-          const saved = stockData[docId];
-          if (!saved) continue;
-          const pn = computePenerimaan(saved.pabrik, saved.nama, selectedDate);
-          const pg = computePengiriman(saved.pabrik, saved.nama, selectedDate);
-          const isOPT = saved.pabrik === OPT_GUDANG;
-          const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[saved.pabrik], saved.nama, selectedDate);
-          const sk = isOPT ? saved.stockAwal + pn - pg : saved.stockAwal + pn - pg - pk;
-          // Hanya update jika nilai berubah
-          if (pn !== saved.penerimaan || pg !== saved.pengiriman || pk !== saved.pemakaian || sk !== saved.stockAkhir) {
-            batch.update(doc(db, "stock_harian", docId), {
-              penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
-              updatedAt: new Date().toISOString()
-            });
-            updateCount++;
-          }
-        }
-        if (updateCount > 0) {
-          await batch.commit();
-          console.log(`[StockHarian] Auto-synced ${updateCount} rows`);
-        }
-      } catch (e) {
-        console.error("[StockHarian] Auto-sync failed:", e);
-      }
-    }, 500);
 
-    return () => { if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current); };
-  }, [penerimaanList, pengirimanList, reports, selectedDate, stockData, currentUser, isMasterAdmin, loading]);
 
   const handleInputChange = (docId: string, value: string) => {
     const digits = value.replace(/[^\d]/g, "");

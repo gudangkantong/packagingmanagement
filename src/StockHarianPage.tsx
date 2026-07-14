@@ -47,6 +47,7 @@ export default function StockHarianPage({
   const isMasterAdmin = userRole === "super_admin";
 
   const [prevDayData, setPrevDayData] = useState<Record<string, StockHarian>>({});
+  const [prevDayLoaded, setPrevDayLoaded] = useState(false);
   const [stockData, setStockData] = useState<Record<string, StockHarian>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -125,13 +126,14 @@ export default function StockHarianPage({
   }, [currentUser, isAllowed, selectedDate]);
 
   useEffect(() => {
-    if (!currentUser || isAllowed !== true) { setPrevDayData({}); return; }
+    if (!currentUser || isAllowed !== true) { setPrevDayData({}); setPrevDayLoaded(false); return; }
     const q = query(collection(db, "stock_harian"), where("tanggal", "==", prevDate));
-    const unsub = onSnapshot(q, snap => { const data: Record<string, StockHarian> = {}; snap.forEach(d => { data[d.id] = d.data() as StockHarian; }); setPrevDayData(data); }, err => console.error(err));
+    const unsub = onSnapshot(q, snap => { const data: Record<string, StockHarian> = {}; snap.forEach(d => { data[d.id] = d.data() as StockHarian; }); setPrevDayData(data); setPrevDayLoaded(true); }, err => { console.error(err); setPrevDayLoaded(true); });
     return () => unsub();
   }, [currentUser, isAllowed, prevDate]);
 
   useEffect(() => {
+    if (!prevDayLoaded) return; // tunggu data kemarin resolve dulu biar gak keisi 0 salah
     const buf: Record<string, { stockAwal: string }> = {};
     ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
       const id = makeDocId(p, n, selectedDate);
@@ -139,12 +141,12 @@ export default function StockHarianPage({
       if (saved) { buf[id] = { stockAwal: String(saved.stockAwal) }; } else { const prevId = makeDocId(p, n, prevDate); const pv = prevDayData[prevId]; const ps = pv ? Number(pv.stockAkhir) || 0 : 0; buf[id] = { stockAwal: ps !== 0 ? String(ps) : "" }; }
     }));
     setEditBuffer(buf);
-  }, [stockData, prevDayData, selectedDate]);
+  }, [stockData, prevDayData, prevDayLoaded, selectedDate]);
 
 
   // Auto-populate stockAwal from prev day's stockAkhir + AUTO-SAVE for new dates
   useEffect(() => {
-    if (!currentUser || !isMasterAdmin || loading) return;
+    if (!currentUser || !isMasterAdmin || loading || !prevDayLoaded) return;
     const toSave: Array<{ pabrik: string; nama: string; docId: string; stockAwal: number }> = [];
 
     ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {

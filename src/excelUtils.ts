@@ -63,7 +63,7 @@ const fillAmberLight = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF
 const setCell = (ws: ExcelJS.Worksheet, r: number, c: number, value: any, font?: Partial<ExcelJS.Font>, fill?: Partial<ExcelJS.Fill>, align?: string) => {
   const cell = ws.getCell(r, c);
   cell.value = value;
-  if (typeof value === 'number') cell.numFmt = '#.##0';
+  if (typeof value === 'number') cell.numFmt = '#,##0';
   if (font) cell.font = font as ExcelJS.Font;
   if (fill) cell.fill = fill as ExcelJS.Fill;
   if (align === 'right') cell.alignment = { horizontal: 'right' };

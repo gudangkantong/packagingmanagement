@@ -2366,25 +2366,25 @@ export default function App() {
                                                 )}
                                               </td>
                                               <td className={`py-2 px-2 sm:px-4 text-center font-semibold text-xs sm:text-sm ${isZero ? "text-[#c4bfb7]" : "text-[#1a1814]"}`}>
-                                                {stat.utuh.toLocaleString('id-ID')}
+                                                {stat.utuh.toLocaleString('en-US')}
                                               </td>
                                               <td className={`py-2 px-2 sm:px-4 text-center font-semibold text-xs sm:text-sm ${isZero ? "text-[#c4bfb7]" : "text-rose-600"}`}>
-                                                {stat.pecah.toLocaleString('id-ID')}
+                                                {stat.pecah.toLocaleString('en-US')}
                                               </td>
                                               <td className={`py-2 px-2 sm:px-4 text-center font-semibold text-xs sm:text-sm ${isZero ? "text-[#c4bfb7]" : "text-amber-600"}`}>
-                                                {stat.sortir.toLocaleString('id-ID')}
+                                                {stat.sortir.toLocaleString('en-US')}
                                               </td>
                                               <td className={`py-2 px-2 sm:px-4 text-center font-extrabold text-xs sm:text-sm bg-[#e8f0e6]/20 ${isZero ? "text-[#c4bfb7]" : "text-brand-green"}`}>
-                                                {stat.total.toLocaleString('id-ID')}
+                                                {stat.total.toLocaleString('en-US')}
                                               </td>
                                             </tr>
                                             {isExpanded && Object.entries(stat.vendors).map(([vendorName, vStat]: [string, { utuh: number; pecah: number; sortir: number; total: number }]) => (
                                               <tr key={`${name}-${vendorName}`} className="bg-[#f5f8f4]">
                                                 <td className="py-1.5 px-4 sm:px-6 text-xs text-[#6b6560] italic pl-8">↳ {vendorName}</td>
-                                                <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-brand-green">{vStat.utuh.toLocaleString('id-ID')}</td>
-                                                <td className="py-1.5 px-2 sm:px-px-4 text-center text-xs font-medium text-rose-500">{vStat.pecah.toLocaleString('id-ID')}</td>
-                                                <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-amber-600">{vStat.sortir.toLocaleString('id-ID')}</td>
-                                                <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-bold text-[#1a1814]">{vStat.total.toLocaleString('id-ID')}</td>
+                                                <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-brand-green">{vStat.utuh.toLocaleString('en-US')}</td>
+                                                <td className="py-1.5 px-2 sm:px-px-4 text-center text-xs font-medium text-rose-500">{vStat.pecah.toLocaleString('en-US')}</td>
+                                                <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-amber-600">{vStat.sortir.toLocaleString('en-US')}</td>
+                                                <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-bold text-[#1a1814]">{vStat.total.toLocaleString('en-US')}</td>
                                               </tr>
                                             ))}
                                           </React.Fragment>
@@ -2473,18 +2473,18 @@ export default function App() {
                                                           {name}
                                                           <span className="ml-2 text-[10px] text-[#9e9892]">{isShiftBagExpanded ? '▼' : '▶'}</span>
                                                         </td>
-                                                        <td className="py-1.5 px-2 sm:px-4 text-center font-semibold text-xs text-[#1a1814]">{stat.utuh.toLocaleString('id-ID')}</td>
-                                                        <td className="py-1.5 px-2 sm:px-4 text-center font-semibold text-xs text-rose-600">{stat.pecah.toLocaleString('id-ID')}</td>
-                                                        <td className="py-1.5 px-2 sm:px-4 text-center font-semibold text-xs text-amber-600">{stat.sortir.toLocaleString('id-ID')}</td>
-                                                        <td className="py-1.5 px-2 sm:px-4 text-center font-extrabold text-xs text-brand-green">{stat.total.toLocaleString('id-ID')}</td>
+                                                        <td className="py-1.5 px-2 sm:px-4 text-center font-semibold text-xs text-[#1a1814]">{stat.utuh.toLocaleString('en-US')}</td>
+                                                        <td className="py-1.5 px-2 sm:px-4 text-center font-semibold text-xs text-rose-600">{stat.pecah.toLocaleString('en-US')}</td>
+                                                        <td className="py-1.5 px-2 sm:px-4 text-center font-semibold text-xs text-amber-600">{stat.sortir.toLocaleString('en-US')}</td>
+                                                        <td className="py-1.5 px-2 sm:px-4 text-center font-extrabold text-xs text-brand-green">{stat.total.toLocaleString('en-US')}</td>
                                                       </tr>
                                                       {isShiftBagExpanded && Object.entries(stat.vendors).map(([vendorName, vStat]: [string, { utuh: number; pecah: number; sortir: number; total: number }]) => (
                                                         <tr key={`${name}-${vendorName}`} className="bg-[#f5f8f4]">
                                                           <td className="py-1.5 px-4 sm:px-6 text-xs text-[#6b6560] italic pl-8">↳ {vendorName}</td>
-                                                          <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-brand-green">{vStat.utuh.toLocaleString('id-ID')}</td>
-                                                          <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-rose-500">{vStat.pecah.toLocaleString('id-ID')}</td>
-                                                          <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-amber-600">{vStat.sortir.toLocaleString('id-ID')}</td>
-                                                          <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-bold text-[#1a1814]">{vStat.total.toLocaleString('id-ID')}</td>
+                                                          <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-brand-green">{vStat.utuh.toLocaleString('en-US')}</td>
+                                                          <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-rose-500">{vStat.pecah.toLocaleString('en-US')}</td>
+                                                          <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-medium text-amber-600">{vStat.sortir.toLocaleString('en-US')}</td>
+                                                          <td className="py-1.5 px-2 sm:px-4 text-center text-xs font-bold text-[#1a1814]">{vStat.total.toLocaleString('en-US')}</td>
                                                         </tr>
                                                       ))}
                                                     </React.Fragment>
@@ -2613,11 +2613,11 @@ export default function App() {
                                               S{item.shift}
                                             </span>
                                           </td>
-                                          <td className="py-2.5 px-4 text-center font-bold text-brand-green">{item.utuh.toLocaleString('id-ID')}</td>
-                                          <td className="py-2.5 px-4 text-center font-bold text-rose-600">{item.pecah.toLocaleString('id-ID')}</td>
-                                          <td className="py-2.5 px-4 text-center font-bold text-amber-600">{item.sortir.toLocaleString('id-ID')}</td>
+                                          <td className="py-2.5 px-4 text-center font-bold text-brand-green">{item.utuh.toLocaleString('en-US')}</td>
+                                          <td className="py-2.5 px-4 text-center font-bold text-rose-600">{item.pecah.toLocaleString('en-US')}</td>
+                                          <td className="py-2.5 px-4 text-center font-bold text-amber-600">{item.sortir.toLocaleString('en-US')}</td>
                                           <td className="py-2.5 px-4 text-center font-extrabold bg-[#e8f0e6]/20 text-[#1a1814]">
-                                            {item.total.toLocaleString('id-ID')}
+                                            {item.total.toLocaleString('en-US')}
                                           </td>
                                           <td className="py-2.5 px-4 text-xs text-[#6b6560] font-medium max-w-[120px] truncate" title={item.createdBy || "Sistem"}>
                                             {item.createdBy?.split("@")[0] || "Sistem"}
@@ -2697,19 +2697,19 @@ export default function App() {
                                     <div className="grid grid-cols-4 gap-1.5 bg-[#faf9f7] p-2 rounded-xl border border-[#e8e4de] text-center">
                                       <div>
                                         <div className="text-[10px] font-semibold text-brand-green uppercase tracking-wider">Utuh</div>
-                                        <div className="text-xs font-extrabold text-[#1a1814] mt-0.5">{item.utuh.toLocaleString('id-ID')}</div>
+                                        <div className="text-xs font-extrabold text-[#1a1814] mt-0.5">{item.utuh.toLocaleString('en-US')}</div>
                                       </div>
                                       <div>
                                         <div className="text-[10px] font-semibold text-rose-600 uppercase tracking-wider">Pecah</div>
-                                        <div className="text-xs font-extrabold text-rose-600 mt-0.5">{item.pecah.toLocaleString('id-ID')}</div>
+                                        <div className="text-xs font-extrabold text-rose-600 mt-0.5">{item.pecah.toLocaleString('en-US')}</div>
                                       </div>
                                       <div>
                                         <div className="text-[10px] font-semibold text-amber-600 uppercase tracking-wider">Sortir</div>
-                                        <div className="text-xs font-extrabold text-amber-600 mt-0.5">{item.sortir.toLocaleString('id-ID')}</div>
+                                        <div className="text-xs font-extrabold text-amber-600 mt-0.5">{item.sortir.toLocaleString('en-US')}</div>
                                       </div>
                                       <div className="bg-[#e8f0e6]/40 rounded-lg py-0.5 border border-brand-green/10">
                                         <div className="text-[10px] font-semibold text-brand-green uppercase tracking-wider">Total</div>
-                                        <div className="text-xs font-black text-brand-green mt-0.5">{item.total.toLocaleString('id-ID')}</div>
+                                        <div className="text-xs font-black text-brand-green mt-0.5">{item.total.toLocaleString('en-US')}</div>
                                       </div>
                                     </div>
 
@@ -2786,7 +2786,7 @@ export default function App() {
                                       <td className="py-2.5 px-4 font-bold text-[#1a1814]">{item.nama}</td>
                                       <td className="py-2.5 px-4 font-medium text-[#6b6560]">{item.pabrik.match(/\(([^)]+)\)/)?.[1] || item.pabrik}</td>
                                       <td className="py-2.5 px-4 font-medium text-emerald-700">{item.sumber || "-"}</td>
-                                      <td className="py-2.5 px-4 text-center font-extrabold text-emerald-700">+{item.jumlah.toLocaleString('id-ID')}</td>
+                                      <td className="py-2.5 px-4 text-center font-extrabold text-emerald-700">+{item.jumlah.toLocaleString('en-US')}</td>
                                       <td className="py-2.5 px-4 text-[#6b6560]">{item.keterangan || "-"}</td>
                                       <td className="py-2.5 px-4 text-xs text-[#6b6560] font-medium max-w-[120px] truncate" title={item.createdBy || "Sistem"}>{item.createdBy?.split("@")[0] || "Sistem"}</td>
                                       {isMasterAdmin && (
@@ -2836,7 +2836,7 @@ export default function App() {
                                       <td className="py-2.5 px-4 font-bold text-[#1a1814]">{item.nama}</td>
                                       <td className="py-2.5 px-4 font-medium text-blue-700">{item.pabrik.match(/\(([^)]+)\)/)?.[1] || item.pabrik}</td>
                                       <td className="py-2.5 px-4 font-medium text-[#6b6560]">{item.tujuan || "-"}</td>
-                                      <td className="py-2.5 px-4 text-center font-extrabold text-blue-700">-{item.jumlah.toLocaleString('id-ID')}</td>
+                                      <td className="py-2.5 px-4 text-center font-extrabold text-blue-700">-{item.jumlah.toLocaleString('en-US')}</td>
                                       <td className="py-2.5 px-4 text-[#6b6560]">{item.keterangan || "-"}</td>
                                       <td className="py-2.5 px-4 text-xs text-[#6b6560] font-medium max-w-[120px] truncate" title={item.createdBy || "Sistem"}>{item.createdBy?.split("@")[0] || "Sistem"}</td>
                                       {isMasterAdmin && (
@@ -3981,19 +3981,19 @@ export default function App() {
                                   )}
                                 </td>
                                 <td className="px-3 py-1.5 font-semibold text-gray-800">{pabrik}</td>
-                                <td className="px-3 py-1.5 text-right text-gray-700">{v.utuh.toLocaleString('id-ID')}</td>
-                                <td className="px-3 py-1.5 text-right text-gray-700">{v.pecah.toLocaleString('id-ID')}</td>
-                                <td className="px-3 py-1.5 text-right text-gray-700">{v.sortir.toLocaleString('id-ID')}</td>
-                                <td className="px-3 py-1.5 text-right font-bold text-gray-800">{v.total.toLocaleString('id-ID')}</td>
+                                <td className="px-3 py-1.5 text-right text-gray-700">{v.utuh.toLocaleString('en-US')}</td>
+                                <td className="px-3 py-1.5 text-right text-gray-700">{v.pecah.toLocaleString('en-US')}</td>
+                                <td className="px-3 py-1.5 text-right text-gray-700">{v.sortir.toLocaleString('en-US')}</td>
+                                <td className="px-3 py-1.5 text-right font-bold text-gray-800">{v.total.toLocaleString('en-US')}</td>
                               </tr>
                               {isExpanded && detailEntries.map(([produk, pv]) => (
                                 <tr key={`${pabrik}-${produk}`} className="bg-gray-50/70 border-b border-gray-200 text-[11px]">
                                   <td></td>
                                   <td className="px-3 py-1 pl-6 text-gray-500 italic">{produk}</td>
-                                  <td className="px-3 py-1 text-right text-gray-500">{pv.utuh.toLocaleString('id-ID')}</td>
-                                  <td className="px-3 py-1 text-right text-gray-500">{pv.pecah.toLocaleString('id-ID')}</td>
-                                  <td className="px-3 py-1 text-right text-gray-500">{pv.sortir.toLocaleString('id-ID')}</td>
-                                  <td className="px-3 py-1 text-right text-gray-600 font-medium">{pv.total.toLocaleString('id-ID')}</td>
+                                  <td className="px-3 py-1 text-right text-gray-500">{pv.utuh.toLocaleString('en-US')}</td>
+                                  <td className="px-3 py-1 text-right text-gray-500">{pv.pecah.toLocaleString('en-US')}</td>
+                                  <td className="px-3 py-1 text-right text-gray-500">{pv.sortir.toLocaleString('en-US')}</td>
+                                  <td className="px-3 py-1 text-right text-gray-600 font-medium">{pv.total.toLocaleString('en-US')}</td>
                                 </tr>
                               ))}
                             </React.Fragment>
@@ -4066,43 +4066,43 @@ export default function App() {
                       <tr key={`d${d}`} className="border-b border-[#e8e4de] hover:bg-gray-50">
                         <td className="px-1 py-1 text-center text-gray-700 font-semibold border-r border-gray-200 text-[10px]">{d}</td>
                         {products.map(p => { const v = dd.get(p)!; const h = v.total > 0; return (<React.Fragment key={p}>
-                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.utuh.toLocaleString('id-ID'):'-'}</td>
-                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.pecah.toLocaleString('id-ID'):'-'}</td>
-                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.sortir.toLocaleString('id-ID'):'-'}</td>
-                          <td className={`px-1 py-1 text-right font-semibold ${h?'text-gray-800':'text-gray-300'} border-r border-gray-200`}>{h?v.total.toLocaleString('id-ID'):'-'}</td>
+                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.utuh.toLocaleString('en-US'):'-'}</td>
+                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.pecah.toLocaleString('en-US'):'-'}</td>
+                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.sortir.toLocaleString('en-US'):'-'}</td>
+                          <td className={`px-1 py-1 text-right font-semibold ${h?'text-gray-800':'text-gray-300'} border-r border-gray-200`}>{h?v.total.toLocaleString('en-US'):'-'}</td>
                         </React.Fragment>);})}
                       </tr>
                     );
                   }
                   dayRows.push(<tr key="subA" className="bg-brand-green-light/30 font-bold"><td className="px-1 py-1 text-center text-gray-700 border-r border-gray-200 text-[10px]">SUB A</td>{products.map(p => (<React.Fragment key={p}>
-                    <td className="px-1 py-1 text-right text-gray-800">{subA[p].utuh.toLocaleString('id-ID')}</td>
-                    <td className="px-1 py-1 text-right text-gray-800">{subA[p].pecah.toLocaleString('id-ID')}</td>
-                    <td className="px-1 py-1 text-right text-gray-800">{subA[p].sortir.toLocaleString('id-ID')}</td>
-                    <td className="px-1 py-1 text-right text-gray-800 border-r border-gray-200">{subA[p].total.toLocaleString('id-ID')}</td>
+                    <td className="px-1 py-1 text-right text-gray-800">{subA[p].utuh.toLocaleString('en-US')}</td>
+                    <td className="px-1 py-1 text-right text-gray-800">{subA[p].pecah.toLocaleString('en-US')}</td>
+                    <td className="px-1 py-1 text-right text-gray-800">{subA[p].sortir.toLocaleString('en-US')}</td>
+                    <td className="px-1 py-1 text-right text-gray-800 border-r border-gray-200">{subA[p].total.toLocaleString('en-US')}</td>
                   </React.Fragment>))}</tr>);
                   if (dim > days1) {
                     for (let d = days1 + 1; d <= dim; d++) {
                       const dd = daily.get(d)!;
                       dayRows.push(<tr key={`d${d}`} className="border-b border-[#e8e4de] hover:bg-gray-50"><td className="px-1 py-1 text-center text-gray-700 font-semibold border-r border-gray-200 text-[10px]">{d}</td>
                         {products.map(p => { const v = dd.get(p)!; const h = v.total > 0; return (<React.Fragment key={p}>
-                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.utuh.toLocaleString('id-ID'):'-'}</td>
-                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.pecah.toLocaleString('id-ID'):'-'}</td>
-                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.sortir.toLocaleString('id-ID'):'-'}</td>
-                          <td className={`px-1 py-1 text-right font-semibold ${h?'text-gray-800':'text-gray-300'} border-r border-gray-200`}>{h?v.total.toLocaleString('id-ID'):'-'}</td>
+                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.utuh.toLocaleString('en-US'):'-'}</td>
+                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.pecah.toLocaleString('en-US'):'-'}</td>
+                          <td className={`px-1 py-1 text-right ${h?'text-gray-700':'text-gray-300'}`}>{h?v.sortir.toLocaleString('en-US'):'-'}</td>
+                          <td className={`px-1 py-1 text-right font-semibold ${h?'text-gray-800':'text-gray-300'} border-r border-gray-200`}>{h?v.total.toLocaleString('en-US'):'-'}</td>
                         </React.Fragment>);})}</tr>);
                     }
                     dayRows.push(<tr key="subB" className="bg-brand-green-light/30 font-bold"><td className="px-1 py-1 text-center text-gray-700 border-r border-gray-200 text-[10px]">SUB B</td>{products.map(p => (<React.Fragment key={p}>
-                      <td className="px-1 py-1 text-right text-gray-800">{subB[p].utuh.toLocaleString('id-ID')}</td>
-                      <td className="px-1 py-1 text-right text-gray-800">{subB[p].pecah.toLocaleString('id-ID')}</td>
-                      <td className="px-1 py-1 text-right text-gray-800">{subB[p].sortir.toLocaleString('id-ID')}</td>
-                      <td className="px-1 py-1 text-right text-gray-800 border-r border-gray-200">{subB[p].total.toLocaleString('id-ID')}</td>
+                      <td className="px-1 py-1 text-right text-gray-800">{subB[p].utuh.toLocaleString('en-US')}</td>
+                      <td className="px-1 py-1 text-right text-gray-800">{subB[p].pecah.toLocaleString('en-US')}</td>
+                      <td className="px-1 py-1 text-right text-gray-800">{subB[p].sortir.toLocaleString('en-US')}</td>
+                      <td className="px-1 py-1 text-right text-gray-800 border-r border-gray-200">{subB[p].total.toLocaleString('en-US')}</td>
                     </React.Fragment>))}</tr>);
                   }
                   dayRows.push(<tr key="total" className="bg-brand-green-light/50 font-bold"><td className="px-1 py-1 text-center text-emerald-700 border-r border-gray-200 text-[10px]">TOTAL</td>{products.map(p => (<React.Fragment key={p}>
-                    <td className="px-1 py-1 text-right text-emerald-700">{totalAll[p].utuh.toLocaleString('id-ID')}</td>
-                    <td className="px-1 py-1 text-right text-emerald-700">{totalAll[p].pecah.toLocaleString('id-ID')}</td>
-                    <td className="px-1 py-1 text-right text-emerald-700">{totalAll[p].sortir.toLocaleString('id-ID')}</td>
-                    <td className="px-1 py-1 text-right text-emerald-700 border-r border-gray-200">{totalAll[p].total.toLocaleString('id-ID')}</td>
+                    <td className="px-1 py-1 text-right text-emerald-700">{totalAll[p].utuh.toLocaleString('en-US')}</td>
+                    <td className="px-1 py-1 text-right text-emerald-700">{totalAll[p].pecah.toLocaleString('en-US')}</td>
+                    <td className="px-1 py-1 text-right text-emerald-700">{totalAll[p].sortir.toLocaleString('en-US')}</td>
+                    <td className="px-1 py-1 text-right text-emerald-700 border-r border-gray-200">{totalAll[p].total.toLocaleString('en-US')}</td>
                   </React.Fragment>))}</tr>);
                   return (<>
                     {/* Factory tabs */}

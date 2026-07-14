@@ -1577,6 +1577,19 @@ export default function App() {
             if (isMasterAdmin && driveToken) {
               try {
                 triggerToast("Membuat laporan Excel...", "inf");
+                // Fetch stock harian data for the report
+                const stockSnapshot = await getDocs(query(collection(db, "stock_harian"), where("tanggal", "==", selectedDate)));
+                const fetchedStockData: Record<string, any> = {};
+                stockSnapshot.forEach(d => {
+                  const v = d.data();
+                  fetchedStockData[d.id] = {
+                    stockAwal: Number(v.stockAwal) || 0,
+                    penerimaan: Number(v.penerimaan) || 0,
+                    pengiriman: Number(v.pengiriman) || 0,
+                    pemakaian: Number(v.pemakaian) || 0,
+                    stockAkhir: Number(v.stockAkhir) || 0,
+                  };
+                });
                 const wb = await generateExcelReport({
                   filteredReports,
                   selectedDate,
@@ -1584,7 +1597,7 @@ export default function App() {
                   lockedStatus: true,
                   penerimaanList,
                   pengirimanList,
-                  stockData: {},
+                  stockData: fetchedStockData,
                   reports,
                 });
                 const buffer = await wb.xlsx.writeBuffer();
@@ -1723,6 +1736,19 @@ export default function App() {
   const handleDownloadFromPreview = async () => {
     try {
       if (exportPreviewType === "harian") {
+        // Fetch stock harian data from Firestore before generating Excel
+        const stockSnapshot = await getDocs(query(collection(db, "stock_harian"), where("tanggal", "==", selectedDate)));
+        const fetchedStockData: Record<string, any> = {};
+        stockSnapshot.forEach(d => {
+          const v = d.data();
+          fetchedStockData[d.id] = {
+            stockAwal: Number(v.stockAwal) || 0,
+            penerimaan: Number(v.penerimaan) || 0,
+            pengiriman: Number(v.pengiriman) || 0,
+            pemakaian: Number(v.pemakaian) || 0,
+            stockAkhir: Number(v.stockAkhir) || 0,
+          };
+        });
         await downloadExcelReport({
           filteredReports,
           selectedDate,
@@ -1730,7 +1756,7 @@ export default function App() {
           lockedStatus: isSelectedDateLocked,
           penerimaanList,
           pengirimanList,
-          stockData: {},
+          stockData: fetchedStockData,
           reports,
         });
       } else if (exportPreviewType === "bulanan") {

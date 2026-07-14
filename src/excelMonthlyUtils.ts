@@ -61,6 +61,7 @@ const setFormula = (ws: ExcelJS.Worksheet, r: number, c: number, formula: string
 };
 
 const blockBorder = { style: 'medium', color: { argb: 'FFB0B0B0' } } as const;
+const separatorBorder = { style: 'medium', color: { argb: 'FF808080' } } as const;
 
 const applyBlockBorder = (ws: ExcelJS.Worksheet, r1: number, c1: number, r2: number, c2: number) => {
   for (let r = r1; r <= r2; r++) {
@@ -74,6 +75,14 @@ const applyBlockBorder = (ws: ExcelJS.Worksheet, r1: number, c1: number, r2: num
     const bottom = ws.getCell(r2, c);
     top.border = { ...top.border, top: blockBorder };
     bottom.border = { ...bottom.border, bottom: blockBorder };
+  }
+};
+
+// Apply separator border (top line) across a row to visually divide sections
+const applyRowSeparator = (ws: ExcelJS.Worksheet, r: number, c1: number, c2: number) => {
+  for (let c = c1; c <= c2; c++) {
+    const cell = ws.getCell(r, c);
+    cell.border = { ...cell.border, top: separatorBorder };
   }
 };
 
@@ -212,6 +221,7 @@ const writePreviewSheet = (
       setCell(ws, row, c, ss, fontSubtotal, fillBlueLight, 'right'); c++;
       setCell(ws, row, c, st, fontSubtotal, fillBlueLight, 'right'); c++;
     }
+    applyRowSeparator(ws, row, 1, totalCols);
     row++;
   }
 
@@ -245,6 +255,7 @@ const writePreviewSheet = (
       setCell(ws, row, c, ss, fontSubtotal, fillBlueLight, 'right'); c++;
       setCell(ws, row, c, st, fontSubtotal, fillBlueLight, 'right'); c++;
     }
+    applyRowSeparator(ws, row, 1, totalCols);
     row++;
   }
 
@@ -262,6 +273,7 @@ const writePreviewSheet = (
     setCell(ws, row, c, ss, fontSubtotal, fillBlueLight, 'right'); c++;
     setCell(ws, row, c, st, fontSubtotal, fillBlueLight, 'right'); c++;
   }
+  applyRowSeparator(ws, row, 1, totalCols);
 
   // Column widths
   ws.getColumn(1).width = 5;
@@ -503,6 +515,10 @@ const writeProductSheet = (
     }
     c++; // gap
   }
+  {
+    const lastDataCol = 2 + (vendors.length - 1) * (V_COLS + colGap) + V_TOTAL;
+    applyRowSeparator(ws, subARow, 1, lastDataCol);
+  }
   dataRow++;
 
   // Days 16-31
@@ -575,6 +591,10 @@ const writeProductSheet = (
     }
     c++; // gap
   }
+  {
+    const lastDataCol = 2 + (vendors.length - 1) * (V_COLS + colGap) + V_TOTAL;
+    applyRowSeparator(ws, subBRow, 1, lastDataCol);
+  }
   dataRow++;
 
   // TOTAL row
@@ -596,6 +616,10 @@ const writeProductSheet = (
       c++;
     }
     c++; // gap
+  }
+  {
+    const lastDataCol = 2 + (vendors.length - 1) * (V_COLS + colGap) + V_TOTAL;
+    applyRowSeparator(ws, dataRow, 1, lastDataCol);
   }
 
   // Column widths

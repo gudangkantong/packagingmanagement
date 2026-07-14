@@ -6,6 +6,7 @@ import { Save, Loader2, Package, RefreshCw, Edit2, Trash2 } from "lucide-react";
 import { db } from "./firebase";
 import { StockHarian, LaporanKantong, AllowedUser, PenerimaanData, PengirimanData } from "./types";
 import { getDateString, formatDateDisplay } from "./utils";
+import { getCached, setCache } from "./utils/cache";
 import { JENIS_KANTONG } from "./csvUtils";
 
 const OPT_GUDANG = "Gudang OPT";
@@ -110,9 +111,20 @@ export default function StockHarianPage({
     return Object.entries(vendorMap).map(([vendor, total]) => ({ vendor, total }));
   };
 
+  // Stock data listener: load from cache first, then sync from Firestore
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setStockData({}); setLoading(false); return; }
     setLoading(true);
+
+    // 1. Load from cache immediately for instant UI
+    const cacheKey = `stock_harian_${selectedDate}`;
+    const cached = getCached<Record<string, StockHarian>>(cacheKey);
+    if (cached && Object.keys(cached).length > 0) {
+      setStockData(cached);
+      setLoading(false);
+    }
+
+    // 2. Set up real-time listener (updates cache on any change)
     const q = query(collection(db, "stock_harian"), where("tanggal", "==", selectedDate));
     const unsub = onSnapshot(q, snap => {
       const data: Record<string, StockHarian> = {};
@@ -120,15 +132,35 @@ export default function StockHarianPage({
         const v = d.data();
         data[d.id] = { id: d.id, pabrik: v.pabrik || "", nama: v.nama || "", tanggal: v.tanggal || "", stockAwal: Number(v.stockAwal) || 0, penerimaan: Number(v.penerimaan) || 0, pengiriman: Number(v.pengiriman) || 0, pemakaian: Number(v.pemakaian) || 0, stockAkhir: Number(v.stockAkhir) || 0, createdBy: v.createdBy || "", updatedAt: v.updatedAt || "" };
       });
-      setStockData(data); setLoading(false);
+      setStockData(data);
+      setLoading(false);
+      // Update cache with latest data (TTL 7 days)
+      setCache(cacheKey, data, 7 * 24 * 60 * 60 * 1000);
     }, err => { console.error(err); triggerToast("Gagal sync stock harian", "er"); setLoading(false); });
     return () => unsub();
   }, [currentUser, isAllowed, selectedDate]);
 
+  // Prev day data: load from cache first, then sync from Firestore
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setPrevDayData({}); setPrevDayLoaded(false); return; }
+
+    // Load from cache first
+    const cacheKey = `stock_harian_${prevDate}`;
+    const cached = getCached<Record<string, StockHarian>>(cacheKey);
+    if (cached && Object.keys(cached).length > 0) {
+      setPrevDayData(cached);
+      setPrevDayLoaded(true);
+    }
+
+    // Real-time listener
     const q = query(collection(db, "stock_harian"), where("tanggal", "==", prevDate));
-    const unsub = onSnapshot(q, snap => { const data: Record<string, StockHarian> = {}; snap.forEach(d => { data[d.id] = d.data() as StockHarian; }); setPrevDayData(data); setPrevDayLoaded(true); }, err => { console.error(err); setPrevDayLoaded(true); });
+    const unsub = onSnapshot(q, snap => {
+      const data: Record<string, StockHarian> = {};
+      snap.forEach(d => { data[d.id] = d.data() as StockHarian; });
+      setPrevDayData(data);
+      setPrevDayLoaded(true);
+      setCache(cacheKey, data, 7 * 24 * 60 * 60 * 1000);
+    }, err => { console.error(err); setPrevDayLoaded(true); });
     return () => unsub();
   }, [currentUser, isAllowed, prevDate]);
 
@@ -164,7 +196,6 @@ export default function StockHarianPage({
   };
 
   // === FULL SYNC: Fill all gaps from last known stock to today ===
-  // Runs on page load, date change, and when source data changes
   const syncRunningRef = useRef(false);
   useEffect(() => {
     if (!currentUser || !isMasterAdmin || loading) return;

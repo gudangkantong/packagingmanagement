@@ -508,8 +508,7 @@ export default function App() {
     doBackfill();
   }, [currentUser, isAllowed]);
 
-  // Main reports — getDocs + cache (hemat reads, no cascade on save)
-  // Re-fetch only when: 1) selectedDate changes, 2) meta signal (other user edited)
+  // Main reports — onSnapshot + cache (real-time, cascade reads hanya 1 doc/change)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) {
       setReports([]);
@@ -532,87 +531,75 @@ export default function App() {
       if (cached) allCached.push(...cached);
       d.setDate(d.getDate() + 1);
     }
+    // Juga cache untuk tanggal di luar 7 hari
+    const selectedMs = new Date(selectedDate + "T00:00:00").getTime();
+    const nowMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
+    const daysDiff = Math.floor((nowMs - selectedMs) / 86400000);
+    if (daysDiff > 7) {
+      const cachedOld = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
+      if (cachedOld) allCached.push(...cachedOld);
+    }
     if (allCached.length > 0) {
       setReports(allCached);
       setDataLoading(false);
     }
 
-    // 2. Fetch from Firestore (only once per mount/date change, not real-time)
-    const fetchReports = async () => {
-      try {
-        const reportsQuery = query(
-          collection(db, "laporan_kantong"),
-          where("tanggal", ">=", fromDate),
-          where("tanggal", "<=", toDate),
-          orderBy("tanggal", "desc")
-        );
-        const snap = await getDocs(reportsQuery);
-        const items: LaporanKantong[] = [];
-        snap.forEach((docSnap) => {
-          const data = docSnap.data();
-          items.push({
-            id: docSnap.id,
-            vendor: data.vendor || "",
-            nama: data.nama || "",
-            pabrik: data.pabrik || "",
-            shift: Number(data.shift) || 1,
-            tanggal: data.tanggal || "",
-            utuh: Number(data.utuh) || 0,
-            pecah: Number(data.pecah) || 0,
-            sortir: Number(data.sortir) || 0,
-            total: Number(data.total) || 0,
-            createdBy: data.createdBy || "",
-            updatedAt: data.updatedAt || ""
-          });
+    // 2. onSnapshot real-time — lebih murah drpd getDocs re-fetch semua user tiap ada edit
+    const reportsQuery = query(
+      collection(db, "laporan_kantong"),
+      where("tanggal", ">=", fromDate),
+      where("tanggal", "<=", toDate),
+      orderBy("tanggal", "desc")
+    );
+    const unsub = onSnapshot(reportsQuery, (snap) => {
+      const items: LaporanKantong[] = [];
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        items.push({
+          id: docSnap.id,
+          vendor: data.vendor || "",
+          nama: data.nama || "",
+          pabrik: data.pabrik || "",
+          shift: Number(data.shift) || 1,
+          tanggal: data.tanggal || "",
+          utuh: Number(data.utuh) || 0,
+          pecah: Number(data.pecah) || 0,
+          sortir: Number(data.sortir) || 0,
+          total: Number(data.total) || 0,
+          createdBy: data.createdBy || "",
+          updatedAt: data.updatedAt || ""
         });
-        setReports(items);
-        setDataLoading(false);
+      });
 
-        // Cache per tanggal (30 hari TTL)
-        const byDate: Record<string, LaporanKantong[]> = {};
-        items.forEach((item) => {
-          if (!byDate[item.tanggal]) byDate[item.tanggal] = [];
-          byDate[item.tanggal].push(item);
-        });
-        Object.entries(byDate).forEach(([date, dateItems]) => {
-          setCache(`laporan_${date}`, dateItems, 30 * 24 * 60 * 60 * 1000);
-        });
-      } catch (err) {
-        console.error("Failed to fetch reports:", err);
-        triggerToast("Gagal memuat data laporan", "er");
-        setDataLoading(false);
-      }
-    };
-
-    fetchReports();
-  }, [currentUser, isAllowed, selectedDate, refreshTrigger]);
-
-  // Juga load data dari cache untuk tanggal di luar 7 hari (agar tampil di halaman)
-  // Ini dilakukan sekali saat selectedDate berubah
-  useEffect(() => {
-    const loadCachedOldData = () => {
-      // Cek apakah selectedDate di luar range 7 hari real-time
-      const selectedMs = new Date(selectedDate + "T00:00:00").getTime();
-      const nowMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
-      const daysDiff = Math.floor((nowMs - selectedMs) / 86400000);
-
+      // Merge cache untuk tanggal di luar 7 hari (tidak ada di onSnapshot)
       if (daysDiff > 7) {
-        // selectedDate di luar7 hari → load dari cache
-        const cached = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
-        if (cached && cached.length > 0) {
-          // Merge dengan data real-time (jangan timpa)
-          setReports(prev => {
-            const existingIds = new Set(prev.map(r => r.id));
-            const newItems = cached.filter(r => !existingIds.has(r.id));
-            if (newItems.length === 0) return prev;
-            const merged = [...prev, ...newItems];
-            merged.sort((a, b) => b.tanggal.localeCompare(a.tanggal) || b.updatedAt.localeCompare(a.updatedAt));
-            return merged;
-          });
+        const cachedOld = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
+        if (cachedOld) {
+          const existingIds = new Set(items.map(r => r.id));
+          cachedOld.forEach(r => { if (!existingIds.has(r.id)) items.push(r); });
         }
       }
-    };
-    loadCachedOldData();
+
+      setReports(items);
+      setDataLoading(false);
+
+      // Cache per tanggal (30 hari TTL)
+      const byDate: Record<string, LaporanKantong[]> = {};
+      items.forEach((item) => {
+        if (!byDate[item.tanggal]) byDate[item.tanggal] = [];
+        byDate[item.tanggal].push(item);
+      });
+      Object.entries(byDate).forEach(([date, dateItems]) => {
+        setCache(`laporan_${date}`, dateItems, 30 * 24 * 60 * 60 * 1000);
+      });
+    }, (err) => {
+      console.error("Failed to sync reports:", err);
+      triggerToast("Gagal menyinkronkan data real-time", "er");
+      setDataLoading(false);
+      handleFirestoreError(err, OperationType.GET, "laporan_kantong");
+    });
+
+    return () => unsub();
   }, [currentUser, isAllowed, selectedDate, refreshTrigger]);
 
   // Penerimaan: getDocs + cache (jarang berubah, hemat reads)
@@ -673,72 +660,62 @@ export default function App() {
     loadPengiriman();
   }, [currentUser, isAllowed, refreshTrigger]);
 
-  // Optimasi Spark: allowed_users pake getDocs + refresh 60 detik instead of onSnapshot
+  // allowed_users: onSnapshot (lebih murah drpd polling buat 50 user)
   useEffect(() => {
     if (!currentUser || isAllowed !== true || currentUser.isAnonymous) {
       setAllowedUsers([]);
       return;
     }
 
-    const loadAllowedUsers = async () => {
-      try {
-        const snap = await getDocs(collection(db, "allowed_users"));
-        const items: AllowedUser[] = [];
-        snap.forEach((docSnap) => {
-          const data = docSnap.data();
-          items.push({
-            email: data.email || docSnap.id,
-            allowed: data.allowed === true,
-            role: data.role || "admin",
-            pabrikRole: data.pabrikRole || null,
-            addedAt: data.addedAt || ""
-          });
+    const usersQuery = collection(db, "allowed_users");
+    const unsubUsers = onSnapshot(usersQuery, (querySnapshot) => {
+      const items: AllowedUser[] = [];
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        items.push({
+          email: data.email || docSnap.id,
+          allowed: data.allowed === true,
+          role: data.role || "admin",
+          pabrikRole: data.pabrikRole || null,
+          addedAt: data.addedAt || ""
         });
-        setAllowedUsers(items);
-      } catch (err) {
-        console.error("Failed to load allowed users:", err);
-        handleFirestoreError(err, OperationType.GET, "allowed_users");
-      }
-    };
+      });
+      setAllowedUsers(items);
+    }, (err) => {
+      console.error("Failed to sync allowed users:", err);
+      handleFirestoreError(err, OperationType.GET, "allowed_users");
+    });
 
-    loadAllowedUsers();
-    // Refresh tiap 60 detik (jarang berubah)
-    const interval = setInterval(loadAllowedUsers, 60000);
-    return () => clearInterval(interval);
+    return () => unsubUsers();
   }, [currentUser, isAllowed]);
 
-  // Optimasi Spark: locked_dates pake getDocs + refresh 30 detik instead of onSnapshot
+  // locked_dates: onSnapshot (lebih murah drpd polling buat 50 user)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) {
       setLockedDates({});
       return;
     }
 
-    const loadLockedDates = async () => {
-      try {
-        const snap = await getDocs(collection(db, "locked_dates"));
-        const datesMap: Record<string, LockedDate> = {};
-        snap.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (data.locked) {
-            datesMap[docSnap.id] = {
-              locked: true,
-              lockedBy: data.lockedBy || "",
-              lockedAt: data.lockedAt || ""
-            };
-          }
-        });
-        setLockedDates(datesMap);
-      } catch (err) {
-        console.error("Failed to load locked dates:", err);
-        handleFirestoreError(err, OperationType.GET, "locked_dates");
-      }
-    };
+    const lockedQuery = collection(db, "locked_dates");
+    const unsubLocked = onSnapshot(lockedQuery, (querySnapshot) => {
+      const datesMap: Record<string, LockedDate> = {};
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.locked) {
+          datesMap[docSnap.id] = {
+            locked: true,
+            lockedBy: data.lockedBy || "",
+            lockedAt: data.lockedAt || ""
+          };
+        }
+      });
+      setLockedDates(datesMap);
+    }, (err) => {
+      console.error("Failed to sync locked dates:", err);
+      handleFirestoreError(err, OperationType.GET, "locked_dates");
+    });
 
-    loadLockedDates();
-    // Refresh tiap 30 detik (biar gak terlalu lama nunggu kalo ada yg lock/unlock)
-    const interval = setInterval(loadLockedDates, 30000);
-    return () => clearInterval(interval);
+    return () => unsubLocked();
   }, [currentUser, isAllowed]);
 
   // Listen to master data collections (vendors, jenis_kantong, pabrik)

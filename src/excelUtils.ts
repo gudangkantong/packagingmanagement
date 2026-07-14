@@ -157,6 +157,9 @@ const writePemakaianSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
         row++;
       });
     }
+    // Separator antar jenis kantong
+    applyRowSeparator(ws, row - 1, 1, 5);
+    row++; // blank row spacer
   });
   applyBlockBorder(ws, blockStart, 1, row - 1, 5);
   row += 2; // extra spacing between pabrik blocks
@@ -216,6 +219,9 @@ const writePemakaianSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
           setCell(ws, row, 5, vStat.total, fontVendor, fillVendor, 'right');
           row++;
         });
+        // Separator antar jenis kantong di shift
+        applyRowSeparator(ws, row - 1, 1, 5);
+        row++; // blank row spacer
       });
       applyBlockBorder(ws, shiftBlockStart, 1, row - 1, 5);
       row += 2; // spacing between shifts

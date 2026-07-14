@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  collection, doc, setDoc, onSnapshot, query, where, writeBatch,
+  collection, doc, setDoc, onSnapshot, query, where, writeBatch, getDocs, orderBy, limit,
 } from "firebase/firestore";
 import { Save, Loader2, Package, RefreshCw, Edit2, Trash2 } from "lucide-react";
 import { db } from "./firebase";
@@ -138,33 +138,93 @@ export default function StockHarianPage({
     ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
       const id = makeDocId(p, n, selectedDate);
       const saved = stockData[id];
-      if (saved) { buf[id] = { stockAwal: String(saved.stockAwal) }; } else { const prevId = makeDocId(p, n, prevDate); const pv = prevDayData[prevId]; const ps = pv ? Number(pv.stockAkhir) || 0 : 0; buf[id] = { stockAwal: ps !== 0 ? String(ps) : "" }; }
+      if (saved) { buf[id] = { stockAwal: String(saved.stockAwal) }; }
+      else {
+        // Try prev day first
+        const prevId = makeDocId(p, n, prevDate);
+        const pv = prevDayData[prevId];
+        if (pv) {
+          const ps = Number(pv.stockAkhir) || 0;
+          buf[id] = { stockAwal: ps !== 0 ? String(ps) : "" };
+        } else {
+          // No prev day data — leave empty, auto-save effect will handle backward search
+          buf[id] = { stockAwal: "" };
+        }
+      }
     }));
     setEditBuffer(buf);
   }, [stockData, prevDayData, prevDayLoaded, selectedDate]);
 
 
   // Auto-populate stockAwal from prev day's stockAkhir + AUTO-SAVE for new dates
+  // Falls back to search backwards if prevDate has no data (multi-day gap)
   useEffect(() => {
     if (!currentUser || !isMasterAdmin || loading || !prevDayLoaded) return;
+
     const toSave: Array<{ pabrik: string; nama: string; docId: string; stockAwal: number }> = [];
+    const needsFallback: Array<{ pabrik: string; nama: string; docId: string }> = [];
 
     ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
       const id = makeDocId(p, n, selectedDate);
       if (stockData[id]) return; // already saved, skip
       const prevId = makeDocId(p, n, prevDate);
       const pv = prevDayData[prevId];
-      if (!pv) return; // no prev data
-      const sa = Number(pv.stockAkhir) || 0;
-      if (sa === 0) return; // skip zero values
-      toSave.push({ pabrik: p, nama: n, docId: id, stockAwal: sa });
+      if (pv) {
+        const sa = Number(pv.stockAkhir) || 0;
+        if (sa !== 0) toSave.push({ pabrik: p, nama: n, docId: id, stockAwal: sa });
+      } else {
+        // No data for yesterday — need to search backwards
+        needsFallback.push({ pabrik: p, nama: n, docId: id });
+      }
     }));
 
-    if (toSave.length === 0) return;
-
+    // If some items need fallback, search backwards in Firestore
     const doAutoSave = async () => {
       try {
+        // Handle fallback items: search backwards for most recent stock akhir
+        if (needsFallback.length > 0) {
+          const fallbackResults = new Map<string, number>();
+
+          // Search for each item individually (could be optimized but keeps it clear)
+          for (const item of needsFallback) {
+            const saved = stockData[item.docId];
+            if (saved) continue; // already saved during this effect
+
+            const nama = item.nama;
+            const pKey = PABRIK_SHORT[item.pabrik] || item.pabrik;
+            const searchId = `${pKey}_${nama.replace(/\s+/g, "_")}`;
+
+            // Query: get most recent stock_harian for this item before selectedDate
+            // Doc ID format: {pKey}_{nama}_{tanggal} — lexicographic order = date order for YYYY-MM-DD
+            const q = query(
+              collection(db, "stock_harian"),
+              where("__name__", ">=", searchId + "_"),
+              where("__name__", "<", searchId + "_" + selectedDate),
+              orderBy("__name__", "desc"),
+              limit(1)
+            );
+            const snap = await getDocs(q);
+            if (!snap.empty) {
+              const latestDoc = snap.docs[0];
+              const data = latestDoc.data();
+              const sa = Number(data.stockAkhir) || 0;
+              if (sa !== 0) {
+                fallbackResults.set(item.docId, sa);
+                toSave.push({ pabrik: item.pabrik, nama: nama, docId: item.docId, stockAwal: sa });
+              }
+            }
+          }
+
+          if (fallbackResults.size > 0) {
+            console.log(`[StockHarian] Found ${fallbackResults.size} items from backward search`);
+          }
+        }
+
+        if (toSave.length === 0) return;
+
         for (const item of toSave) {
+          // Double-check: don't overwrite if another effect already saved it
+          if (stockData[item.docId]) continue;
           const pn = computePenerimaan(item.pabrik, item.nama, selectedDate);
           const pg = computePengiriman(item.pabrik, item.nama, selectedDate);
           const isOPT = item.pabrik === OPT_GUDANG;
@@ -176,7 +236,7 @@ export default function StockHarianPage({
             createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
           }, { merge: true });
         }
-        console.log(`[StockHarian] Auto-saved ${toSave.length} rows from prev day data`);
+        console.log(`[StockHarian] Auto-saved ${toSave.length} rows (${needsFallback.length} via backward search)`);
       } catch (e) {
         console.error("[StockHarian] Auto-save failed:", e);
       }

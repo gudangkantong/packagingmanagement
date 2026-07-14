@@ -51,7 +51,8 @@ const setMergedCell = (ws: ExcelJS.Worksheet, r1: number, c1: number, r2: number
 const setFormula = (ws: ExcelJS.Worksheet, r: number, c: number, formula: string, font?: Partial<ExcelJS.Font>, fill?: Partial<ExcelJS.Fill>, align?: string) => {
   const cell = ws.getCell(r, c);
   cell.value = { formula } as any;
-  cell.numFmt = '#,##0';
+  // Percentage formulas contain *100 → format as percent; else thousands separator
+  cell.numFmt = formula.includes('*100') ? '0.0"%"' : '#,##0';
   if (font) cell.font = font as ExcelJS.Font;
   if (fill) cell.fill = fill as ExcelJS.Fill;
   if (align === 'right') cell.alignment = { horizontal: 'right' };

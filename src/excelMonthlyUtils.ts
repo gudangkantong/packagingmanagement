@@ -428,6 +428,7 @@ const writeProductSheet = (
   // Days 1-15
   let dataRow = 5;
   const rowSubA = dataRow;
+  const detailBlockStart = 1;
   for (let d = 1; d <= days1; d++) {
     setCell(ws, dataRow, 1, d, fontData, undefined, 'center');
     const dd = daily.get(d)!;
@@ -462,13 +463,11 @@ const writeProductSheet = (
 
       setCell(ws, dataRow, c, 0, fontNol, undefined, 'right'); c++; // MAS = 0
       setCell(ws, dataRow, c, 0, fontNol, undefined, 'right'); c++; // LAB = 0
-      // TOTAL formula = UTUH+PCH+SRT+MAS+LAB
+      // TOTAL formula = UTUH+PCH+SRT (MAS+LAB dummy 0)
       const totalUtuh = colLetter(c - 7);
       const totalPch = colLetter(c - 6);
       const totalSrt = colLetter(c - 4);
-      const totalMas = colLetter(c - 2);
-      const totalLab = colLetter(c - 1);
-      setFormula(ws, dataRow, c, `${totalUtuh}${dataRow}+${totalPch}${dataRow}+${totalSrt}${dataRow}+${totalMas}${dataRow}+${totalLab}${dataRow}`, f, bg, 'right');
+      setFormula(ws, dataRow, c, `${totalUtuh}${dataRow}+${totalPch}${dataRow}+${totalSrt}${dataRow}`, f, bg, 'right');
       c++;
 
       c++; // gap column
@@ -536,14 +535,12 @@ const writeProductSheet = (
       }
       c++;
 
-      setCell(ws, dataRow, c, 0, fontNol, undefined, 'right'); c++;
-      setCell(ws, dataRow, c, 0, fontNol, undefined, 'right'); c++;
+      setCell(ws, dataRow, c, 0, fontNol, undefined, 'right'); c++; // MAS = 0
+      setCell(ws, dataRow, c, 0, fontNol, undefined, 'right'); c++; // LAB = 0
       const totalUtuh = colLetter(c - 7);
       const totalPch = colLetter(c - 6);
       const totalSrt = colLetter(c - 4);
-      const totalMas = colLetter(c - 2);
-      const totalLab = colLetter(c - 1);
-      setFormula(ws, dataRow, c, `${totalUtuh}${dataRow}+${totalPch}${dataRow}+${totalSrt}${dataRow}+${totalMas}${dataRow}+${totalLab}${dataRow}`, f, bg, 'right');
+      setFormula(ws, dataRow, c, `${totalUtuh}${dataRow}+${totalPch}${dataRow}+${totalSrt}${dataRow}`, f, bg, 'right');
       c++;
 
       c++; // gap
@@ -614,6 +611,7 @@ const writeProductSheet = (
 
   // Freeze header rows (R1:title, R2:vendor, R3:sub-columns, R4:KELUAR)
   ws.views = [{ state: 'frozen', ySplit: 4 }];
+  applyBlockBorder(ws, detailBlockStart, 1, row - 1, 2 + (vendors.length - 1) * (V_COLS + colGap) + V_TOTAL);
 };
 
 // ============================================================

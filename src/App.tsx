@@ -262,20 +262,20 @@ export default function App() {
     }, 4000);
   };
 
-  // Helper: update meta timestamp untuk sync antar device (debounced 5 detik)
-  const bumpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Debounced: update meta timestamp untuk sync antar device (max 1×/30 detik hemat writes)
+  const lastBumpRef = useRef(0);
   const bumpLastUpdate = async () => {
-    if (bumpTimerRef.current) clearTimeout(bumpTimerRef.current);
-    bumpTimerRef.current = setTimeout(async () => {
-      try {
-        await setDoc(doc(db, "app_meta", "last_update"), {
-          timestamp: new Date().toISOString(),
-          updatedBy: currentUser?.email || "unknown"
-        }, { merge: true });
-      } catch (err) {
-        console.error("Failed to bump last_update:", err);
-      }
-    }, 5000); // 5 detik debounce
+    const now = Date.now();
+    if (now - lastBumpRef.current < 30000) return; // skip kalo <30 detik sejak bump terakhir
+    lastBumpRef.current = now;
+    try {
+      await setDoc(doc(db, "app_meta", "last_update"), {
+        timestamp: new Date().toISOString(),
+        updatedBy: currentUser?.email || "unknown"
+      }, { merge: true });
+    } catch (err) {
+      console.error("Failed to bump last_update:", err);
+    }
   };
 
   // Listen to app_meta/last_update untuk auto-sync antar device
@@ -438,18 +438,19 @@ export default function App() {
 
     if (!needsBackfill) return;
 
-    console.log("[Backfill] User baru/kembali setelah lama, fetch30 hari data...");
+    console.log("[Backfill] User baru/kembali setelah lama, fetch7 hari data...");
     setCache("last_seen", new Date().toISOString(), 365 * oneDayMs);
 
     const doBackfill = async () => {
       try {
-        const thirtyDaysAgo = getDateString(new Date(now - 30 * oneDayMs));
+        // Spark plan: backfill 7 hari instead of 30 untuk hemat reads
+        const sevenDaysAgo = getDateString(new Date(now - 7 * oneDayMs));
         const today = getDateString(new Date());
 
-        // Fetch laporan30 hari
+        // Fetch laporan 7 hari
         const laporanQuery = query(
           collection(db, "laporan_kantong"),
-          where("tanggal", ">=", thirtyDaysAgo),
+          where("tanggal", ">=", sevenDaysAgo),
           where("tanggal", "<=", today),
           orderBy("tanggal", "desc")
         );
@@ -671,62 +672,72 @@ export default function App() {
     loadPengiriman();
   }, [currentUser, isAllowed, refreshTrigger]);
 
-  // Listen to allowed_users collection when authorized
+  // Optimasi Spark: allowed_users pake getDocs + refresh 60 detik instead of onSnapshot
   useEffect(() => {
     if (!currentUser || isAllowed !== true || currentUser.isAnonymous) {
       setAllowedUsers([]);
       return;
     }
 
-    const usersQuery = collection(db, "allowed_users");
-    const unsubUsers = onSnapshot(usersQuery, (querySnapshot) => {
-      const items: AllowedUser[] = [];
-      querySnapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        items.push({
-          email: data.email || docSnap.id,
-          allowed: data.allowed === true,
-          role: data.role || "admin",
-          pabrikRole: data.pabrikRole || null,
-          addedAt: data.addedAt || ""
+    const loadAllowedUsers = async () => {
+      try {
+        const snap = await getDocs(collection(db, "allowed_users"));
+        const items: AllowedUser[] = [];
+        snap.forEach((docSnap) => {
+          const data = docSnap.data();
+          items.push({
+            email: data.email || docSnap.id,
+            allowed: data.allowed === true,
+            role: data.role || "admin",
+            pabrikRole: data.pabrikRole || null,
+            addedAt: data.addedAt || ""
+          });
         });
-      });
-      setAllowedUsers(items);
-    }, (err) => {
-      console.error("Failed to sync allowed users:", err);
-      handleFirestoreError(err, OperationType.GET, "allowed_users");
-    });
+        setAllowedUsers(items);
+      } catch (err) {
+        console.error("Failed to load allowed users:", err);
+        handleFirestoreError(err, OperationType.GET, "allowed_users");
+      }
+    };
 
-    return () => unsubUsers();
+    loadAllowedUsers();
+    // Refresh tiap 60 detik (jarang berubah)
+    const interval = setInterval(loadAllowedUsers, 60000);
+    return () => clearInterval(interval);
   }, [currentUser, isAllowed]);
 
-  // Listen to locked_dates collection when authorized
+  // Optimasi Spark: locked_dates pake getDocs + refresh 30 detik instead of onSnapshot
   useEffect(() => {
     if (!currentUser || isAllowed !== true) {
       setLockedDates({});
       return;
     }
 
-    const lockedQuery = collection(db, "locked_dates");
-    const unsubLocked = onSnapshot(lockedQuery, (querySnapshot) => {
-      const datesMap: Record<string, LockedDate> = {};
-      querySnapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (data.locked) {
-          datesMap[docSnap.id] = {
-            locked: true,
-            lockedBy: data.lockedBy || "",
-            lockedAt: data.lockedAt || ""
-          };
-        }
-      });
-      setLockedDates(datesMap);
-    }, (err) => {
-      console.error("Failed to sync locked dates:", err);
-      handleFirestoreError(err, OperationType.GET, "locked_dates");
-    });
+    const loadLockedDates = async () => {
+      try {
+        const snap = await getDocs(collection(db, "locked_dates"));
+        const datesMap: Record<string, LockedDate> = {};
+        snap.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data.locked) {
+            datesMap[docSnap.id] = {
+              locked: true,
+              lockedBy: data.lockedBy || "",
+              lockedAt: data.lockedAt || ""
+            };
+          }
+        });
+        setLockedDates(datesMap);
+      } catch (err) {
+        console.error("Failed to load locked dates:", err);
+        handleFirestoreError(err, OperationType.GET, "locked_dates");
+      }
+    };
 
-    return () => unsubLocked();
+    loadLockedDates();
+    // Refresh tiap 30 detik (biar gak terlalu lama nunggu kalo ada yg lock/unlock)
+    const interval = setInterval(loadLockedDates, 30000);
+    return () => clearInterval(interval);
   }, [currentUser, isAllowed]);
 
   // Listen to master data collections (vendors, jenis_kantong, pabrik)

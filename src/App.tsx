@@ -306,6 +306,15 @@ export default function App() {
             if (key.includes("stock_harian_")) localStorage.removeItem(key);
           });
 
+          // Clear penerimaan & pengiriman cache (biar export pake data terbaru)
+          removeCache("penerimaan_data");
+          removeCache("pengiriman_data");
+
+          // Clear master data cache
+          removeCache("vendors");
+          removeCache("jenis_kantong");
+          removeCache("pabrik_list");
+
           console.log("[AutoSync] Remote update detected, refreshing data...");
           setRefreshTrigger(prev => prev + 1); // trigger data refresh
         }

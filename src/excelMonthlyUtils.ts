@@ -736,7 +736,7 @@ const writeDataProduksi = (
     for (const product of products) {
       const info = prodSheets[product];
       if (info && info.vendors.length > 0) {
-        const detailRow = 5 + d; // +1 for SUB A row shift in detail sheet
+        const detailRow = 4 + d; // detail sheet: R4 = KELUAR label, data starts R5 (= 4 + day)
         const sn = info.sheetName;
 
         const sumFormula = (vendorSubCol: number): string => {

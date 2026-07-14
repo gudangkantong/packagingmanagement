@@ -71,7 +71,7 @@ const setCell = (ws: ExcelJS.Worksheet, r: number, c: number, value: any, font?:
   cell.border = { top: { style: 'thin', color: { argb: 'FFE0E0E0' } }, bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } }, left: { style: 'thin', color: { argb: 'FFE0E0E0' } }, right: { style: 'thin', color: { argb: 'FFE0E0E0' } } };
 };
 
-const blockBorder = { style: 'medium', color: { argb: 'FFB0B0B0' } } as const;
+const blockBorder = { style: 'thick', color: { argb: 'FF666666' } } as const;
 
 const applyBlockBorder = (ws: ExcelJS.Worksheet, r1: number, c1: number, r2: number, c2: number) => {
   for (let r = r1; r <= r2; r++) {
@@ -109,48 +109,50 @@ const writePemakaianSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
   row = 5;
 
   const writePabrik = (pabrikLabel: string, pabrikName: string) => {
-    const factoryReports = filteredReports.filter(r => r.pabrik.includes(pabrikLabel));
-    const agg: Record<string, { utuh: number; pecah: number; sortir: number; total: number; vendors: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> }> = {};
-    JENIS_KANTONG.forEach(name => { agg[name] = { utuh: 0, pecah: 0, sortir: 0, total: 0, vendors: {} }; });
-    factoryReports.forEach(r => {
-      if (agg[r.nama]) {
-        agg[r.nama].utuh += r.utuh; agg[r.nama].pecah += r.pecah; agg[r.nama].sortir += r.sortir; agg[r.nama].total += r.total;
-        if (!agg[r.nama].vendors[r.vendor]) agg[r.nama].vendors[r.vendor] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
-        agg[r.nama].vendors[r.vendor].utuh += r.utuh; agg[r.nama].vendors[r.vendor].pecah += r.pecah;
-        agg[r.nama].vendors[r.vendor].sortir += r.sortir; agg[r.nama].vendors[r.vendor].total += r.total;
-      }
-    });
+  const factoryReports = filteredReports.filter(r => r.pabrik.includes(pabrikLabel));
+  const agg: Record<string, { utuh: number; pecah: number; sortir: number; total: number; vendors: Record<string, { utuh: number; pecah: number; sortir: number; total: number }> }> = {};
+  JENIS_KANTONG.forEach(name => { agg[name] = { utuh: 0, pecah: 0, sortir: 0, total: 0, vendors: {} }; });
+  factoryReports.forEach(r => {
+    if (agg[r.nama]) {
+      agg[r.nama].utuh += r.utuh; agg[r.nama].pecah += r.pecah; agg[r.nama].sortir += r.sortir; agg[r.nama].total += r.total;
+      if (!agg[r.nama].vendors[r.vendor]) agg[r.nama].vendors[r.vendor] = { utuh: 0, pecah: 0, sortir: 0, total: 0 };
+      agg[r.nama].vendors[r.vendor].utuh += r.utuh; agg[r.nama].vendors[r.vendor].pecah += r.pecah;
+      agg[r.nama].vendors[r.vendor].sortir += r.sortir; agg[r.nama].vendors[r.vendor].total += r.total;
+    }
+  });
 
-    ws.mergeCells(`A${row}:E${row}`);
-    setCell(ws, row, 1, `🏭 ${pabrikName}`, fontPabrik, fillPabrik);
-    const blockStart = row;
+  ws.mergeCells(`A${row}:E${row}`);
+  setCell(ws, row, 1, `🏭 ${pabrikName}`, fontPabrik, fillPabrik);
+  const blockStart = row;
+  row++;
+  ['JENIS KANTONG', 'UTUH', 'PECAH', 'SORTIR', 'TOTAL'].forEach((h, i) => {
+    setCell(ws, row, i + 1, h, fontTableHeader, fillHeader, i > 0 ? 'right' : 'left');
+  });
+  row++;
+  JENIS_KANTONG.forEach(name => {
+    const stat = agg[name];
+    const hasData = stat.total > 0;
+    const jenisBlockStart = row;
+    setCell(ws, row, 1, hasData ? `${name} ▼` : name, fontData, hasData ? fillData : undefined);
+    setCell(ws, row, 2, stat.utuh, fontData, hasData ? fillData : undefined, 'right');
+    setCell(ws, row, 3, stat.pecah, fontData, hasData ? fillData : undefined, 'right');
+    setCell(ws, row, 4, stat.sortir, fontData, hasData ? fillData : undefined, 'right');
+    setCell(ws, row, 5, stat.total, fontData, hasData ? fillData : undefined, 'right');
     row++;
-    ['JENIS KANTONG', 'UTUH', 'PECAH', 'SORTIR', 'TOTAL'].forEach((h, i) => {
-      setCell(ws, row, i + 1, h, fontTableHeader, fillHeader, i > 0 ? 'right' : 'left');
-    });
-    row++;
-    JENIS_KANTONG.forEach(name => {
-      const stat = agg[name];
-      const hasData = stat.total > 0;
-      setCell(ws, row, 1, hasData ? `${name} ▼` : name, fontData, hasData ? fillData : undefined);
-      setCell(ws, row, 2, stat.utuh, fontData, hasData ? fillData : undefined, 'right');
-      setCell(ws, row, 3, stat.pecah, fontData, hasData ? fillData : undefined, 'right');
-      setCell(ws, row, 4, stat.sortir, fontData, hasData ? fillData : undefined, 'right');
-      setCell(ws, row, 5, stat.total, fontData, hasData ? fillData : undefined, 'right');
-      row++;
-      if (hasData) {
-        Object.entries(stat.vendors).forEach(([vName, vStat]) => {
-          setCell(ws, row, 1, `    ↳ ${vName}`, fontVendor, fillVendor);
-          setCell(ws, row, 2, vStat.utuh, fontVendor, fillVendor, 'right');
-          setCell(ws, row, 3, vStat.pecah, fontVendor, fillVendor, 'right');
-          setCell(ws, row, 4, vStat.sortir, fontVendor, fillVendor, 'right');
-          setCell(ws, row, 5, vStat.total, fontVendor, fillVendor, 'right');
-          row++;
-        });
-      }
-    });
-    applyBlockBorder(ws, blockStart, 1, row - 1, 5);
-    row++;
+    if (hasData) {
+      Object.entries(stat.vendors).forEach(([vName, vStat]) => {
+        setCell(ws, row, 1, `    ↳ ${vName}`, fontVendor, fillVendor);
+        setCell(ws, row, 2, vStat.utuh, fontVendor, fillVendor, 'right');
+        setCell(ws, row, 3, vStat.pecah, fontVendor, fillVendor, 'right');
+        setCell(ws, row, 4, vStat.sortir, fontVendor, fillVendor, 'right');
+        setCell(ws, row, 5, vStat.total, fontVendor, fillVendor, 'right');
+        row++;
+      });
+    }
+    applyBlockBorder(ws, jenisBlockStart, 1, row - 1, 5);
+  });
+  applyBlockBorder(ws, blockStart, 1, row - 1, 5);
+  row++;
   };
 
   writePabrik('PBR 1', 'Pabrik Baturaja 1 (PBR 1)');
@@ -193,6 +195,7 @@ const writePemakaianSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
       JENIS_KANTONG.forEach(name => {
         const stat = shiftAgg[name];
         if (stat.total === 0) return;
+        const jenisBlockStart = row;
         setCell(ws, row, 1, name, fontData, fillData);
         setCell(ws, row, 2, stat.utuh, fontData, fillData, 'right');
         setCell(ws, row, 3, stat.pecah, fontData, fillData, 'right');
@@ -207,6 +210,7 @@ const writePemakaianSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
           setCell(ws, row, 5, vStat.total, fontVendor, fillVendor, 'right');
           row++;
         });
+        applyBlockBorder(ws, jenisBlockStart, 1, row - 1, 5);
       });
       applyBlockBorder(ws, shiftBlockStart, 1, row - 1, 5);
       row++;

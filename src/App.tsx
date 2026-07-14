@@ -587,10 +587,11 @@ export default function App() {
     fetchReports();
   }, [currentUser, isAllowed, selectedDate, refreshTrigger]);
 
-    // Juga load data dari cache untuk tanggal di luar7 hari (agar tampil di halaman)
-    // Ini dilakukan sekali saat selectedDate berubah
+  // Juga load data dari cache untuk tanggal di luar 7 hari (agar tampil di halaman)
+  // Ini dilakukan sekali saat selectedDate berubah
+  useEffect(() => {
     const loadCachedOldData = () => {
-      // Cek apakah selectedDate di luar range7 hari real-time
+      // Cek apakah selectedDate di luar range 7 hari real-time
       const selectedMs = new Date(selectedDate + "T00:00:00").getTime();
       const nowMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
       const daysDiff = Math.floor((nowMs - selectedMs) / 86400000);

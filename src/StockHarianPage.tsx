@@ -139,7 +139,7 @@ export default function StockHarianPage({
       if (saved) { buf[id] = { stockAwal: String(saved.stockAwal) }; } else { const prevId = makeDocId(p, n, prevDate); const pv = prevDayData[prevId]; const ps = pv ? Number(pv.stockAkhir) || 0 : 0; buf[id] = { stockAwal: ps !== 0 ? String(ps) : "" }; }
     }));
     setEditBuffer(buf);
-  }, [stockData, selectedDate]);
+  }, [stockData, prevDayData, selectedDate]);
 
 
   // Auto-populate stockAwal from prev day's stockAkhir + AUTO-SAVE for new dates

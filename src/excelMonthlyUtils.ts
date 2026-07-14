@@ -35,7 +35,7 @@ const setCell = (ws: ExcelJS.Worksheet, r: number, c: number, value: any, font?:
   if (fill) cell.fill = fill as ExcelJS.Fill;
   if (align === 'right') cell.alignment = { horizontal: 'right' };
   else if (align === 'center') cell.alignment = { horizontal: 'center' };
-  cell.border = { bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } } };
+  cell.border = { top: { style: 'thin', color: { argb: 'FFD0D0D0' } }, bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } }, left: { style: 'thin', color: { argb: 'FFD0D0D0' } }, right: { style: 'thin', color: { argb: 'FFD0D0D0' } } };
 };
 
 const setMergedCell = (ws: ExcelJS.Worksheet, r1: number, c1: number, r2: number, c2: number, value: any, font?: Partial<ExcelJS.Font>, fill?: Partial<ExcelJS.Fill>, align?: string) => {
@@ -55,7 +55,7 @@ const setFormula = (ws: ExcelJS.Worksheet, r: number, c: number, formula: string
   if (fill) cell.fill = fill as ExcelJS.Fill;
   if (align === 'right') cell.alignment = { horizontal: 'right' };
   else if (align === 'center') cell.alignment = { horizontal: 'center' };
-  cell.border = { bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } } };
+  cell.border = { top: { style: 'thin', color: { argb: 'FFD0D0D0' } }, bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } }, left: { style: 'thin', color: { argb: 'FFD0D0D0' } }, right: { style: 'thin', color: { argb: 'FFD0D0D0' } } };
 };
 
 const colLetter = (col: number): string => {

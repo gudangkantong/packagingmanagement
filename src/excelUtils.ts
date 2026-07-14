@@ -68,7 +68,7 @@ const setCell = (ws: ExcelJS.Worksheet, r: number, c: number, value: any, font?:
   if (fill) cell.fill = fill as ExcelJS.Fill;
   if (align === 'right') cell.alignment = { horizontal: 'right' };
   if (align === 'center') cell.alignment = { horizontal: 'center' };
-  cell.border = { bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } } };
+  cell.border = { top: { style: 'thin', color: { argb: 'FFE0E0E0' } }, bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } }, left: { style: 'thin', color: { argb: 'FFE0E0E0' } }, right: { style: 'thin', color: { argb: 'FFE0E0E0' } } };
 };
 
 // === SHEET 1: PEMAKAIAN KANTONG ===

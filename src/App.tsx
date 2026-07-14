@@ -262,16 +262,20 @@ export default function App() {
     }, 4000);
   };
 
-  // Helper: update meta timestamp untuk sync antar device
+  // Helper: update meta timestamp untuk sync antar device (debounced 5 detik)
+  const bumpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bumpLastUpdate = async () => {
-    try {
-      await setDoc(doc(db, "app_meta", "last_update"), {
-        timestamp: new Date().toISOString(),
-        updatedBy: currentUser?.email || "unknown"
-      }, { merge: true });
-    } catch (err) {
-      console.error("Failed to bump last_update:", err);
-    }
+    if (bumpTimerRef.current) clearTimeout(bumpTimerRef.current);
+    bumpTimerRef.current = setTimeout(async () => {
+      try {
+        await setDoc(doc(db, "app_meta", "last_update"), {
+          timestamp: new Date().toISOString(),
+          updatedBy: currentUser?.email || "unknown"
+        }, { merge: true });
+      } catch (err) {
+        console.error("Failed to bump last_update:", err);
+      }
+    }, 5000); // 5 detik debounce
   };
 
   // Listen to app_meta/last_update untuk auto-sync antar device
@@ -289,21 +293,17 @@ export default function App() {
           // Ada update dari device lain → clear cache & refresh
           setCache("last_meta_timestamp", remoteTimestamp, 365 * 24 * 60 * 60 * 1000);
 
-          // Clear cache penerimaan & pengiriman
-          removeCache("penerimaan_data");
-          removeCache("pengiriman_data");
-
-          // Clear stock harian cache (force re-read)
-          const stockKeys = Object.keys(localStorage);
-          stockKeys.forEach((key) => {
-            if (key.includes("stock_harian_")) localStorage.removeItem(key);
-          });
-
           // Clear cache laporan per tanggal (paksa refresh)
           // Hapus semua cache laporan_ dari localStorage
           const keys = Object.keys(localStorage);
           keys.forEach((key) => {
             if (key.includes("laporan_")) localStorage.removeItem(key);
+          });
+
+          // Clear stock harian cache
+          const stockKeys = Object.keys(localStorage);
+          stockKeys.forEach((key) => {
+            if (key.includes("stock_harian_")) localStorage.removeItem(key);
           });
 
           console.log("[AutoSync] Remote update detected, refreshing data...");

@@ -299,7 +299,7 @@ export default function StockHarianPage({
     };
 
     doFullSync();
-  }, [currentUser, isMasterAdmin, loading, selectedDate, penerimaanList, pengirimanList, reports, refreshTrigger]);
+  }, [currentUser, isMasterAdmin, loading, selectedDate, penerimaanList, pengirimanList, reports]);
 
 
 

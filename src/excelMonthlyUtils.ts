@@ -127,7 +127,8 @@ const DP_UTUH = 0;
 const DP_PCH = 1;
 const DP_SRT = 2;
 const DP_JUMLAH = 3;
-const DP_COLS = 4; // per product
+const DP_COLS = 4; // per product: UTUH, PCH, SRT, TOT
+const DP_GAP = 1;  // separator column between products
 
 // ============================================================
 // PREVIEW SHEET: per-factory summary (matches React preview layout)
@@ -159,7 +160,7 @@ const writePreviewSheet = (
     }
   }
 
-  const totalCols = 1 + products.length * DP_COLS;
+  const totalCols = 1 + products.length * (DP_COLS + DP_GAP) - DP_GAP;
   let row = 1;
 
   // Row 1: Title
@@ -167,23 +168,31 @@ const writePreviewSheet = (
   const previewBlockStart = row;
   row++;
 
-  // R2: TGL + product headers
+  // R2: TGL + product headers (merged across their columns, skip gap)
   setCell(ws, row, 1, 'TGL', fontWhite, fillBlue, 'center');
   let c = 2;
   for (const p of products) {
     setMergedCell(ws, row, c, row, c + DP_COLS - 1, p, fontWhite, fillBlue, 'center');
-    c += DP_COLS;
+    c += DP_COLS + DP_GAP;
   }
   row++;
 
-  // R3: Sub-headers
+  // R3: Sub-headers (UTUH, PCH, SRT, TOT per product, gap column empty)
   setCell(ws, row, 1, '', null, fillBlueLight, 'center');
   c = 2;
   for (const _p of products) {
     setCell(ws, row, c, 'UTUH', fontSubtotal, fillBlueLight, 'center'); c++;
     setCell(ws, row, c, 'PCH', fontSubtotal, fillBlueLight, 'center'); c++;
     setCell(ws, row, c, 'SRT', fontSubtotal, fillBlueLight, 'center'); c++;
-    setCell(ws, row, c, 'TOT', fontSubtotal, fillBlueLight, 'center'); c++;
+    // TOT with thick right border as separator
+    setCell(ws, row, c, 'TOT', fontSubtotal, fillBlueLight, 'center');
+    ws.getCell(row, c).border = { ...ws.getCell(row, c).border, right: { style: 'medium', color: { argb: 'FF808080' } } };
+    c++;
+    // Gap column — empty with borders
+    const gapCell = ws.getCell(row, c);
+    gapCell.value = '';
+    gapCell.border = { left: { style: 'thin', color: { argb: 'FFD0D0D0' } }, right: { style: 'thin', color: { argb: 'FFD0D0D0' } }, top: { style: 'thin', color: { argb: 'FFD0D0D0' } }, bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } } };
+    c++;
   }
   row++;
 
@@ -201,7 +210,10 @@ const writePreviewSheet = (
       setCell(ws, row, c, h ? v.utuh : 0, fontData, undefined, 'right'); c++;
       setCell(ws, row, c, h ? v.pecah : 0, fontData, undefined, 'right'); c++;
       setCell(ws, row, c, h ? v.sortir : 0, fontData, undefined, 'right'); c++;
-      setCell(ws, row, c, h ? v.total : 0, fontData, undefined, 'right'); c++;
+      setCell(ws, row, c, h ? v.total : 0, fontData, undefined, 'right');
+      ws.getCell(row, c).border = { ...ws.getCell(row, c).border, right: { style: 'medium', color: { argb: 'FF808080' } } };
+      c++;
+      c++; // gap column
     }
     row++;
   }
@@ -219,7 +231,10 @@ const writePreviewSheet = (
       setCell(ws, row, c, su, fontSubtotal, fillBlueLight, 'right'); c++;
       setCell(ws, row, c, sp, fontSubtotal, fillBlueLight, 'right'); c++;
       setCell(ws, row, c, ss, fontSubtotal, fillBlueLight, 'right'); c++;
-      setCell(ws, row, c, st, fontSubtotal, fillBlueLight, 'right'); c++;
+      setCell(ws, row, c, st, fontSubtotal, fillBlueLight, 'right');
+      ws.getCell(row, c).border = { ...ws.getCell(row, c).border, right: { style: 'medium', color: { argb: 'FF808080' } } };
+      c++;
+      c++; // gap column
     }
     applyRowSeparator(ws, row, 1, totalCols);
     row++;
@@ -235,7 +250,10 @@ const writePreviewSheet = (
       setCell(ws, row, c, h ? v.utuh : 0, fontData, undefined, 'right'); c++;
       setCell(ws, row, c, h ? v.pecah : 0, fontData, undefined, 'right'); c++;
       setCell(ws, row, c, h ? v.sortir : 0, fontData, undefined, 'right'); c++;
-      setCell(ws, row, c, h ? v.total : 0, fontData, undefined, 'right'); c++;
+      setCell(ws, row, c, h ? v.total : 0, fontData, undefined, 'right');
+      ws.getCell(row, c).border = { ...ws.getCell(row, c).border, right: { style: 'medium', color: { argb: 'FF808080' } } };
+      c++;
+      c++; // gap column
     }
     row++;
   }
@@ -253,7 +271,10 @@ const writePreviewSheet = (
       setCell(ws, row, c, su, fontSubtotal, fillBlueLight, 'right'); c++;
       setCell(ws, row, c, sp, fontSubtotal, fillBlueLight, 'right'); c++;
       setCell(ws, row, c, ss, fontSubtotal, fillBlueLight, 'right'); c++;
-      setCell(ws, row, c, st, fontSubtotal, fillBlueLight, 'right'); c++;
+      setCell(ws, row, c, st, fontSubtotal, fillBlueLight, 'right');
+      ws.getCell(row, c).border = { ...ws.getCell(row, c).border, right: { style: 'medium', color: { argb: 'FF808080' } } };
+      c++;
+      c++; // gap column
     }
     applyRowSeparator(ws, row, 1, totalCols);
     row++;
@@ -271,16 +292,21 @@ const writePreviewSheet = (
     setCell(ws, row, c, su, fontSubtotal, fillBlueLight, 'right'); c++;
     setCell(ws, row, c, sp, fontSubtotal, fillBlueLight, 'right'); c++;
     setCell(ws, row, c, ss, fontSubtotal, fillBlueLight, 'right'); c++;
-    setCell(ws, row, c, st, fontSubtotal, fillBlueLight, 'right'); c++;
+    setCell(ws, row, c, st, fontSubtotal, fillBlueLight, 'right');
+    ws.getCell(row, c).border = { ...ws.getCell(row, c).border, right: { style: 'medium', color: { argb: 'FF808080' } } };
+    c++;
+    c++; // gap column
   }
   applyRowSeparator(ws, row, 1, totalCols);
 
-  // Column widths
+  // Column widths (include gap columns)
   ws.getColumn(1).width = 5;
   for (let pi = 0; pi < products.length; pi++) {
     for (let si = 0; si < DP_COLS; si++) {
-      ws.getColumn(2 + pi * DP_COLS + si).width = si === DP_JUMLAH ? 10 : 12;
+      ws.getColumn(2 + pi * (DP_COLS + DP_GAP) + si).width = si === DP_JUMLAH ? 10 : 12;
     }
+    // Gap column — narrow
+    ws.getColumn(2 + pi * (DP_COLS + DP_GAP) + DP_COLS).width = 2;
   }
 
   // Freeze header rows (R1:title, R2:TGL+product, R3:sub-headers)

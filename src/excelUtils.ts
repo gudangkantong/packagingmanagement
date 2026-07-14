@@ -71,7 +71,8 @@ const setCell = (ws: ExcelJS.Worksheet, r: number, c: number, value: any, font?:
   cell.border = { top: { style: 'thin', color: { argb: 'FFE0E0E0' } }, bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } }, left: { style: 'thin', color: { argb: 'FFE0E0E0' } }, right: { style: 'thin', color: { argb: 'FFE0E0E0' } } };
 };
 
-const blockBorder = { style: 'thick', color: { argb: 'FF666666' } } as const;
+const blockBorder = { style: 'thick', color: { argb: 'FF505050' } } as const;
+const thinBorder = { style: 'thin', color: { argb: 'FFB0B0B0' } } as const;
 
 const applyBlockBorder = (ws: ExcelJS.Worksheet, r1: number, c1: number, r2: number, c2: number) => {
   for (let r = r1; r <= r2; r++) {
@@ -85,6 +86,14 @@ const applyBlockBorder = (ws: ExcelJS.Worksheet, r1: number, c1: number, r2: num
     const bottom = ws.getCell(r2, c);
     top.border = { ...top.border, top: blockBorder };
     bottom.border = { ...bottom.border, bottom: blockBorder };
+  }
+};
+
+// Apply thin horizontal border across a row (separator line)
+const applyRowSeparator = (ws: ExcelJS.Worksheet, r: number, c1: number, c2: number) => {
+  for (let c = c1; c <= c2; c++) {
+    const cell = ws.getCell(r, c);
+    cell.border = { ...cell.border, bottom: { style: 'medium', color: { argb: 'FF888888' } } };
   }
 };
 
@@ -132,7 +141,6 @@ const writePemakaianSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
   JENIS_KANTONG.forEach(name => {
     const stat = agg[name];
     const hasData = stat.total > 0;
-    const jenisBlockStart = row;
     setCell(ws, row, 1, hasData ? `${name} ▼` : name, fontData, hasData ? fillData : undefined);
     setCell(ws, row, 2, stat.utuh, fontData, hasData ? fillData : undefined, 'right');
     setCell(ws, row, 3, stat.pecah, fontData, hasData ? fillData : undefined, 'right');
@@ -149,10 +157,9 @@ const writePemakaianSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
         row++;
       });
     }
-    applyBlockBorder(ws, jenisBlockStart, 1, row - 1, 5);
   });
   applyBlockBorder(ws, blockStart, 1, row - 1, 5);
-  row++;
+  row += 2; // extra spacing between pabrik blocks
   };
 
   writePabrik('PBR 1', 'Pabrik Baturaja 1 (PBR 1)');
@@ -195,7 +202,6 @@ const writePemakaianSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
       JENIS_KANTONG.forEach(name => {
         const stat = shiftAgg[name];
         if (stat.total === 0) return;
-        const jenisBlockStart = row;
         setCell(ws, row, 1, name, fontData, fillData);
         setCell(ws, row, 2, stat.utuh, fontData, fillData, 'right');
         setCell(ws, row, 3, stat.pecah, fontData, fillData, 'right');
@@ -210,10 +216,9 @@ const writePemakaianSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
           setCell(ws, row, 5, vStat.total, fontVendor, fillVendor, 'right');
           row++;
         });
-        applyBlockBorder(ws, jenisBlockStart, 1, row - 1, 5);
       });
       applyBlockBorder(ws, shiftBlockStart, 1, row - 1, 5);
-      row++;
+      row += 2; // spacing between shifts
     });
   };
 
@@ -244,9 +249,11 @@ const writePenerimaanSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
   });
   row++;
 
+  const tableStartRow = row;
   if (datePenerimaan.length === 0) {
     ws.mergeCells(`A${row}:G${row}`);
     setCell(ws, row, 1, 'Tidak ada data penerimaan untuk tanggal ini', fontVendor, undefined, 'center');
+    applyBlockBorder(ws, tableStartRow - 1, 1, row, 7);
   } else {
     datePenerimaan.forEach((item, idx) => {
       const bg = idx % 2 === 0 ? fillEmeraldLight : undefined;
@@ -266,6 +273,7 @@ const writePenerimaanSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
     ws.mergeCells(`A${row}:D${row}`);
     setCell(ws, row, 1, 'TOTAL PENERIMAAN', { ...fontData, bold: true }, fillEmeraldLight);
     setCell(ws, row, 5, datePenerimaan.reduce((s, r) => s + r.jumlah, 0), { ...fontData, bold: true, color: { argb: 'FF059669' } }, fillEmeraldLight, 'center');
+    applyBlockBorder(ws, tableStartRow - 1, 1, row, 7);
   }
 };
 
@@ -290,9 +298,11 @@ const writePengirimanSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
   });
   row++;
 
+  const tableStartRow = row;
   if (datePengiriman.length === 0) {
     ws.mergeCells(`A${row}:G${row}`);
     setCell(ws, row, 1, 'Tidak ada data pengiriman untuk tanggal ini', fontVendor, undefined, 'center');
+    applyBlockBorder(ws, tableStartRow - 1, 1, row, 7);
   } else {
     datePengiriman.forEach((item, idx) => {
       const bg = idx % 2 === 0 ? fillBlueLight : undefined;
@@ -311,6 +321,7 @@ const writePengirimanSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
     ws.mergeCells(`A${row}:D${row}`);
     setCell(ws, row, 1, 'TOTAL PENGIRIMAN', { ...fontData, bold: true }, fillBlueLight);
     setCell(ws, row, 5, datePengiriman.reduce((s, r) => s + r.jumlah, 0), { ...fontData, bold: true, color: { argb: 'FF2563EB' } }, fillBlueLight, 'center');
+    applyBlockBorder(ws, tableStartRow - 1, 1, row, 7);
   }
 };
 
@@ -345,6 +356,7 @@ const writeStockSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
   allLocations.forEach(pabrik => {
     const shortName = PABRIK_SHORT[pabrik] || pabrik;
     const isOPT = pabrik === "Gudang OPT";
+    const blockStart = row;
 
     // Pabrik header
     ws.mergeCells(`A${row}:G${row}`);
@@ -380,7 +392,8 @@ const writeStockSheet = (ws: ExcelJS.Worksheet, opts: ExcelOptions) => {
       setCell(ws, row, 7, statusText, { ...fontData, bold: true, color: { argb: statusColor } }, bg, 'center');
       row++;
     });
-    row++;
+    applyBlockBorder(ws, blockStart, 1, row - 1, 7);
+    row += 2; // spacing between pabrik blocks
   });
 };
 

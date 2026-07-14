@@ -507,7 +507,8 @@ export default function App() {
     doBackfill();
   }, [currentUser, isAllowed]);
 
-  // Main reports useEffect — always7 days ending on selectedDate
+  // Main reports — getDocs + cache (hemat reads, no cascade on save)
+  // Re-fetch only when: 1) selectedDate changes, 2) meta signal (other user edited)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) {
       setReports([]);
@@ -516,54 +517,74 @@ export default function App() {
 
     setDataLoading(true);
 
-    //7 hari ke belakang dari selectedDate
+    // 7 hari ke belakang dari selectedDate
     const toDate = selectedDate;
     const fromDate = getDateString(new Date(new Date(selectedDate + "T00:00:00").getTime() - 7 * 86400000));
 
-    // Real-time onSnapshot untuk7 hari
-    const reportsQuery = query(
-      collection(db, "laporan_kantong"),
-      where("tanggal", ">=", fromDate),
-      where("tanggal", "<=", toDate),
-      orderBy("tanggal", "desc")
-    );
-    const unsub = onSnapshot(reportsQuery, (snap) => {
-      const items: LaporanKantong[] = [];
-      snap.forEach((docSnap) => {
-        const data = docSnap.data();
-        items.push({
-          id: docSnap.id,
-          vendor: data.vendor || "",
-          nama: data.nama || "",
-          pabrik: data.pabrik || "",
-          shift: Number(data.shift) || 1,
-          tanggal: data.tanggal || "",
-          utuh: Number(data.utuh) || 0,
-          pecah: Number(data.pecah) || 0,
-          sortir: Number(data.sortir) || 0,
-          total: Number(data.total) || 0,
-          createdBy: data.createdBy || "",
-          updatedAt: data.updatedAt || ""
-        });
-      });
-      setReports(items);
+    // 1. Load from cache first (instant UI)
+    const allCached: LaporanKantong[] = [];
+    const d = new Date(fromDate + "T00:00:00");
+    const end = new Date(toDate + "T00:00:00");
+    while (d <= end) {
+      const dateStr = getDateString(d);
+      const cached = getCached<LaporanKantong[]>(`laporan_${dateStr}`);
+      if (cached) allCached.push(...cached);
+      d.setDate(d.getDate() + 1);
+    }
+    if (allCached.length > 0) {
+      setReports(allCached);
       setDataLoading(false);
+    }
 
-      // Simpan SEMUA data ke localStorage per tanggal
-      const byDate: Record<string, LaporanKantong[]> = {};
-      items.forEach((item) => {
-        if (!byDate[item.tanggal]) byDate[item.tanggal] = [];
-        byDate[item.tanggal].push(item);
-      });
-      Object.entries(byDate).forEach(([date, dateItems]) => {
-        setCache(`laporan_${date}`, dateItems, 30 * 24 * 60 * 60 * 1000); // cache 30 hari
-      });
-    }, (err) => {
-      console.error("Failed to sync reports:", err);
-      triggerToast("Gagal menyinkronkan data real-time", "er");
-      setDataLoading(false);
-      handleFirestoreError(err, OperationType.GET, "laporan_kantong");
-    });
+    // 2. Fetch from Firestore (only once per mount/date change, not real-time)
+    const fetchReports = async () => {
+      try {
+        const reportsQuery = query(
+          collection(db, "laporan_kantong"),
+          where("tanggal", ">=", fromDate),
+          where("tanggal", "<=", toDate),
+          orderBy("tanggal", "desc")
+        );
+        const snap = await getDocs(reportsQuery);
+        const items: LaporanKantong[] = [];
+        snap.forEach((docSnap) => {
+          const data = docSnap.data();
+          items.push({
+            id: docSnap.id,
+            vendor: data.vendor || "",
+            nama: data.nama || "",
+            pabrik: data.pabrik || "",
+            shift: Number(data.shift) || 1,
+            tanggal: data.tanggal || "",
+            utuh: Number(data.utuh) || 0,
+            pecah: Number(data.pecah) || 0,
+            sortir: Number(data.sortir) || 0,
+            total: Number(data.total) || 0,
+            createdBy: data.createdBy || "",
+            updatedAt: data.updatedAt || ""
+          });
+        });
+        setReports(items);
+        setDataLoading(false);
+
+        // Cache per tanggal (30 hari TTL)
+        const byDate: Record<string, LaporanKantong[]> = {};
+        items.forEach((item) => {
+          if (!byDate[item.tanggal]) byDate[item.tanggal] = [];
+          byDate[item.tanggal].push(item);
+        });
+        Object.entries(byDate).forEach(([date, dateItems]) => {
+          setCache(`laporan_${date}`, dateItems, 30 * 24 * 60 * 60 * 1000);
+        });
+      } catch (err) {
+        console.error("Failed to fetch reports:", err);
+        triggerToast("Gagal memuat data laporan", "er");
+        setDataLoading(false);
+      }
+    };
+
+    fetchReports();
+  }, [currentUser, isAllowed, selectedDate, refreshTrigger]);
 
     // Juga load data dari cache untuk tanggal di luar7 hari (agar tampil di halaman)
     // Ini dilakukan sekali saat selectedDate berubah
@@ -590,8 +611,6 @@ export default function App() {
       }
     };
     loadCachedOldData();
-
-    return () => unsub();
   }, [currentUser, isAllowed, selectedDate, refreshTrigger]);
 
   // Penerimaan: getDocs + cache (jarang berubah, hemat reads)

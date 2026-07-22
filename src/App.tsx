@@ -1811,6 +1811,7 @@ export default function App() {
     return userAllowedPabrik.some(p => p === r.pabrik);
   });
   const isToday = selectedDate === getDateString(new Date());
+  const isFutureDate = selectedDate > getDateString(new Date());
 
   // Statistics calculation for the selected date
   const selectedDateStats = filteredReports.reduce(
@@ -2457,33 +2458,25 @@ export default function App() {
                     transition={{ duration: 0.15 }}
                     className="space-y-8"
                   >
-                    {/* === FUTURE DATE GUARD === */}
-                    {(() => {
-                      const todayStr = getDateString(new Date());
-                      if (selectedDate > todayStr) {
-                        return (
-                          <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-12 text-center shadow-xs">
-                            <div className="flex justify-center mb-4">
-                              <div className="p-4 bg-amber-50/80 text-amber-600 border-2 border-amber-200/60 rounded-2xl">
-                                <CalendarIcon className="w-8 h-8" />
-                              </div>
-                            </div>
-                            <h4 className="text-sm font-extrabold text-[#1a1814]">Data Belum Tersedia</h4>
-                            <p className="text-xs text-[#5c554f] mt-1.5 max-w-sm mx-auto leading-relaxed">
-                              Data untuk tanggal <span className="font-extrabold text-[#1a1814] bg-amber-50 px-1.5 py-0.5 rounded-md inline-block">{formatDateDisplay(selectedDate)}</span> belum tersedia.
-                              <span className="block mt-1.5 text-[#9e9892] text-[11px] font-medium">
-                                Silakan kembali ke hari ini atau tanggal sebelumnya untuk melihat data.
-                              </span>
-                            </p>
-                            <button onClick={handleGoToday} className="mt-4 px-4 py-2 bg-brand-green text-white text-xs font-bold rounded-xl hover:bg-brand-green/90 transition-colors">
-                              Kembali ke Hari Ini
-                            </button>
+                    {isFutureDate ? (
+                      <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-12 text-center shadow-xs">
+                        <div className="flex justify-center mb-4">
+                          <div className="p-4 bg-amber-50/80 text-amber-600 border-2 border-amber-200/60 rounded-2xl">
+                            <CalendarIcon className="w-8 h-8" />
                           </div>
-                        );
-                      }
-                      return null;
-                    })() || (
-                    filteredReports.length === 0 ? (
+                        </div>
+                        <h4 className="text-sm font-extrabold text-[#1a1814]">Data Belum Tersedia</h4>
+                        <p className="text-xs text-[#5c554f] mt-1.5 max-w-sm mx-auto leading-relaxed">
+                          Data untuk tanggal <span className="font-extrabold text-[#1a1814] bg-amber-50 px-1.5 py-0.5 rounded-md inline-block">{formatDateDisplay(selectedDate)}</span> belum tersedia.
+                          <span className="block mt-1.5 text-[#9e9892] text-[11px] font-medium">
+                            Silakan kembali ke hari ini atau tanggal sebelumnya untuk melihat data.
+                          </span>
+                        </p>
+                        <button onClick={handleGoToday} className="mt-4 px-4 py-2 bg-brand-green text-white text-xs font-bold rounded-xl hover:bg-brand-green/90 transition-colors">
+                          Kembali ke Hari Ini
+                        </button>
+                      </div>
+                    ) : filteredReports.length === 0 ? (
                       <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-12 text-center shadow-xs">
                         <div className="flex justify-center mb-4 animate-pulse">
                           <div className="p-4 bg-[#e8f0e6]/40 text-brand-green border-2 border-brand-green/20 rounded-2xl">
@@ -2721,7 +2714,6 @@ export default function App() {
                         );
                       })
                     )}
-                    )
                   </motion.div>
                 )}
 
@@ -2763,33 +2755,25 @@ export default function App() {
                     transition={{ duration: 0.15 }}
                     className="space-y-1"
                   >
-                    {/* === FUTURE DATE GUARD === */}
-                    {(() => {
-                      const todayStr = getDateString(new Date());
-                      if (selectedDate > todayStr) {
-                        return (
-                          <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-12 text-center shadow-xs">
-                            <div className="flex justify-center mb-4">
-                              <div className="p-4 bg-amber-50/80 text-amber-600 border-2 border-amber-200/60 rounded-2xl">
-                                <CalendarIcon className="w-8 h-8" />
-                              </div>
-                            </div>
-                            <h4 className="text-sm font-extrabold text-[#1a1814]">Data Belum Tersedia</h4>
-                            <p className="text-xs text-[#5c554f] mt-1.5 max-w-sm mx-auto leading-relaxed">
-                              Data untuk tanggal <span className="font-extrabold text-[#1a1814] bg-amber-50 px-1.5 py-0.5 rounded-md inline-block">{formatDateDisplay(selectedDate)}</span> belum tersedia.
-                              <span className="block mt-1.5 text-[#9e9892] text-[11px] font-medium">
-                                Silakan kembali ke hari ini atau tanggal sebelumnya untuk melihat data.
-                              </span>
-                            </p>
-                            <button onClick={handleGoToday} className="mt-4 px-4 py-2 bg-brand-green text-white text-xs font-bold rounded-xl hover:bg-brand-green/90 transition-colors">
-                              Kembali ke Hari Ini
-                            </button>
+                    {isFutureDate ? (
+                      <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-12 text-center shadow-xs">
+                        <div className="flex justify-center mb-4">
+                          <div className="p-4 bg-amber-50/80 text-amber-600 border-2 border-amber-200/60 rounded-2xl">
+                            <CalendarIcon className="w-8 h-8" />
                           </div>
-                        );
-                      }
-                      return null;
-                    })() || (
-                    inputFilteredReports.length === 0 ? (
+                        </div>
+                        <h4 className="text-sm font-extrabold text-[#1a1814]">Data Belum Tersedia</h4>
+                        <p className="text-xs text-[#5c554f] mt-1.5 max-w-sm mx-auto leading-relaxed">
+                          Data untuk tanggal <span className="font-extrabold text-[#1a1814] bg-amber-50 px-1.5 py-0.5 rounded-md inline-block">{formatDateDisplay(selectedDate)}</span> belum tersedia.
+                          <span className="block mt-1.5 text-[#9e9892] text-[11px] font-medium">
+                            Silakan kembali ke hari ini atau tanggal sebelumnya untuk melihat data.
+                          </span>
+                        </p>
+                        <button onClick={handleGoToday} className="mt-4 px-4 py-2 bg-brand-green text-white text-xs font-bold rounded-xl hover:bg-brand-green/90 transition-colors">
+                          Kembali ke Hari Ini
+                        </button>
+                      </div>
+                    ) : inputFilteredReports.length === 0 ? (
                       <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-12 text-center shadow-xs">
                         <div className="flex justify-center mb-4 animate-pulse">
                           <div className="p-4 bg-[#e8f0e6]/40 text-brand-green border-2 border-brand-green/20 rounded-2xl">
@@ -3002,7 +2986,6 @@ export default function App() {
                         })}
                       </>
                     )}
-                    )
 
                     {/* === DATA PENERIMAAN === */}
                     {(() => {

@@ -216,7 +216,48 @@ export default function App() {
 
   useEffect(() => {
     setSelectedDate(getDateString(new Date()));
+
+    // === MIDNIGHT TIMER: auto-refresh saat tanggal berganti ===
+    const scheduleMidnightRefresh = () => {
+      const now = new Date();
+      const midnight = new Date(now);
+      midnight.setDate(midnight.getDate() + 1);
+      midnight.setHours(0, 0, 0, 0);
+      const msUntilMidnight = midnight.getTime() - now.getTime();
+
+      return setTimeout(() => {
+        const newDate = getDateString(new Date());
+        setSelectedDate(newDate);
+        setRefreshTrigger(prev => prev + 1);
+        console.log(`[MidnightRefresh] Tanggal berganti ke ${newDate}`);
+        // Jadwalkan lagi untuk besok
+        midnightTimerRef.current = scheduleMidnightRefresh();
+      }, msUntilMidnight + 1000); // +1 detik biar pasti udah ganti hari
+    };
+
+    midnightTimerRef.current = scheduleMidnightRefresh();
+
+    return () => {
+      if (midnightTimerRef.current) clearTimeout(midnightTimerRef.current);
+    };
   }, []);
+
+  // === VISIBILITY REFRESH: cek tanggal saat user kembali ke tab ===
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const todayStr = getDateString(new Date());
+        if (selectedDate !== todayStr && selectedDate < todayStr) {
+          // User kembali ke tab tapi selectedDate masih hari kemarin → auto ke hari ini
+          setSelectedDate(todayStr);
+          setRefreshTrigger(prev => prev + 1);
+          console.log(`[VisibilityRefresh] Auto-refresh ke ${todayStr}`);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [selectedDate]);
 
   // Derived state
   const isSelectedDateLocked = !!lockedDates[selectedDate]?.locked;
@@ -327,6 +368,7 @@ export default function App() {
 
   // Debounced: update meta timestamp untuk sync antar device (max 1×/30 detik hemat writes)
   const lastBumpRef = useRef(0);
+  const midnightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bumpLastUpdate = async () => {
     const now = Date.now();
     if (now - lastBumpRef.current < 30000) return; // skip kalo <30 detik sejak bump terakhir

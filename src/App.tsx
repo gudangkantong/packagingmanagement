@@ -603,7 +603,14 @@ export default function App() {
       });
     }, (err) => {
       console.error("Failed to sync reports:", err);
-      triggerToast("Gagal menyinkronkan data real-time", "er");
+      const errMsg = err?.code || err?.message || String(err);
+      // Don't show error toast if we have cached data (graceful degradation)
+      const hasCachedData = allCached.length > 0;
+      if (!hasCachedData) {
+        triggerToast(`Gagal sync real-time: ${errMsg}`, "er");
+      } else {
+        console.warn(`[Reports] Real-time sync failed, using cached data. Error: ${errMsg}`);
+      }
       setDataLoading(false);
       handleFirestoreError(err, OperationType.GET, "laporan_kantong");
     });

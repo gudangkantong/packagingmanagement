@@ -617,18 +617,10 @@ export default function App() {
       return;
     }
 
-    // === FUTURE DATE GUARD: hemat Firebase reads ===
-    const todayStr = getDateString(new Date());
-    if (selectedDate > todayStr) {
-      setReports([]);
-      setDataLoading(false);
-      return; // tidak perlu query Firestore untuk tanggal yang belum ada
-    }
-
     setDataLoading(true);
 
     // Real-time range: always from today to 7 days back
-    const today = todayStr;
+    const today = getDateString(new Date());
     const realtimeFromDate = getDateString(new Date(new Date(today + "T00:00:00").getTime() - 7 * 86400000));
     const realtimeToDate = today;
 
@@ -1790,14 +1782,7 @@ export default function App() {
     const [year, month, day] = selectedDate.split('-').map(Number);
     const d = new Date(year, month - 1, day);
     d.setDate(d.getDate() + 1);
-    const nextDateStr = getDateString(d);
-    const todayStr = getDateString(new Date());
-    // Blokir navigasi ke tanggal setelah hari ini (hemat Firebase reads)
-    if (nextDateStr > todayStr) {
-      triggerToast("Data untuk tanggal setelah hari ini belum tersedia.", "inf");
-      return;
-    }
-    setSelectedDate(nextDateStr);
+    setSelectedDate(getDateString(d));
   };
 
   const handleGoToday = () => {
@@ -2457,33 +2442,7 @@ export default function App() {
                     transition={{ duration: 0.15 }}
                     className="space-y-8"
                   >
-                    {/* === FUTURE DATE GUARD === */}
-                    {(() => {
-                      const todayStr = getDateString(new Date());
-                      if (selectedDate > todayStr) {
-                        return (
-                          <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-12 text-center shadow-xs">
-                            <div className="flex justify-center mb-4">
-                              <div className="p-4 bg-amber-50/80 text-amber-600 border-2 border-amber-200/60 rounded-2xl">
-                                <CalendarIcon className="w-8 h-8" />
-                              </div>
-                            </div>
-                            <h4 className="text-sm font-extrabold text-[#1a1814]">Data Belum Tersedia</h4>
-                            <p className="text-xs text-[#5c554f] mt-1.5 max-w-sm mx-auto leading-relaxed">
-                              Data untuk tanggal <span className="font-extrabold text-[#1a1814] bg-amber-50 px-1.5 py-0.5 rounded-md inline-block">{formatDateDisplay(selectedDate)}</span> belum tersedia.
-                              <span className="block mt-1.5 text-[#9e9892] text-[11px] font-medium">
-                                Silakan kembali ke hari ini atau tanggal sebelumnya untuk melihat data.
-                              </span>
-                            </p>
-                            <button onClick={handleGoToday} className="mt-4 px-4 py-2 bg-brand-green text-white text-xs font-bold rounded-xl hover:bg-brand-green/90 transition-colors">
-                              Kembali ke Hari Ini
-                            </button>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })() || (
-                    filteredReports.length === 0 ? (
+                    {filteredReports.length === 0 ? (
                       <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-12 text-center shadow-xs">
                         <div className="flex justify-center mb-4 animate-pulse">
                           <div className="p-4 bg-[#e8f0e6]/40 text-brand-green border-2 border-brand-green/20 rounded-2xl">
@@ -2721,7 +2680,6 @@ export default function App() {
                         );
                       })
                     )}
-                    )
                   </motion.div>
                 )}
 
@@ -2763,33 +2721,7 @@ export default function App() {
                     transition={{ duration: 0.15 }}
                     className="space-y-1"
                   >
-                    {/* === FUTURE DATE GUARD === */}
-                    {(() => {
-                      const todayStr = getDateString(new Date());
-                      if (selectedDate > todayStr) {
-                        return (
-                          <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-12 text-center shadow-xs">
-                            <div className="flex justify-center mb-4">
-                              <div className="p-4 bg-amber-50/80 text-amber-600 border-2 border-amber-200/60 rounded-2xl">
-                                <CalendarIcon className="w-8 h-8" />
-                              </div>
-                            </div>
-                            <h4 className="text-sm font-extrabold text-[#1a1814]">Data Belum Tersedia</h4>
-                            <p className="text-xs text-[#5c554f] mt-1.5 max-w-sm mx-auto leading-relaxed">
-                              Data untuk tanggal <span className="font-extrabold text-[#1a1814] bg-amber-50 px-1.5 py-0.5 rounded-md inline-block">{formatDateDisplay(selectedDate)}</span> belum tersedia.
-                              <span className="block mt-1.5 text-[#9e9892] text-[11px] font-medium">
-                                Silakan kembali ke hari ini atau tanggal sebelumnya untuk melihat data.
-                              </span>
-                            </p>
-                            <button onClick={handleGoToday} className="mt-4 px-4 py-2 bg-brand-green text-white text-xs font-bold rounded-xl hover:bg-brand-green/90 transition-colors">
-                              Kembali ke Hari Ini
-                            </button>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })() || (
-                    inputFilteredReports.length === 0 ? (
+                    {inputFilteredReports.length === 0 ? (
                       <div className="bg-white border-2 border-[#e8e4de] rounded-3xl p-12 text-center shadow-xs">
                         <div className="flex justify-center mb-4 animate-pulse">
                           <div className="p-4 bg-[#e8f0e6]/40 text-brand-green border-2 border-brand-green/20 rounded-2xl">
@@ -3002,7 +2934,6 @@ export default function App() {
                         })}
                       </>
                     )}
-                    )
 
                     {/* === DATA PENERIMAAN === */}
                     {(() => {

@@ -526,25 +526,31 @@ export default function App() {
 
     setDataLoading(true);
 
-    // 7 hari ke belakang dari selectedDate
-    const toDate = selectedDate;
-    const fromDate = getDateString(new Date(new Date(selectedDate + "T00:00:00").getTime() - 7 * 86400000));
+    // Real-time range: always from today to 7 days back
+    const today = getDateString(new Date());
+    const realtimeFromDate = getDateString(new Date(new Date(today + "T00:00:00").getTime() - 7 * 86400000));
+    const realtimeToDate = today;
+
+    // Check if selectedDate is within the real-time range
+    const selectedMs = new Date(selectedDate + "T00:00:00").getTime();
+    const nowMs = new Date(today + "T00:00:00").getTime();
+    const daysDiff = Math.floor((nowMs - selectedMs) / 86400000);
+    const isInRealtimeRange = daysDiff >= 0 && daysDiff <= 7;
 
     // 1. Load from cache first (instant UI)
     const allCached: LaporanKantong[] = [];
-    const d = new Date(fromDate + "T00:00:00");
-    const end = new Date(toDate + "T00:00:00");
-    while (d <= end) {
-      const dateStr = getDateString(d);
-      const cached = getCached<LaporanKantong[]>(`laporan_${dateStr}`);
-      if (cached) allCached.push(...cached);
-      d.setDate(d.getDate() + 1);
-    }
-    // Juga cache untuk tanggal di luar 7 hari
-    const selectedMs = new Date(selectedDate + "T00:00:00").getTime();
-    const nowMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
-    const daysDiff = Math.floor((nowMs - selectedMs) / 86400000);
-    if (daysDiff > 7) {
+    if (isInRealtimeRange) {
+      // Cache for the real-time range
+      const d = new Date(realtimeFromDate + "T00:00:00");
+      const end = new Date(realtimeToDate + "T00:00:00");
+      while (d <= end) {
+        const dateStr = getDateString(d);
+        const cached = getCached<LaporanKantong[]>(`laporan_${dateStr}`);
+        if (cached) allCached.push(...cached);
+        d.setDate(d.getDate() + 1);
+      }
+    } else {
+      // Old date: load from cache only
       const cachedOld = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
       if (cachedOld) allCached.push(...cachedOld);
     }
@@ -553,17 +559,16 @@ export default function App() {
       setDataLoading(false);
     }
 
-    // 2. For old dates, use getDocs (one-time read). For recent, use onSnapshot.
-    const reportsQuery = query(
-      collection(db, "laporan_kantong"),
-      where("tanggal", ">=", fromDate),
-      where("tanggal", "<=", toDate),
-      orderBy("tanggal", "desc")
-    );
-
-    if (daysDiff > 7) {
-      // Old date: one-time read, no real-time listener
-      getDocs(reportsQuery).then(snap => {
+    // 2. For dates within 7 days of today: onSnapshot real-time
+    //    For older dates: one-time getDocs
+    if (isInRealtimeRange) {
+      const reportsQuery = query(
+        collection(db, "laporan_kantong"),
+        where("tanggal", ">=", realtimeFromDate),
+        where("tanggal", "<=", realtimeToDate),
+        orderBy("tanggal", "desc")
+      );
+      const unsub = onSnapshot(reportsQuery, (snap) => {
         const items: LaporanKantong[] = [];
         snap.forEach((docSnap) => {
           const data = docSnap.data();
@@ -583,13 +588,6 @@ export default function App() {
           });
         });
 
-        // Merge cache untuk tanggal di luar range
-        const cachedOld = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
-        if (cachedOld) {
-          const existingIds = new Set(items.map(r => r.id));
-          cachedOld.forEach(r => { if (!existingIds.has(r.id)) items.push(r); });
-        }
-
         setReports(items);
         setDataLoading(false);
 
@@ -601,6 +599,48 @@ export default function App() {
         Object.entries(byDate).forEach(([date, dateItems]) => {
           setCache(`laporan_${date}`, dateItems, 30 * 24 * 60 * 60 * 1000);
         });
+      }, (err) => {
+        console.error("Failed to sync reports:", err);
+        const errMsg = err?.code || err?.message || String(err);
+        const hasCachedData = allCached.length > 0;
+        if (!hasCachedData) {
+          triggerToast(`Gagal sync real-time: ${errMsg}`, "er");
+        } else {
+          console.warn(`[Reports] Real-time sync failed, using cached data. Error: ${errMsg}`);
+        }
+        setDataLoading(false);
+        handleFirestoreError(err, OperationType.GET, "laporan_kantong");
+      });
+      return () => unsub();
+    } else {
+      // Old date: one-time getDocs, no real-time listener
+      const selectedDateQuery = query(
+        collection(db, "laporan_kantong"),
+        where("tanggal", "==", selectedDate),
+        orderBy("tanggal", "desc")
+      );
+      getDocs(selectedDateQuery).then(snap => {
+        const items: LaporanKantong[] = [];
+        snap.forEach((docSnap) => {
+          const data = docSnap.data();
+          items.push({
+            id: docSnap.id,
+            vendor: data.vendor || "",
+            nama: data.nama || "",
+            pabrik: data.pabrik || "",
+            shift: Number(data.shift) || 1,
+            tanggal: data.tanggal || "",
+            utuh: Number(data.utuh) || 0,
+            pecah: Number(data.pecah) || 0,
+            sortir: Number(data.sortir) || 0,
+            total: Number(data.total) || 0,
+            createdBy: data.createdBy || "",
+            updatedAt: data.updatedAt || ""
+          });
+        });
+        setReports(items);
+        setDataLoading(false);
+        setCache(`laporan_${selectedDate}`, items, 30 * 24 * 60 * 60 * 1000);
       }).catch(err => {
         console.error("Failed to fetch reports:", err);
         const errMsg = err?.code || err?.message || String(err);
@@ -610,66 +650,8 @@ export default function App() {
         }
         setDataLoading(false);
       });
-      return; // no cleanup needed
+      return;
     }
-
-    // Recent date: real-time listener
-    const unsub = onSnapshot(reportsQuery, (snap) => {
-      const items: LaporanKantong[] = [];
-      snap.forEach((docSnap) => {
-        const data = docSnap.data();
-        items.push({
-          id: docSnap.id,
-          vendor: data.vendor || "",
-          nama: data.nama || "",
-          pabrik: data.pabrik || "",
-          shift: Number(data.shift) || 1,
-          tanggal: data.tanggal || "",
-          utuh: Number(data.utuh) || 0,
-          pecah: Number(data.pecah) || 0,
-          sortir: Number(data.sortir) || 0,
-          total: Number(data.total) || 0,
-          createdBy: data.createdBy || "",
-          updatedAt: data.updatedAt || ""
-        });
-      });
-
-      // Merge cache untuk tanggal di luar 7 hari (tidak ada di onSnapshot)
-      if (daysDiff > 7) {
-        const cachedOld = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
-        if (cachedOld) {
-          const existingIds = new Set(items.map(r => r.id));
-          cachedOld.forEach(r => { if (!existingIds.has(r.id)) items.push(r); });
-        }
-      }
-
-      setReports(items);
-      setDataLoading(false);
-
-      // Cache per tanggal (30 hari TTL)
-      const byDate: Record<string, LaporanKantong[]> = {};
-      items.forEach((item) => {
-        if (!byDate[item.tanggal]) byDate[item.tanggal] = [];
-        byDate[item.tanggal].push(item);
-      });
-      Object.entries(byDate).forEach(([date, dateItems]) => {
-        setCache(`laporan_${date}`, dateItems, 30 * 24 * 60 * 60 * 1000);
-      });
-    }, (err) => {
-      console.error("Failed to sync reports:", err);
-      const errMsg = err?.code || err?.message || String(err);
-      // Don't show error toast if we have cached data (graceful degradation)
-      const hasCachedData = allCached.length > 0;
-      if (!hasCachedData) {
-        triggerToast(`Gagal sync real-time: ${errMsg}`, "er");
-      } else {
-        console.warn(`[Reports] Real-time sync failed, using cached data. Error: ${errMsg}`);
-      }
-      setDataLoading(false);
-      handleFirestoreError(err, OperationType.GET, "laporan_kantong");
-    });
-
-    return () => unsub();
   }, [currentUser, isAllowed, selectedDate, refreshTrigger]);
 
   // Penerimaan: getDocs + cache (jarang berubah, hemat reads)

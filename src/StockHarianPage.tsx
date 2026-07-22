@@ -329,61 +329,63 @@ export default function StockHarianPage({
         const nowMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
         const daysDiff = Math.floor((nowMs - todayMs) / 86400000);
 
-        // Skip full sync for dates older than 7 days (just view, don't cascade)
-        // This prevents resource-exhausted errors from too many Firestore reads/writes
+        // Skip full sync for dates older than 7 days
         if (daysDiff > 7) {
           syncRunningRef.current = false;
           return;
         }
 
         let totalSaved = 0;
+        const isOPT = (pabrik: string) => pabrik === OPT_GUDANG;
 
-        // Process items sequentially with small delay to avoid quota exhaustion
+        // OPTIMIZED: 1 query per location instead of 2 queries per item
+        // Old: 5 locations × 9 items × 2 queries = 90 queries
+        // New: 5 locations × 1 query = 5 queries
         for (let i = 0; i < ALL_LOCATIONS.length; i++) {
           const pabrik = ALL_LOCATIONS[i];
-          for (let j = 0; j < JENIS_KANTONG.length; j++) {
-            const nama = JENIS_KANTONG[j];
-            const todayDocId = makeDocId(pabrik, nama, today);
+          const pKey = PABRIK_SHORT[pabrik] || pabrik;
 
-            // Find last known stock for this item before today
-            const pKey = PABRIK_SHORT[pabrik] || pabrik;
-            const searchId = `${pKey}_${nama.replace(/\s+/g, "_")}`;
-            const q = query(
-              collection(db, "stock_harian"),
-              where("__name__", ">=", searchId + "_"),
-              where("__name__", "<", searchId + "_" + addDays(today, 1)),
-              orderBy("__name__", "desc"),
-              limit(1)
-            );
-            const snap = await getDocs(q);
+          // Single query: fetch ALL stock_harian docs for this location up to today
+          const locQuery = query(
+            collection(db, "stock_harian"),
+            where("pabrik", "==", pabrik),
+            where("tanggal", "<=", today),
+            orderBy("tanggal", "desc")
+          );
+          const locSnap = await getDocs(locQuery);
 
-            if (snap.empty) continue; // no data at all for this item
+          // Group docs by item name (nama)
+          const docsByNama = new Map<string, { id: string; data: any }[]>();
+          locSnap.forEach(d => {
+            const v = d.data();
+            const nama = v.nama || "";
+            if (!docsByNama.has(nama)) docsByNama.set(nama, []);
+            docsByNama.get(nama)!.push({ id: d.id, data: v });
+          });
 
-            const lastDoc = snap.docs[0];
-            const lastData = lastDoc.data();
+          // Process each item type for this location
+          for (const nama of JENIS_KANTONG) {
+            const docs = docsByNama.get(nama) || [];
+            if (docs.length === 0) continue; // no data at all for this item
+
+            // docs are already sorted desc by tanggal from the query
+            const lastDoc = docs[0];
+            const lastData = lastDoc.data;
             const lastDate = lastData.tanggal;
             const lastStockAkhir = Number(lastData.stockAkhir) || 0;
 
-            // Batch-fetch ALL existing docs for this item from lastDate to today (inclusive)
-            const rangeStart = searchId + "_" + lastDate;
-            const rangeEnd = searchId + "_" + addDays(today, 1); // exclusive upper bound
-            const existingSnap = await getDocs(query(
-              collection(db, "stock_harian"),
-              where("__name__", ">=", rangeStart),
-              where("__name__", "<", rangeEnd)
-            ));
+            // Build lookup map for existing docs
             const existingDocs = new Map<string, any>();
-            existingSnap.forEach(d => existingDocs.set(d.id, d.data()));
+            docs.forEach(d => existingDocs.set(d.id, d.data));
 
-            // Recalculate lastDate's document first (penerimaan/pengiriman/pemakaian may have changed)
+            // Recalculate lastDate's document first
             const lastDocId = makeDocId(pabrik, nama, lastDate);
             const lastExistingData = existingDocs.get(lastDocId) || null;
             const lastPn = computePenerimaan(pabrik, nama, lastDate);
             const lastPg = computePengiriman(pabrik, nama, lastDate);
-            const isOPTLast = pabrik === OPT_GUDANG;
-            const lastPk = isOPTLast ? 0 : computePemakaian(pKey, nama, lastDate);
+            const lastPk = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, lastDate);
             const lastSa = lastExistingData ? Number(lastExistingData.stockAwal) || 0 : 0;
-            const lastSk = isOPTLast ? lastSa + lastPn - lastPg : lastSa + lastPn - lastPg - lastPk;
+            const lastSk = isOPT(pabrik) ? lastSa + lastPn - lastPg : lastSa + lastPn - lastPg - lastPk;
 
             const lastExistingPn = lastExistingData ? Number(lastExistingData.penerimaan) || 0 : -1;
             const lastExistingPg = lastExistingData ? Number(lastExistingData.pengiriman) || 0 : -1;
@@ -403,7 +405,6 @@ export default function StockHarianPage({
             }
 
             // Cascade forward: recalculate each day AFTER lastDate up to today
-            // stockAwal = previous day's stockAkhir (propagates changes forward)
             let prevStockAkhir = lastSk;
             let cursor = addDays(lastDate, 1);
 
@@ -411,17 +412,12 @@ export default function StockHarianPage({
               const cursorDocId = makeDocId(pabrik, nama, cursor);
               const existingData = existingDocs.get(cursorDocId) || null;
 
-              // Compute values for this day from live lists
               const pn = computePenerimaan(pabrik, nama, cursor);
               const pg = computePengiriman(pabrik, nama, cursor);
-              const isOPT = pabrik === OPT_GUDANG;
-              const pk = isOPT ? 0 : computePemakaian(pKey, nama, cursor);
-
-              // stockAwal always comes from previous day's stockAkhir
+              const pk = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, cursor);
               const sa = prevStockAkhir;
-              const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
+              const sk = isOPT(pabrik) ? sa + pn - pg : sa + pn - pg - pk;
 
-              // Only write if values changed (avoids unnecessary Firestore writes)
               const existingSa = existingData ? Number(existingData.stockAwal) || 0 : -1;
               const existingPn = existingData ? Number(existingData.penerimaan) || 0 : -1;
               const existingPg = existingData ? Number(existingData.pengiriman) || 0 : -1;
@@ -445,7 +441,7 @@ export default function StockHarianPage({
             }
           }
 
-          // Small delay between pabrik groups to avoid quota exhaustion
+          // Small delay between locations to avoid quota exhaustion
           if (i < ALL_LOCATIONS.length - 1) {
             await new Promise(r => setTimeout(r, 100));
           }

@@ -1,0 +1,12 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "stock_harian",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "pabrik", "order": "ASCENDING" },
+        { "fieldPath": "tanggal", "order": "DESCENDING" }
+      ]
+    }
+  ]
+}

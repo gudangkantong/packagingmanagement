@@ -220,7 +220,7 @@ export default function StockHarianPage({
             const q = query(
               collection(db, "stock_harian"),
               where("__name__", ">=", searchId + "_"),
-              where("__name__", "<", searchId + "_" + today),
+              where("__name__", "<", searchId + "_" + addDays(today, 1)),
               orderBy("__name__", "desc"),
               limit(1)
             );
@@ -233,10 +233,8 @@ export default function StockHarianPage({
             const lastDate = lastData.tanggal;
             const lastStockAkhir = Number(lastData.stockAkhir) || 0;
 
-            if (lastDate >= today) continue; // already up to date
-
-            // Batch-fetch ALL existing docs for this item between lastDate and today
-            const rangeStart = searchId + "_" + addDays(lastDate, 1);
+            // Batch-fetch ALL existing docs for this item from lastDate to today (inclusive)
+            const rangeStart = searchId + "_" + lastDate;
             const rangeEnd = searchId + "_" + addDays(today, 1); // exclusive upper bound
             const existingSnap = await getDocs(query(
               collection(db, "stock_harian"),
@@ -246,25 +244,50 @@ export default function StockHarianPage({
             const existingDocs = new Map<string, any>();
             existingSnap.forEach(d => existingDocs.set(d.id, d.data()));
 
-            // Cascade forward: recalculate each day from last known to today
-            // This ensures changes to past stock akhir propagate to all future days
-            let prevStockAkhir = lastStockAkhir;
+            // Recalculate lastDate's document first (penerimaan/pengiriman/pemakaian may have changed)
+            const lastDocId = makeDocId(pabrik, nama, lastDate);
+            const lastExistingData = existingDocs.get(lastDocId) || null;
+            const lastPn = computePenerimaan(pabrik, nama, lastDate);
+            const lastPg = computePengiriman(pabrik, nama, lastDate);
+            const isOPTLast = pabrik === OPT_GUDANG;
+            const lastPk = isOPTLast ? 0 : computePemakaian(pKey, nama, lastDate);
+            const lastSa = lastExistingData ? Number(lastExistingData.stockAwal) || 0 : 0;
+            const lastSk = isOPTLast ? lastSa + lastPn - lastPg : lastSa + lastPn - lastPg - lastPk;
+
+            const lastExistingPn = lastExistingData ? Number(lastExistingData.penerimaan) || 0 : -1;
+            const lastExistingPg = lastExistingData ? Number(lastExistingData.pengiriman) || 0 : -1;
+            const lastExistingPk = lastExistingData ? Number(lastExistingData.pemakaian) || 0 : -1;
+            const lastExistingSk = lastExistingData ? Number(lastExistingData.stockAkhir) || 0 : -1;
+            const lastNeedsWrite = !lastExistingData
+              || lastPn !== lastExistingPn || lastPg !== lastExistingPg
+              || lastPk !== lastExistingPk || lastSk !== lastExistingSk;
+
+            if (lastNeedsWrite) {
+              await setDoc(doc(db, "stock_harian", lastDocId), {
+                pabrik, nama, tanggal: lastDate,
+                stockAwal: lastSa, penerimaan: lastPn, pengiriman: lastPg, pemakaian: lastPk, stockAkhir: lastSk,
+                createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
+              }, { merge: true });
+              totalSaved++;
+            }
+
+            // Cascade forward: recalculate each day AFTER lastDate up to today
+            // stockAwal = previous day's stockAkhir (propagates changes forward)
+            let prevStockAkhir = lastSk;
             let cursor = addDays(lastDate, 1);
 
             while (cursor <= today) {
               const cursorDocId = makeDocId(pabrik, nama, cursor);
               const existingData = existingDocs.get(cursorDocId) || null;
 
-              // Compute values for this day
+              // Compute values for this day from live lists
               const pn = computePenerimaan(pabrik, nama, cursor);
               const pg = computePengiriman(pabrik, nama, cursor);
               const isOPT = pabrik === OPT_GUDANG;
               const pk = isOPT ? 0 : computePemakaian(pKey, nama, cursor);
 
-              // Always cascade stockAwal from previous day's stockAkhir
-              // This ensures changes to past data propagate to all future days
-              const isFirstDay = cursor === addDays(lastDate, 1);
-              const sa = isFirstDay && existingData ? Number(existingData.stockAwal) || 0 : prevStockAkhir;
+              // stockAwal always comes from previous day's stockAkhir
+              const sa = prevStockAkhir;
               const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
 
               // Only write if values changed (avoids unnecessary Firestore writes)

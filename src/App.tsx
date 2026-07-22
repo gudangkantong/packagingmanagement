@@ -1906,6 +1906,7 @@ export default function App() {
       setSelectedFactory(firstWithData || "Pabrik Baturaja 1 (PBR 1)");
     } catch (e) {
       console.error("fetch monthly data error:", e);
+      triggerToast("Gagal memuat data bulanan: " + (e instanceof Error ? e.message : String(e)), "er");
       setMonthlyData([]);
     } finally {
       setMonthlyLoading(false);

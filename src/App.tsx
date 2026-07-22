@@ -553,13 +553,67 @@ export default function App() {
       setDataLoading(false);
     }
 
-    // 2. onSnapshot real-time — lebih murah drpd getDocs re-fetch semua user tiap ada edit
+    // 2. For old dates, use getDocs (one-time read). For recent, use onSnapshot.
     const reportsQuery = query(
       collection(db, "laporan_kantong"),
       where("tanggal", ">=", fromDate),
       where("tanggal", "<=", toDate),
       orderBy("tanggal", "desc")
     );
+
+    if (daysDiff > 7) {
+      // Old date: one-time read, no real-time listener
+      getDocs(reportsQuery).then(snap => {
+        const items: LaporanKantong[] = [];
+        snap.forEach((docSnap) => {
+          const data = docSnap.data();
+          items.push({
+            id: docSnap.id,
+            vendor: data.vendor || "",
+            nama: data.nama || "",
+            pabrik: data.pabrik || "",
+            shift: Number(data.shift) || 1,
+            tanggal: data.tanggal || "",
+            utuh: Number(data.utuh) || 0,
+            pecah: Number(data.pecah) || 0,
+            sortir: Number(data.sortir) || 0,
+            total: Number(data.total) || 0,
+            createdBy: data.createdBy || "",
+            updatedAt: data.updatedAt || ""
+          });
+        });
+
+        // Merge cache untuk tanggal di luar range
+        const cachedOld = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
+        if (cachedOld) {
+          const existingIds = new Set(items.map(r => r.id));
+          cachedOld.forEach(r => { if (!existingIds.has(r.id)) items.push(r); });
+        }
+
+        setReports(items);
+        setDataLoading(false);
+
+        const byDate: Record<string, LaporanKantong[]> = {};
+        items.forEach((item) => {
+          if (!byDate[item.tanggal]) byDate[item.tanggal] = [];
+          byDate[item.tanggal].push(item);
+        });
+        Object.entries(byDate).forEach(([date, dateItems]) => {
+          setCache(`laporan_${date}`, dateItems, 30 * 24 * 60 * 60 * 1000);
+        });
+      }).catch(err => {
+        console.error("Failed to fetch reports:", err);
+        const errMsg = err?.code || err?.message || String(err);
+        const hasCachedData = allCached.length > 0;
+        if (!hasCachedData) {
+          triggerToast(`Gagal load data: ${errMsg}`, "er");
+        }
+        setDataLoading(false);
+      });
+      return; // no cleanup needed
+    }
+
+    // Recent date: real-time listener
     const unsub = onSnapshot(reportsQuery, (snap) => {
       const items: LaporanKantong[] = [];
       snap.forEach((docSnap) => {

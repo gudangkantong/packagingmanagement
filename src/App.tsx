@@ -122,14 +122,14 @@ function updatePenerimaanCache(item: PenerimaanData) {
   } else {
     cached.push(item);
   }
-  setCache("penerimaan_data", cached, 24 * 60 * 60 * 1000);
+  setCache("penerimaan_data", cached, 30 * 24 * 60 * 60 * 1000);
 }
 
 /** Remove a penerimaan item from the cache */
 function removePenerimaanFromCache(id: string) {
   const cached = getCached<PenerimaanData[]>("penerimaan_data");
   if (!cached) return;
-  setCache("penerimaan_data", cached.filter(r => r.id !== id), 24 * 60 * 60 * 1000);
+  setCache("penerimaan_data", cached.filter(r => r.id !== id), 30 * 24 * 60 * 60 * 1000);
 }
 
 /** Add or update a pengiriman item in the cache */
@@ -141,14 +141,14 @@ function updatePengirimanCache(item: PengirimanData) {
   } else {
     cached.push(item);
   }
-  setCache("pengiriman_data", cached, 24 * 60 * 60 * 1000);
+  setCache("pengiriman_data", cached, 30 * 24 * 60 * 60 * 1000);
 }
 
 /** Remove a pengiriman item from the cache */
 function removePengirimanFromCache(id: string) {
   const cached = getCached<PengirimanData[]>("pengiriman_data");
   if (!cached) return;
-  setCache("pengiriman_data", cached.filter(r => r.id !== id), 24 * 60 * 60 * 1000);
+  setCache("pengiriman_data", cached.filter(r => r.id !== id), 30 * 24 * 60 * 60 * 1000);
 }
 
 const VENDORS = ["GEMAH", "YANA", "HARDO", "IKSG", "KRR", "SAMI", "TRI USAHA"];
@@ -825,7 +825,7 @@ export default function App() {
           items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
         });
         setPenerimaanList(items);
-        setCache("penerimaan_data", items, 24 * 60 * 60 * 1000); // cache 24 jam
+        setCache("penerimaan_data", items, 30 * 24 * 60 * 60 * 1000); // cache 30 hari
       } catch (err) {
         console.error("Failed to load penerimaan_data:", err);
         handleFirestoreError(err, OperationType.GET, "penerimaan_data");
@@ -853,7 +853,7 @@ export default function App() {
           items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
         });
         setPengirimanList(items);
-        setCache("pengiriman_data", items, 24 * 60 * 60 * 1000); // cache 24 jam
+        setCache("pengiriman_data", items, 30 * 24 * 60 * 60 * 1000); // cache 30 hari
       } catch (err) {
         console.error("Failed to load pengiriman_data:", err);
         handleFirestoreError(err, OperationType.GET, "pengiriman_data");
@@ -1016,10 +1016,10 @@ export default function App() {
         setDynamicJenisKantong(jItems);
         setDynamicPabrikList(pItems);
 
-        // Simpan ke cache 24 jam
-        setCache("vendors", vItems, 24 * 60 * 60 * 1000);
-        setCache("jenis_kantong", jItems, 24 * 60 * 60 * 1000);
-        setCache("pabrik_list", pItems, 24 * 60 * 60 * 1000);
+        // Simpan ke cache 30 hari
+        setCache("vendors", vItems, 30 * 24 * 60 * 60 * 1000);
+        setCache("jenis_kantong", jItems, 30 * 24 * 60 * 60 * 1000);
+        setCache("pabrik_list", pItems, 30 * 24 * 60 * 60 * 1000);
       } catch (e) {
         console.error("Failed to load master data:", e);
       }

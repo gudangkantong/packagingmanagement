@@ -255,15 +255,13 @@ export default function StockHarianPage({
     ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
       const id = makeDocId(p, n, selectedDate);
       const buf = editBuffer[id];
-      const saved = stockData[id];
-      if (!buf || !saved) return; // skip kalau saved blm ada
+      if (!buf) return;
       const bufVal = parseInt(buf.stockAwal) || 0;
-      const savedVal = Number(saved.stockAwal) || 0;
-      // Only auto-save if: prev day data exists (meaning value derived from cascade)
-      // AND value actually differs from saved
-      const prevId = makeDocId(p, n, prevDate);
-      const hasPrevData = !!prevDayData[prevId];
-      if (hasPrevData && bufVal !== savedVal) {
+      const saved = stockData[id];
+      const savedVal = saved ? Number(saved.stockAwal) || 0 : 0;
+      // Auto-save if value differs (including when document doesn't exist yet)
+      // Also require: has prev day data OR buffer is non-empty
+      if (bufVal !== savedVal && buf.stockAwal !== "") {
         toSave.push({ docId: id, pabrik: p, nama: n, stockAwal: bufVal });
       }
     }));

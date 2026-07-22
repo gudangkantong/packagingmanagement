@@ -88,6 +88,69 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   console.error("Firestore Error: ", JSON.stringify(errInfo));
 }
 
+// === INCREMENTAL CACHE HELPERS ===
+// Update cache for a single item instead of re-fetching everything
+
+/** Add or update a laporan item in the date's cache */
+function updateLaporanCache(item: LaporanKantong) {
+  const cacheKey = `laporan_${item.tanggal}`;
+  const cached = getCached<LaporanKantong[]>(cacheKey) || [];
+  const idx = cached.findIndex(r => r.id === item.id);
+  if (idx >= 0) {
+    cached[idx] = item; // update existing
+  } else {
+    cached.push(item); // add new
+  }
+  setCache(cacheKey, cached, 30 * 24 * 60 * 60 * 1000);
+}
+
+/** Remove a laporan item from the date's cache */
+function removeLaporanFromCache(id: string, tanggal: string) {
+  const cacheKey = `laporan_${tanggal}`;
+  const cached = getCached<LaporanKantong[]>(cacheKey);
+  if (!cached) return;
+  const filtered = cached.filter(r => r.id !== id);
+  setCache(cacheKey, filtered, 30 * 24 * 60 * 60 * 1000);
+}
+
+/** Add or update a penerimaan item in the cache */
+function updatePenerimaanCache(item: PenerimaanData) {
+  const cached = getCached<PenerimaanData[]>("penerimaan_data") || [];
+  const idx = cached.findIndex(r => r.id === item.id);
+  if (idx >= 0) {
+    cached[idx] = item;
+  } else {
+    cached.push(item);
+  }
+  setCache("penerimaan_data", cached, 24 * 60 * 60 * 1000);
+}
+
+/** Remove a penerimaan item from the cache */
+function removePenerimaanFromCache(id: string) {
+  const cached = getCached<PenerimaanData[]>("penerimaan_data");
+  if (!cached) return;
+  setCache("penerimaan_data", cached.filter(r => r.id !== id), 24 * 60 * 60 * 1000);
+}
+
+/** Add or update a pengiriman item in the cache */
+function updatePengirimanCache(item: PengirimanData) {
+  const cached = getCached<PengirimanData[]>("pengiriman_data") || [];
+  const idx = cached.findIndex(r => r.id === item.id);
+  if (idx >= 0) {
+    cached[idx] = item;
+  } else {
+    cached.push(item);
+  }
+  setCache("pengiriman_data", cached, 24 * 60 * 60 * 1000);
+}
+
+/** Remove a pengiriman item from the cache */
+function removePengirimanFromCache(id: string) {
+  const cached = getCached<PengirimanData[]>("pengiriman_data");
+  if (!cached) return;
+  setCache("pengiriman_data", cached.filter(r => r.id !== id), 24 * 60 * 60 * 1000);
+}
+
 const VENDORS = ["GEMAH", "YANA", "HARDO", "IKSG", "KRR", "SAMI", "TRI USAHA"];
 const PABRIK_LIST = ["Pabrik Baturaja 1 (PBR 1)", "Pabrik Baturaja 2 (PBR 2)", "Pabrik Palembang (PPG)", "Pabrik Panjang (PPJ)"];
 const PABRIK_SHORT: Record<string, string> = {
@@ -1340,7 +1403,7 @@ export default function App() {
 
     try {
       await setDoc(doc(db, "laporan_kantong", docId), entryData, { merge: true });
-      removeCache(`laporan_${formTanggal}`); // invalidate cache for this date
+      updateLaporanCache(entryData as LaporanKantong); // incremental cache update
       bumpLastUpdate(); // notify other devices
       setIsModalOpen(false);
       triggerToast(editingId ? "Laporan diperbarui" : "Laporan ditambahkan", "ok");
@@ -1368,7 +1431,7 @@ export default function App() {
       onConfirm: async () => {
         try {
           await deleteDoc(doc(db, "laporan_kantong", id));
-          if (item?.tanggal) removeCache(`laporan_${item.tanggal}`); // invalidate cache
+          if (item?.tanggal) removeLaporanFromCache(id, item.tanggal);
           bumpLastUpdate(); // notify other devices
           triggerToast("Laporan berhasil dihapus", "ok");
         } catch (err) {
@@ -1391,17 +1454,9 @@ export default function App() {
     setIsSavingPenerimaan(true);
     try {
       const docId = editingPenerimaanId || `pn_${PABRIK_SHORT[pnFormPabrik] || pnFormPabrik}_${pnFormNama.replace(/\s+/g, "_")}_${pnFormTanggal}_${Date.now()}`;
-      await setDoc(doc(db, "penerimaan_data", docId), {
-        nama: pnFormNama,
-        pabrik: pnFormPabrik,
-        tanggal: pnFormTanggal,
-        jumlah: parseInt(pnFormJumlah) || 0,
-        sumber: pnFormSumber,
-        keterangan: pnFormKeterangan,
-        createdBy: currentUser.email || "",
-        createdAt: new Date().toISOString()
-      });
-      removeCache("penerimaan_data"); // invalidate cache
+      const pnData: PenerimaanData = { id: docId, nama: pnFormNama, pabrik: pnFormPabrik, tanggal: pnFormTanggal, jumlah: parseInt(pnFormJumlah) || 0, sumber: pnFormSumber, keterangan: pnFormKeterangan, createdBy: currentUser.email || "", createdAt: new Date().toISOString() };
+      await setDoc(doc(db, "penerimaan_data", docId), pnData);
+      updatePenerimaanCache(pnData);
       bumpLastUpdate(); // notify other devices
       triggerToast(`Penerimaan ${pnFormNama} (${PABRIK_SHORT[pnFormPabrik] || pnFormPabrik}) berhasil ${editingPenerimaanId ? "diperbarui" : "disimpan"}`, "ok");
       setPnFormJumlah("");
@@ -1430,17 +1485,9 @@ export default function App() {
     setIsSavingPengiriman(true);
     try {
       const docId = editingPengirimanId || `pg_${PABRIK_SHORT[pgFormPabrik] || pgFormPabrik}_${pgFormNama.replace(/\s+/g, "_")}_${pgFormTanggal}_${Date.now()}`;
-      await setDoc(doc(db, "pengiriman_data", docId), {
-        nama: pgFormNama,
-        pabrik: pgFormPabrik,
-        tanggal: pgFormTanggal,
-        jumlah: parseInt(pgFormJumlah) || 0,
-        tujuan: pgFormTujuan,
-        keterangan: pgFormKeterangan,
-        createdBy: currentUser.email || "",
-        createdAt: new Date().toISOString()
-      });
-      removeCache("pengiriman_data"); // invalidate cache
+      const pgData: PengirimanData = { id: docId, nama: pgFormNama, pabrik: pgFormPabrik, tanggal: pgFormTanggal, jumlah: parseInt(pgFormJumlah) || 0, tujuan: pgFormTujuan, keterangan: pgFormKeterangan, createdBy: currentUser.email || "", createdAt: new Date().toISOString() };
+      await setDoc(doc(db, "pengiriman_data", docId), pgData);
+      updatePengirimanCache(pgData);
       bumpLastUpdate(); // notify other devices
       triggerToast(`Pengiriman ${pgFormNama} (${PABRIK_SHORT[pgFormPabrik] || pgFormPabrik}) berhasil ${editingPengirimanId ? "diperbarui" : "disimpan"}`, "ok");
       setPgFormJumlah("");
@@ -1467,7 +1514,7 @@ export default function App() {
       onConfirm: async () => {
         try {
           await deleteDoc(doc(db, "penerimaan_data", id));
-          removeCache("penerimaan_data"); // invalidate cache
+          removePenerimaanFromCache(id);
           bumpLastUpdate(); // notify other devices
           triggerToast("Data penerimaan berhasil dihapus", "ok");
         } catch (err) {
@@ -1487,7 +1534,7 @@ export default function App() {
       onConfirm: async () => {
         try {
           await deleteDoc(doc(db, "pengiriman_data", id));
-          removeCache("pengiriman_data"); // invalidate cache
+          removePengirimanFromCache(id);
           bumpLastUpdate(); // notify other devices
           triggerToast("Data pengiriman berhasil dihapus", "ok");
         } catch (err) {

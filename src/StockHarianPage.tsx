@@ -138,7 +138,14 @@ export default function StockHarianPage({
       setLoading(false);
       // Update cache with latest data (TTL 7 days)
       setCache(cacheKey, data, 7 * 24 * 60 * 60 * 1000);
-    }, err => { console.error(err); triggerToast("Gagal sync stock harian", "er"); setLoading(false); });
+    }, err => {
+      console.error("[StockHarian] snapshot error:", err);
+      const _hasCache = cached && Object.keys(cached).length > 0;
+      if (!_hasCache) {
+        triggerToast("Gagal sync stock: " + (err?.code || err?.message || "unknown"), "er");
+      }
+      setLoading(false);
+    });
     return () => unsub();
   }, [currentUser, isAllowed, selectedDate]);
 

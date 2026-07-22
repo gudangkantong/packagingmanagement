@@ -456,59 +456,89 @@ export default function App() {
         const sevenDaysAgo = getDateString(new Date(now - 7 * oneDayMs));
         const today = getDateString(new Date());
 
-        // Fetch laporan 7 hari
-        const laporanQuery = query(
-          collection(db, "laporan_kantong"),
-          where("tanggal", ">=", sevenDaysAgo),
-          where("tanggal", "<=", today),
-          orderBy("tanggal", "desc")
-        );
-        const laporanSnap = await getDocs(laporanQuery);
-        const byDate: Record<string, LaporanKantong[]> = {};
-        laporanSnap.forEach((d) => {
-          const data = d.data();
-          const item: LaporanKantong = {
-            id: d.id,
-            vendor: data.vendor || "",
-            nama: data.nama || "",
-            pabrik: data.pabrik || "",
-            shift: Number(data.shift) || 1,
-            tanggal: data.tanggal || "",
-            utuh: Number(data.utuh) || 0,
-            pecah: Number(data.pecah) || 0,
-            sortir: Number(data.sortir) || 0,
-            total: Number(data.total) || 0,
-            createdBy: data.createdBy || "",
-            updatedAt: data.updatedAt || ""
-          };
-          if (!byDate[item.tanggal]) byDate[item.tanggal] = [];
-          byDate[item.tanggal].push(item);
-        });
-        Object.entries(byDate).forEach(([date, items]) => {
-          setCache(`laporan_${date}`, items, 30 * oneDayMs);
-        });
+        // Only fetch dates that are NOT already cached
+        const datesToFetch: string[] = [];
+        const d = new Date(sevenDaysAgo + "T00:00:00");
+        const end = new Date(today + "T00:00:00");
+        while (d <= end) {
+          const dateStr = getDateString(d);
+          const cached = getCached<LaporanKantong[]>(`laporan_${dateStr}`);
+          if (!cached || cached.length === 0) {
+            datesToFetch.push(dateStr);
+          }
+          d.setDate(d.getDate() + 1);
+        }
 
-        // Fetch penerimaan & pengiriman juga
-        const [pnSnap, pgSnap] = await Promise.all([
-          getDocs(collection(db, "penerimaan_data")),
-          getDocs(collection(db, "pengiriman_data"))
-        ]);
+        if (datesToFetch.length > 0) {
+          // Fetch only uncached dates
+          const laporanQuery = query(
+            collection(db, "laporan_kantong"),
+            where("tanggal", ">=", datesToFetch[0]),
+            where("tanggal", "<=", datesToFetch[datesToFetch.length - 1]),
+            orderBy("tanggal", "desc")
+          );
+          const laporanSnap = await getDocs(laporanQuery);
+          const byDate: Record<string, LaporanKantong[]> = {};
+          laporanSnap.forEach((d) => {
+            const data = d.data();
+            const item: LaporanKantong = {
+              id: d.id,
+              vendor: data.vendor || "",
+              nama: data.nama || "",
+              pabrik: data.pabrik || "",
+              shift: Number(data.shift) || 1,
+              tanggal: data.tanggal || "",
+              utuh: Number(data.utuh) || 0,
+              pecah: Number(data.pecah) || 0,
+              sortir: Number(data.sortir) || 0,
+              total: Number(data.total) || 0,
+              createdBy: data.createdBy || "",
+              updatedAt: data.updatedAt || ""
+            };
+            if (!byDate[item.tanggal]) byDate[item.tanggal] = [];
+            byDate[item.tanggal].push(item);
+          });
+          Object.entries(byDate).forEach(([date, items]) => {
+            setCache(`laporan_${date}`, items, 30 * oneDayMs);
+          });
+          console.log(`[Backfill] Fetched ${datesToFetch.length} uncached days`);
+        } else {
+          console.log(`[Backfill] All 7 days already cached, skipping Firestore`);
+        }
 
-        const pnItems: PenerimaanData[] = [];
-        pnSnap.forEach((d) => {
-          const data = d.data();
-          pnItems.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
-        });
-        setCache("penerimaan_data", pnItems, 24 * oneDayMs);
+        // Fetch penerimaan & pengiriman only if not cached
+        const cachedPn = getCached<PenerimaanData[]>("penerimaan_data");
+        const cachedPg = getCached<PengirimanData[]>("pengiriman_data");
 
-        const pgItems: PengirimanData[] = [];
-        pgSnap.forEach((d) => {
-          const data = d.data();
-          pgItems.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
-        });
-        setCache("pengiriman_data", pgItems, 24 * oneDayMs);
+        if (!cachedPn || !cachedPg) {
+          const promises: Promise<any>[] = [];
+          if (!cachedPn) promises.push(getDocs(collection(db, "penerimaan_data")));
+          else promises.push(Promise.resolve(null));
+          if (!cachedPg) promises.push(getDocs(collection(db, "pengiriman_data")));
+          else promises.push(Promise.resolve(null));
 
-        console.log(`[Backfill] Selesai: ${Object.keys(byDate).length} hari laporan, ${pnItems.length} penerimaan, ${pgItems.length} pengiriman`);
+          const [pnSnap, pgSnap] = await Promise.all(promises);
+
+          if (pnSnap) {
+            const pnItems: PenerimaanData[] = [];
+            pnSnap.forEach((d: any) => {
+              const data = d.data();
+              pnItems.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+            });
+            setCache("penerimaan_data", pnItems, 24 * oneDayMs);
+          }
+
+          if (pgSnap) {
+            const pgItems: PengirimanData[] = [];
+            pgSnap.forEach((d: any) => {
+              const data = d.data();
+              pgItems.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+            });
+            setCache("pengiriman_data", pgItems, 24 * oneDayMs);
+          }
+        }
+
+        console.log("[Backfill] Selesai");
       } catch (err) {
         console.error("[Backfill] Gagal:", err);
       }
@@ -613,7 +643,14 @@ export default function App() {
       });
       return () => unsub();
     } else {
-      // Old date: one-time getDocs, no real-time listener
+      // Old date: SKIP Firestore if cache exists (data doesn't change)
+      const cachedLaporan = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
+      if (cachedLaporan && cachedLaporan.length > 0) {
+        setReports(cachedLaporan);
+        setDataLoading(false);
+        return;
+      }
+      // Cache miss: one-time getDocs
       const selectedDateQuery = query(
         collection(db, "laporan_kantong"),
         where("tanggal", "==", selectedDate),

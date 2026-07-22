@@ -132,7 +132,13 @@ export default function StockHarianPage({
     const q = query(collection(db, "stock_harian"), where("tanggal", "==", selectedDate));
 
     if (isOldDate) {
-      // Old date: one-time read, no real-time listener (saves resources)
+      // Old date: SKIP Firestore if cache exists (data doesn't change)
+      if (cached && Object.keys(cached).length > 0) {
+        setStockData(cached);
+        setLoading(false);
+        return; // no Firestore read needed
+      }
+      // Cache miss: one-time read
       getDocs(q).then(snap => {
         const data: Record<string, StockHarian> = {};
         snap.forEach(d => {
@@ -141,13 +147,10 @@ export default function StockHarianPage({
         });
         setStockData(data);
         setLoading(false);
-        setCache(cacheKey, data, 7 * 24 * 60 * 60 * 1000);
+        setCache(cacheKey, data, 30 * 24 * 60 * 60 * 1000); // 30 days for old data
       }).catch(err => {
         console.error("[StockHarian] getDocs error:", err);
-        const _hasCache = cached && Object.keys(cached).length > 0;
-        if (!_hasCache) {
-          triggerToast("Gagal load stock: " + (err?.code || err?.message || "unknown"), "er");
-        }
+        triggerToast("Gagal load stock: " + (err?.code || err?.message || "unknown"), "er");
         setLoading(false);
       });
       return; // no cleanup needed
@@ -162,7 +165,7 @@ export default function StockHarianPage({
       });
       setStockData(data);
       setLoading(false);
-      setCache(cacheKey, data, 7 * 24 * 60 * 60 * 1000);
+      setCache(cacheKey, data, 30 * 24 * 60 * 60 * 1000);
     }, err => {
       console.error("[StockHarian] snapshot error:", err);
       const _hasCache = cached && Object.keys(cached).length > 0;
@@ -192,12 +195,18 @@ export default function StockHarianPage({
     const q = query(collection(db, "stock_harian"), where("tanggal", "==", prevDate));
 
     if (isOldDate) {
+      // Old date: SKIP Firestore if cache exists
+      if (cached && Object.keys(cached).length > 0) {
+        setPrevDayData(cached);
+        setPrevDayLoaded(true);
+        return;
+      }
       getDocs(q).then(snap => {
         const data: Record<string, StockHarian> = {};
         snap.forEach(d => { data[d.id] = d.data() as StockHarian; });
         setPrevDayData(data);
         setPrevDayLoaded(true);
-        setCache(cacheKey, data, 7 * 24 * 60 * 60 * 1000);
+        setCache(cacheKey, data, 30 * 24 * 60 * 60 * 1000);
       }).catch(err => { console.error(err); setPrevDayLoaded(true); });
       return;
     }
@@ -207,7 +216,7 @@ export default function StockHarianPage({
       snap.forEach(d => { data[d.id] = d.data() as StockHarian; });
       setPrevDayData(data);
       setPrevDayLoaded(true);
-      setCache(cacheKey, data, 7 * 24 * 60 * 60 * 1000);
+      setCache(cacheKey, data, 30 * 24 * 60 * 60 * 1000);
     }, err => { console.error(err); setPrevDayLoaded(true); });
     return () => unsub();
   }, [currentUser, isAllowed, prevDate]);

@@ -351,7 +351,7 @@ export default function StockHarianPage({
     const doFullSync = async () => {
       syncRunningRef.current = true;
       try {
-        const today = selectedDate;
+        const today = getDateString(new Date()); // sync sampai hari ini, bukan selectedDate
         const todayMs = new Date(today + "T00:00:00").getTime();
         const nowMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
         const daysDiff = Math.floor((nowMs - todayMs) / 86400000);

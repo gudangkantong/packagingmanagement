@@ -206,6 +206,11 @@ export default function StockHarianPage({
     if (Object.keys(editBuffer).length === 0) return;
     if (Object.keys(stockData).length === 0) return; // skip kalau stockData blm loaded
 
+    // Skip auto-save for dates older than 7 days (view-only, no writes)
+    const todayMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
+    const selectedMs = new Date(selectedDate + "T00:00:00").getTime();
+    if (Math.floor((todayMs - selectedMs) / 86400000) > 7) return;
+
     // Find rows where editBuffer stockAwal differs from saved stockData
     const toSave: { docId: string; pabrik: string; nama: string; stockAwal: number }[] = [];
     ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
@@ -283,10 +288,24 @@ export default function StockHarianPage({
       syncRunningRef.current = true;
       try {
         const today = selectedDate;
+        const todayMs = new Date(today + "T00:00:00").getTime();
+        const nowMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
+        const daysDiff = Math.floor((nowMs - todayMs) / 86400000);
+
+        // Skip full sync for dates older than 7 days (just view, don't cascade)
+        // This prevents resource-exhausted errors from too many Firestore reads/writes
+        if (daysDiff > 7) {
+          syncRunningRef.current = false;
+          return;
+        }
+
         let totalSaved = 0;
 
-        for (const pabrik of ALL_LOCATIONS) {
-          for (const nama of JENIS_KANTONG) {
+        // Process items sequentially with small delay to avoid quota exhaustion
+        for (let i = 0; i < ALL_LOCATIONS.length; i++) {
+          const pabrik = ALL_LOCATIONS[i];
+          for (let j = 0; j < JENIS_KANTONG.length; j++) {
+            const nama = JENIS_KANTONG[j];
             const todayDocId = makeDocId(pabrik, nama, today);
 
             // Find last known stock for this item before today
@@ -387,6 +406,11 @@ export default function StockHarianPage({
               prevStockAkhir = sk;
               cursor = addDays(cursor, 1);
             }
+          }
+
+          // Small delay between pabrik groups to avoid quota exhaustion
+          if (i < ALL_LOCATIONS.length - 1) {
+            await new Promise(r => setTimeout(r, 100));
           }
         }
 

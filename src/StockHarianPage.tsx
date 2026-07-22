@@ -171,19 +171,20 @@ export default function StockHarianPage({
     const buf: Record<string, { stockAwal: string }> = {};
     ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
       const id = makeDocId(p, n, selectedDate);
+      const prevId = makeDocId(p, n, prevDate);
+      const pv = prevDayData[prevId];
       const saved = stockData[id];
-      if (saved) { buf[id] = { stockAwal: String(saved.stockAwal) }; }
-      else {
-        // Try prev day first
-        const prevId = makeDocId(p, n, prevDate);
-        const pv = prevDayData[prevId];
-        if (pv) {
-          const ps = Number(pv.stockAkhir) || 0;
-          buf[id] = { stockAwal: ps !== 0 ? String(ps) : "" };
-        } else {
-          // No prev day data — leave empty, auto-save effect will handle backward search
-          buf[id] = { stockAwal: "" };
-        }
+
+      if (pv) {
+        // Always derive stockAwal from previous day's stockAkhir
+        // This ensures changes to past data propagate correctly
+        const ps = Number(pv.stockAkhir) || 0;
+        buf[id] = { stockAwal: ps !== 0 ? String(ps) : "" };
+      } else if (saved) {
+        // Fallback: use saved value if no prev day data
+        buf[id] = { stockAwal: String(saved.stockAwal) };
+      } else {
+        buf[id] = { stockAwal: "" };
       }
     }));
     setEditBuffer(buf);
@@ -260,17 +261,20 @@ export default function StockHarianPage({
               const isOPT = pabrik === OPT_GUDANG;
               const pk = isOPT ? 0 : computePemakaian(pKey, nama, cursor);
 
-              // If document exists, preserve manual stockAwal; only recalculate dependent fields
-              const sa = existingData ? Number(existingData.stockAwal) || 0 : prevStockAkhir;
+              // Always cascade stockAwal from previous day's stockAkhir
+              // This ensures changes to past data propagate to all future days
+              const isFirstDay = cursor === addDays(lastDate, 1);
+              const sa = isFirstDay && existingData ? Number(existingData.stockAwal) || 0 : prevStockAkhir;
               const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
 
               // Only write if values changed (avoids unnecessary Firestore writes)
+              const existingSa = existingData ? Number(existingData.stockAwal) || 0 : -1;
               const existingPn = existingData ? Number(existingData.penerimaan) || 0 : -1;
               const existingPg = existingData ? Number(existingData.pengiriman) || 0 : -1;
               const existingPk = existingData ? Number(existingData.pemakaian) || 0 : -1;
               const existingSk = existingData ? Number(existingData.stockAkhir) || 0 : -1;
               const needsWrite = !existingData
-                || pn !== existingPn || pg !== existingPg
+                || sa !== existingSa || pn !== existingPn || pg !== existingPg
                 || pk !== existingPk || sk !== existingSk;
 
               if (needsWrite) {

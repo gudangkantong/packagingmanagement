@@ -411,6 +411,12 @@ export default function App() {
             if (key.includes("stock_harian_")) localStorage.removeItem(key);
           });
 
+          // Clear monthly preview cache
+          const monthlyKeys = Object.keys(localStorage);
+          monthlyKeys.forEach((key) => {
+            if (key.includes("monthly_")) localStorage.removeItem(key);
+          });
+
           // Clear penerimaan & pengiriman cache (biar export pake data terbaru)
           removeCache("penerimaan_data");
           removeCache("pengiriman_data");
@@ -1871,6 +1877,19 @@ export default function App() {
   const fetchMonthlyData = async (month: string) => {
     if (!month || !currentUser || isAllowed !== true) return;
     setMonthlyLoading(true);
+
+    // === CACHE FIRST: cek cache dulu sebelum query Firestore ===
+    const cacheKey = `monthly_${month}`;
+    const cached = getCached<LaporanKantong[]>(cacheKey);
+    if (cached && cached.length > 0) {
+      setMonthlyData(cached);
+      const firstWithData = PABRIK_LIST.find(f => cached.some(r => r.pabrik === f));
+      setSelectedFactory(firstWithData || "Pabrik Baturaja 1 (PBR 1)");
+      setMonthlyLoading(false);
+      console.log(`[MonthlyPreview] Cache hit: ${cached.length} items for ${month} (0 reads)`);
+      return;
+    }
+
     try {
       const [year, m] = month.split('-');
       const startDate = `${year}-${m}-01`;
@@ -1901,6 +1920,9 @@ export default function App() {
         });
       });
       setMonthlyData(items);
+      // Cache 30 hari
+      setCache(cacheKey, items, 30 * 24 * 60 * 60 * 1000);
+      console.log(`[MonthlyPreview] Fetched ${items.length} items for ${month} from Firestore`);
       // Auto-select first factory with data
       const firstWithData = PABRIK_LIST.find(f => items.some(r => r.pabrik === f));
       setSelectedFactory(firstWithData || "Pabrik Baturaja 1 (PBR 1)");

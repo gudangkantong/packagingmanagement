@@ -192,10 +192,12 @@ export default function StockHarianPage({
 
   // === AUTO-SAVE: persist stockAwal changes to Firestore when prev day data changes ===
   const autoSaveRunningRef = useRef(false);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!currentUser || !isMasterAdmin || !prevDayLoaded || loading) return;
     if (autoSaveRunningRef.current) return;
     if (Object.keys(editBuffer).length === 0) return;
+    if (Object.keys(stockData).length === 0) return; // skip kalau stockData blm loaded
 
     // Find rows where editBuffer stockAwal differs from saved stockData
     const toSave: { docId: string; pabrik: string; nama: string; stockAwal: number }[] = [];
@@ -203,9 +205,9 @@ export default function StockHarianPage({
       const id = makeDocId(p, n, selectedDate);
       const buf = editBuffer[id];
       const saved = stockData[id];
-      if (!buf) return;
+      if (!buf || !saved) return; // skip kalau saved blm ada
       const bufVal = parseInt(buf.stockAwal) || 0;
-      const savedVal = saved ? Number(saved.stockAwal) || 0 : 0;
+      const savedVal = Number(saved.stockAwal) || 0;
       // Only auto-save if: prev day data exists (meaning value derived from cascade)
       // AND value actually differs from saved
       const prevId = makeDocId(p, n, prevDate);
@@ -217,32 +219,44 @@ export default function StockHarianPage({
 
     if (toSave.length === 0) return;
 
-    const doAutoSave = async () => {
-      autoSaveRunningRef.current = true;
-      try {
-        await Promise.all(toSave.map(({ docId, pabrik, nama, stockAwal }) => {
-          const isOPT = pabrik === OPT_GUDANG;
-          const pKey = PABRIK_SHORT[pabrik] || pabrik;
-          const pn = computePenerimaan(pabrik, nama, selectedDate);
-          const pg = computePengiriman(pabrik, nama, selectedDate);
-          const pk = isOPT ? 0 : computePemakaian(pKey, nama, selectedDate);
-          const sk = isOPT ? stockAwal + pn - pg : stockAwal + pn - pg - pk;
-          return setDoc(doc(db, "stock_harian", docId), {
-            pabrik, nama, tanggal: selectedDate,
-            stockAwal, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
-            createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
-          }, { merge: true });
-        }));
-        await bumpLastUpdate();
-        console.log(`[StockHarian] Auto-saved ${toSave.length} stock awal rows`);
-      } catch (e) {
-        console.error("[StockHarian] Auto-save failed:", e);
-      } finally {
-        autoSaveRunningRef.current = false;
+    // Debounce: tunggu 500ms supaya gak rapid-fire saat multiple state update
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      const doAutoSave = async () => {
+        if (autoSaveRunningRef.current) return;
+        autoSaveRunningRef.current = true;
+        try {
+          await Promise.all(toSave.map(({ docId, pabrik, nama, stockAwal }) => {
+            const isOPT = pabrik === OPT_GUDANG;
+            const pKey = PABRIK_SHORT[pabrik] || pabrik;
+            const pn = computePenerimaan(pabrik, nama, selectedDate);
+            const pg = computePengiriman(pabrik, nama, selectedDate);
+            const pk = isOPT ? 0 : computePemakaian(pKey, nama, selectedDate);
+            const sk = isOPT ? stockAwal + pn - pg : stockAwal + pn - pg - pk;
+            return setDoc(doc(db, "stock_harian", docId), {
+              pabrik, nama, tanggal: selectedDate,
+              stockAwal, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
+              createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
+            }, { merge: true });
+          }));
+          await bumpLastUpdate();
+          console.log(`[StockHarian] Auto-saved ${toSave.length} stock awal rows`);
+        } catch (e) {
+          console.error("[StockHarian] Auto-save failed:", e);
+        } finally {
+          autoSaveRunningRef.current = false;
+        }
+      };
+      doAutoSave();
+    }, 500);
+
+    // Cleanup timer on unmount or dependency change
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
       }
     };
-
-    doAutoSave();
   }, [editBuffer, prevDayData, prevDayLoaded, stockData, loading]);
 
   // === HELPER: add days to YYYY-MM-DD string ===

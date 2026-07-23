@@ -6,7 +6,7 @@ import { Save, Loader2, Package, RefreshCw, Edit2, Trash2 } from "lucide-react";
 import { db } from "./firebase";
 import { StockHarian, LaporanKantong, AllowedUser, PenerimaanData, PengirimanData } from "./types";
 import { getDateString, formatDateDisplay } from "./utils";
-import { getCached, setCache } from "./utils/cache";
+import { getCached, setCache, removeCache } from "./utils/cache";
 import { JENIS_KANTONG } from "./csvUtils";
 
 const OPT_GUDANG = "Gudang OPT";
@@ -506,6 +506,10 @@ export default function StockHarianPage({
       const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
       const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
       await setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
+      // Update stockData supaya UI langsung sinkron & isStockAwalChanged jadi false
+      setStockData(prev => ({ ...prev, [docId]: { id: docId, pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() } }));
+      // Invalidate cache supaya reload baca dari Firestore, bukan data lama
+      removeCache(`stock_harian_${selectedDate}`);
       await bumpLastUpdate(); // notify other devices
       triggerToast(`Stock ${nama} (${PABRIK_SHORT[pabrik]}) disimpan`, "ok");
     } catch (e) { console.error(e); triggerToast("Gagal simpan", "er"); }
@@ -527,6 +531,23 @@ export default function StockHarianPage({
         const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
         return setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
       }));
+      // Update stockData untuk semua item supaya UI langsung sinkron
+      setStockData(prev => {
+        const updated = { ...prev };
+        JENIS_KANTONG.forEach(nama => {
+          const docId = makeDocId(pabrik, nama, selectedDate);
+          const b = editBuffer[docId] || { stockAwal: "0" };
+          const sa = parseInt(b.stockAwal) || 0;
+          const pn = computePenerimaan(pabrik, nama, selectedDate);
+          const pg = computePengiriman(pabrik, nama, selectedDate);
+          const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
+          const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
+          updated[docId] = { id: docId, pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() };
+        });
+        return updated;
+      });
+      // Invalidate cache supaya reload baca dari Firestore
+      removeCache(`stock_harian_${selectedDate}`);
       await bumpLastUpdate(); // notify other devices
       triggerToast(`Semua stock ${PABRIK_SHORT[pabrik]} disimpan`, "ok");
     } catch (e) { console.error(e); triggerToast("Gagal simpan", "er"); }

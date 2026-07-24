@@ -115,23 +115,6 @@ function removeLaporanFromCache(id: string, tanggal: string) {
   markDateDirty(tanggal); // tandai tanggal ini sebagai dirty
 }
 
-/** Tandai tanggal sebagai dirty (ada perubahan) */
-function markDateDirty(tanggal: string) {
-  const dirtyDates = getCached<string[]>("dirty_monthly_dates") || [];
-  if (!dirtyDates.includes(tanggal)) {
-    dirtyDates.push(tanggal);
-    setCache("dirty_monthly_dates", dirtyDates, 30 * 24 * 60 * 60 * 1000);
-  }
-}
-
-/** Ambil & hapus dirty dates */
-function consumeDirtyDates(): string[] {
-  const dirtyDates = getCached<string[]>("dirty_monthly_dates") || [];
-  if (dirtyDates.length > 0) {
-    removeCache("dirty_monthly_dates");
-  }
-  return dirtyDates;
-}
 
 /** Add or update a penerimaan item in the cache */
 function updatePenerimaanCache(item: PenerimaanData) {
@@ -1854,11 +1837,25 @@ export default function App() {
     { utuh: 0, pecah: 0, sortir: 0, total: 0 }
   );
 
-  // Fetch full month data for monthly preview — always fresh from Firestore
+  // Fetch full month data for monthly preview
+  // Cache + invalidate via refreshTrigger (0 reads kalau data tidak berubah)
   const fetchMonthlyData = async (month: string) => {
     if (!month || !currentUser || isAllowed !== true) return;
     setMonthlyLoading(true);
 
+    const cacheKey = `monthly_${month}`;
+    const cached = getCached<LaporanKantong[]>(cacheKey);
+
+    // Pakai cache kalau ada (refreshTrigger berubah → cache sudah di-clear oleh meta listener)
+    if (cached && cached.length > 0) {
+      setMonthlyData(cached);
+      const firstWithData = PABRIK_LIST.find(f => cached.some(r => r.pabrik === f));
+      setSelectedFactory(firstWithData || "Pabrik Baturaja 1 (PBR 1)");
+      setMonthlyLoading(false);
+      return;
+    }
+
+    // Cache miss → fetch dari Firestore
     const [year, m] = month.split('-');
     const startDate = `${year}-${m}-01`;
     const lastDay = new Date(parseInt(year), parseInt(m), 0).getDate();
@@ -1891,9 +1888,9 @@ export default function App() {
       });
 
       setMonthlyData(items);
+      setCache(cacheKey, items, 30 * 24 * 60 * 60 * 1000); // cache 30 hari
       const firstWithData = PABRIK_LIST.find(f => items.some(r => r.pabrik === f));
       setSelectedFactory(firstWithData || "Pabrik Baturaja 1 (PBR 1)");
-      console.log(`[MonthlyPreview] Fetched ${items.length} items for ${month}`);
     } catch (e) {
       console.error("fetch monthly data error:", e);
       triggerToast("Gagal memuat data bulanan: " + (e instanceof Error ? e.message : String(e)), "er");

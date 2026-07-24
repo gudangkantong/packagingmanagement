@@ -262,23 +262,6 @@ export default function App() {
     };
   }, []);
 
-  // === VISIBILITY REFRESH: cek tanggal saat user kembali ke tab ===
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        const todayStr = getDateString(new Date());
-        if (selectedDate !== todayStr && selectedDate < todayStr) {
-          // User kembali ke tab tapi selectedDate masih hari kemarin → auto ke hari ini
-          setSelectedDate(todayStr);
-          setRefreshTrigger(prev => prev + 1);
-          console.log(`[VisibilityRefresh] Auto-refresh ke ${todayStr}`);
-        }
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [selectedDate]);
-
   // Derived state
   const isSelectedDateLocked = !!lockedDates[selectedDate]?.locked;
 

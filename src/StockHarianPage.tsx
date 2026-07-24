@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   collection, doc, setDoc, onSnapshot, query, where, getDocs, orderBy, limit,
 } from "firebase/firestore";
+import { getDocsFromServer } from "firebase/firestore";
 import { Save, Loader2, Package, RefreshCw, Edit2, Trash2 } from "lucide-react";
 import { db } from "./firebase";
 import { StockHarian, LaporanKantong, AllowedUser, PenerimaanData, PengirimanData } from "./types";
@@ -259,8 +260,15 @@ export default function StockHarianPage({
       if (pv) {
         const ps = Number(pv.stockAkhir) || 0;
         buf[id] = { stockAwal: ps !== 0 ? String(ps) : "" };
+        // Debug: log untuk OPT
+        if (p === OPT_GUDANG && selectedDate === getDateString(new Date())) {
+          console.log(`[StockHarian] editBuffer ${n}: from prevDayData.stockAkhir=${ps} (prevDate=${prevDate})`);
+        }
       } else if (saved) {
         buf[id] = { stockAwal: String(saved.stockAwal) };
+        if (p === OPT_GUDANG && selectedDate === getDateString(new Date())) {
+          console.log(`[StockHarian] editBuffer ${n}: from stockData.stockAwal=${saved.stockAwal}`);
+        }
       } else {
         buf[id] = { stockAwal: "" };
       }
@@ -375,6 +383,9 @@ export default function StockHarianPage({
           const today = getDateString(new Date());
           const isOPT = (pabrik: string) => pabrik === OPT_GUDANG;
 
+          console.log(`[StockHarian] === CASCADE START === selectedDate=${selectedDate}, today=${today}`);
+          console.log(`[StockHarian] penerimaanList.length=${penerimaanList.length}, pengirimanList.length=${pengirimanList.length}, reports.length=${reports.length}`);
+
           let totalSaved = 0;
           // Track stockAwal yang ditulis cascade untuk selectedDate
           // supaya bisa sync editBuffer setelah selesai
@@ -390,7 +401,11 @@ export default function StockHarianPage({
               where("tanggal", "<=", today),
               orderBy("tanggal", "desc")
             );
-            const locSnap = await getDocs(locQuery);
+            const locSnap = await getDocsFromServer(locQuery);
+
+            if (pabrik === OPT_GUDANG) {
+              console.log(`[StockHarian] OPT: fetched ${locSnap.size} stock_harian docs FROM SERVER`);
+            }
 
             const docsByNama = new Map<string, { id: string; data: any }[]>();
             locSnap.forEach(d => {
@@ -513,6 +528,11 @@ export default function StockHarianPage({
                 const sa = prevSk;
                 const sk = isOPT(pabrik) ? sa + pn - pg : sa + pn - pg - pk;
 
+                // Debug logging untuk OPT pada selectedDate
+                if (pabrik === OPT_GUDANG && cursor === selectedDate) {
+                  console.log(`[StockHarian] OPT ${nama} ${cursor}: sa=${sa} pn=${pn} pg=${pg} sk=${sk} existingSa=${existingData ? Number(existingData.stockAwal) : 'none'} needsWrite=${!existingData || sa !== (existingData ? Number(existingData.stockAwal) : -1) || pn !== (existingData ? Number(existingData.penerimaan) : -1)}`);
+                }
+
                 const existingSa = existingData ? Number(existingData.stockAwal) || 0 : -1;
                 const existingPn = existingData ? Number(existingData.penerimaan) || 0 : -1;
                 const existingPg = existingData ? Number(existingData.pengiriman) || 0 : -1;
@@ -573,6 +593,10 @@ export default function StockHarianPage({
           // Setelah cascade menulis ke Firestore, update editBuffer untuk selectedDate
           // supaya UI langsung menampilkan stockAwal yang benar (= prev day stockAkhir)
           // tanpa menunggu onSnapshot yang bisa race condition
+          console.log(`[StockHarian] Cascade buffer sync: todayBufferUpdates.size=${todayBufferUpdates.size}, selectedDate=${selectedDate}`);
+          todayBufferUpdates.forEach((val, key) => {
+            console.log(`[StockHarian] Buffer: ${key} = ${val}`);
+          });
           if (todayBufferUpdates.size > 0) {
             setEditBuffer(prev => {
               const next = { ...prev };
@@ -737,6 +761,9 @@ export default function StockHarianPage({
     const inc = computeIncomingPengiriman(pabrik, nama, selectedDate);
     const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
     const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
+    if (isOPT && sa > 0) {
+      console.log(`[StockHarian] UI ${nama}: sa=${sa} pn=${pn} pg=${pg} inc=${inc} sk=${sk}`);
+    }
     return { stockAwal: sa, penerimaan: pn, pengiriman: pg, incomingPengiriman: inc, pemakaian: pk, stockAkhir: sk };
   };
 
@@ -751,6 +778,14 @@ export default function StockHarianPage({
       <div className="bg-brand-green text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2 rounded-t-3xl">
         <div className="flex items-center gap-2"><Package className="w-5 h-5" /><h3 className="font-bold text-lg">📦 {OPT_GUDANG}</h3></div>
         {isMasterAdmin && <div className="flex items-center gap-2">
+          <button
+            onClick={() => setRefreshTrigger(prev => prev + 1)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors"
+            title="Sinkron ulang data stock"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Sync</span>
+          </button>
         </div>}
       </div>
       <div className="overflow-x-auto">
@@ -855,6 +890,14 @@ export default function StockHarianPage({
         <div className={`${c.h} text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2 rounded-t-3xl`}>
           <div className="flex items-center gap-2"><Package className="w-5 h-5" /><h3 className="font-bold text-lg">🏭 {pabrik}</h3></div>
           {isMasterAdmin && <div className="flex items-center gap-2">
+            <button
+              onClick={() => setRefreshTrigger(prev => prev + 1)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors"
+              title="Sinkron ulang data stock"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Sync</span>
+            </button>
           </div>}
         </div>
         <div className="overflow-x-auto">

@@ -1867,37 +1867,26 @@ export default function App() {
     { utuh: 0, pecah: 0, sortir: 0, total: 0 }
   );
 
-  // Fetch full month data for monthly preview
-  // Cache + invalidate via refreshTrigger (0 reads kalau data tidak berubah)
-  const fetchMonthlyData = async (month: string) => {
-    if (!month || !currentUser || isAllowed !== true) return;
-    setMonthlyLoading(true);
-
-    const cacheKey = `monthly_${month}`;
-    const cached = getCached<LaporanKantong[]>(cacheKey);
-
-    // Pakai cache kalau ada (refreshTrigger berubah → cache sudah di-clear oleh meta listener)
-    if (cached && cached.length > 0) {
-      setMonthlyData(cached);
-      const firstWithData = PABRIK_LIST.find(f => cached.some(r => r.pabrik === f));
-      setSelectedFactory(firstWithData || "Pabrik Baturaja 1 (PBR 1)");
-      setMonthlyLoading(false);
+  // Real-time listener for monthly preview data (onSnapshot)
+  // Langsung update kalau ada perubahan dari browser/device lain
+  useEffect(() => {
+    if (!showExportPreview || exportPreviewType !== "bulanan" || !exportMonth || !currentUser || isAllowed !== true) {
       return;
     }
 
-    // Cache miss → fetch dari Firestore
-    const [year, m] = month.split('-');
+    setMonthlyLoading(true);
+    const [year, m] = exportMonth.split('-');
     const startDate = `${year}-${m}-01`;
     const lastDay = new Date(parseInt(year), parseInt(m), 0).getDate();
     const endDate = `${year}-${m}-${String(lastDay).padStart(2, '0')}`;
 
-    try {
-      const q = query(
-        collection(db, "laporan_kantong"),
-        where("tanggal", ">=", startDate),
-        where("tanggal", "<=", endDate),
-      );
-      const snap = await getDocs(q);
+    const q = query(
+      collection(db, "laporan_kantong"),
+      where("tanggal", ">=", startDate),
+      where("tanggal", "<=", endDate),
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
       const items: LaporanKantong[] = [];
       snap.forEach((docSnap) => {
         const data = docSnap.data();
@@ -1918,24 +1907,22 @@ export default function App() {
       });
 
       setMonthlyData(items);
-      setCache(cacheKey, items, 30 * 24 * 60 * 60 * 1000); // cache 30 hari
       const firstWithData = PABRIK_LIST.find(f => items.some(r => r.pabrik === f));
-      setSelectedFactory(firstWithData || "Pabrik Baturaja 1 (PBR 1)");
-    } catch (e) {
-      console.error("fetch monthly data error:", e);
-      triggerToast("Gagal memuat data bulanan: " + (e instanceof Error ? e.message : String(e)), "er");
-      setMonthlyData([]);
-    } finally {
+      setSelectedFactory(prev => {
+        if (!firstWithData) return "Pabrik Baturaja 1 (PBR 1)";
+        // Preserve current selection if still valid
+        return prev && items.some(r => r.pabrik === prev) ? prev : firstWithData;
+      });
       setMonthlyLoading(false);
-    }
-  };
+    }, (err) => {
+      console.error("Monthly onSnapshot error:", err);
+      triggerToast("Gagal memuat data bulanan: " + (err?.message || String(err)), "er");
+      setMonthlyData([]);
+      setMonthlyLoading(false);
+    });
 
-  // Re-fetch monthly data on mount, month change, or data update
-  useEffect(() => {
-    if (showExportPreview && exportPreviewType === "bulanan" && exportMonth) {
-      fetchMonthlyData(exportMonth);
-    }
-  }, [showExportPreview, exportPreviewType, exportMonth, refreshTrigger]);
+    return () => unsub();
+  }, [showExportPreview, exportPreviewType, exportMonth, currentUser, isAllowed]);
 
   // Excel Export — modals flow
   const handleOpenExportOption = () => {

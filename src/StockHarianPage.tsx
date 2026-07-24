@@ -342,9 +342,10 @@ export default function StockHarianPage({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
 
-  // === FULL SYNC: Fill all gaps from last known stock to today ===
-  // FIX: Jalankan untuk SEMUA user (bukan hanya super_admin) supaya semua kebagian data terbaru
-  // FIX: Inisialisasi dari reports kalau belum ada data stock_harian sama sekali
+  // === FULL SYNC: Cascade dari anchor date ke hari ini ===
+  // Anchor = dokumen stock_harian paling awal (biasanya 1 Juli)
+  // stockAwal anchor TIDAK diubah (itu data real dari admin)
+  // Cascade hanya MAJU: stockAwal[t+1] = stockAkhir[t]
   const syncRunningRef = useRef(false);
   useEffect(() => {
     if (!currentUser || isAllowed !== true || loading) return;
@@ -381,22 +382,18 @@ export default function StockHarianPage({
           for (const nama of JENIS_KANTONG) {
             const docs = docsByNama.get(nama) || [];
 
-            // FIX: Kalau belum ada data stock_harian sama sekali, inisialisasi dari reports
             if (docs.length === 0) {
-              // Cek apakah ada laporan untuk item ini
+              // Belum ada data stock_harian → inisialisasi dari laporan
               const hasAnyReport = reports.some(r =>
                 r.nama === nama && r.pabrik.includes(pKey)
               );
-              if (!hasAnyReport) continue; // benar2 tidak ada data, skip
+              if (!hasAnyReport) continue;
 
-              // Inisialisasi: buat dokumen pertama dari laporan yang ada
-              // Cari tanggal laporan paling awal
               const itemReports = reports.filter(r => r.nama === nama && r.pabrik.includes(pKey));
               const earliestReport = itemReports.reduce((earliest, r) =>
                 r.tanggal < earliest ? r.tanggal : earliest, itemReports[0].tanggal
               );
 
-              // Mulai cascade dari tanggal laporan paling awal sampai hari ini
               let prevSk = 0;
               let cursor = earliestReport;
               while (cursor <= today) {
@@ -420,31 +417,21 @@ export default function StockHarianPage({
               continue;
             }
 
-            // Normal flow: cascade dari dokumen PALING AWAL ke hari ini
-            // Walk through SEMUA tanggal (termasuk gap) supaya chain tidak terputus
+            // === NORMAL FLOW ===
+            // Anchor = dokumen paling awal (stockAwal-nya TIDAK diubah)
+            // Cascade dari anchor+1 sampai today
             const existingDocs = new Map<string, any>();
             docs.forEach(d => existingDocs.set(d.id, d.data));
 
-            // docs sorted desc, jadi yang paling awal = docs[docs.length - 1]
-            const earliestDoc = docs[docs.length - 1];
-            const earliestDate = earliestDoc.data.tanggal;
+            // docs sorted desc → yang paling awal = docs[docs.length - 1]
+            const anchorDoc = docs[docs.length - 1];
+            const anchorDate = anchorDoc.data.tanggal;
+            const anchorSk = Number(anchorDoc.data.stockAkhir) || 0;
 
-            // Mulai cascade dari 1 hari SEBELUM earliestDate (kalau ada)
-            // supaya prevSk terisi dengan benar dari stockAkhir hari sebelumnya
-            let cursor = getPrevDate(earliestDate);
-            let prevSk = 0;
-            const startPrevDocId = makeDocId(pabrik, nama, cursor);
-            const startPrevDoc = existingDocs.get(startPrevDocId);
-            if (startPrevDoc) {
-              prevSk = Number(startPrevDoc.stockAkhir) || 0;
-              cursor = earliestDate; // mulai dari earliestDate kalau hari sebelumnya ada
-            } else {
-              // Tidak ada hari sebelumnya → mulai dari earliestDate, prevSk = 0
-              // Ini benar kalau earliestDate memang hari pertama data
-              cursor = earliestDate;
-            }
+            // Cascade dari anchor+1 sampai today
+            let prevSk = anchorSk;
+            let cursor = addDays(anchorDate, 1);
 
-            // Walk through SEMUA tanggal dari cursor sampai today
             while (cursor <= today) {
               const cursorDocId = makeDocId(pabrik, nama, cursor);
               const existingData = existingDocs.get(cursorDocId) || null;
@@ -484,8 +471,8 @@ export default function StockHarianPage({
         }
 
         if (totalSaved > 0) {
-          console.log(`[StockHarian] Full sync: filled/updated ${totalSaved} rows`);
-          await bumpLastUpdate(); // notify other devices
+          console.log(`[StockHarian] Full sync: cascade ${totalSaved} rows dari anchor ke today`);
+          await bumpLastUpdate();
         }
       } catch (e) {
         console.error("[StockHarian] Full sync failed:", e);

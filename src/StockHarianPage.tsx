@@ -347,148 +347,154 @@ export default function StockHarianPage({
   // stockAwal anchor TIDAK diubah (itu data real dari admin)
   // Cascade hanya MAJU: stockAwal[t+1] = stockAkhir[t]
   const syncRunningRef = useRef(false);
+  const syncDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!currentUser || isAllowed !== true || loading) {
-      console.log("[StockHarian] Sync skipped:", { hasUser: !!currentUser, isAllowed, loading });
-      return;
-    }
+    if (!currentUser || isAllowed !== true || loading) return;
     if (syncRunningRef.current) return;
 
-    const doFullSync = async () => {
-      syncRunningRef.current = true;
-      try {
-        const today = getDateString(new Date());
-        const isOPT = (pabrik: string) => pabrik === OPT_GUDANG;
+    // Debounce 3 detik supaya tidak rapid-fire saat banyak onSnapshot update
+    if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
+    syncDebounceRef.current = setTimeout(() => {
+      const doFullSync = async () => {
+        if (syncRunningRef.current) return;
+        syncRunningRef.current = true;
+        try {
+          const today = getDateString(new Date());
+          const isOPT = (pabrik: string) => pabrik === OPT_GUDANG;
 
-        console.log(`[StockHarian] Full sync START — anchor to ${today}, reports=${reports.length}, penerimaan=${penerimaanList.length}, pengiriman=${pengirimanList.length}`);
-        let totalSaved = 0;
+          let totalSaved = 0;
 
-        for (let i = 0; i < ALL_LOCATIONS.length; i++) {
-          const pabrik = ALL_LOCATIONS[i];
-          const pKey = PABRIK_SHORT[pabrik] || pabrik;
+          for (let i = 0; i < ALL_LOCATIONS.length; i++) {
+            const pabrik = ALL_LOCATIONS[i];
+            const pKey = PABRIK_SHORT[pabrik] || pabrik;
 
-          const locQuery = query(
-            collection(db, "stock_harian"),
-            where("pabrik", "==", pabrik),
-            where("tanggal", "<=", today),
-            orderBy("tanggal", "desc")
-          );
-          const locSnap = await getDocs(locQuery);
+            const locQuery = query(
+              collection(db, "stock_harian"),
+              where("pabrik", "==", pabrik),
+              where("tanggal", "<=", today),
+              orderBy("tanggal", "desc")
+            );
+            const locSnap = await getDocs(locQuery);
 
-          const docsByNama = new Map<string, { id: string; data: any }[]>();
-          locSnap.forEach(d => {
-            const v = d.data();
-            const nama = v.nama || "";
-            if (!docsByNama.has(nama)) docsByNama.set(nama, []);
-            docsByNama.get(nama)!.push({ id: d.id, data: v });
-          });
+            const docsByNama = new Map<string, { id: string; data: any }[]>();
+            locSnap.forEach(d => {
+              const v = d.data();
+              const nama = v.nama || "";
+              if (!docsByNama.has(nama)) docsByNama.set(nama, []);
+              docsByNama.get(nama)!.push({ id: d.id, data: v });
+            });
 
-          for (const nama of JENIS_KANTONG) {
-            const docs = docsByNama.get(nama) || [];
+            for (const nama of JENIS_KANTONG) {
+              const docs = docsByNama.get(nama) || [];
 
-            if (docs.length === 0) {
-              // Belum ada data stock_harian → inisialisasi dari laporan
-              const hasAnyReport = reports.some(r =>
-                r.nama === nama && r.pabrik.includes(pKey)
-              );
-              if (!hasAnyReport) continue;
+              if (docs.length === 0) {
+                // Belum ada data stock_harian → inisialisasi dari laporan
+                const hasAnyReport = reports.some(r =>
+                  r.nama === nama && r.pabrik.includes(pKey)
+                );
+                if (!hasAnyReport) continue;
 
-              const itemReports = reports.filter(r => r.nama === nama && r.pabrik.includes(pKey));
-              const earliestReport = itemReports.reduce((earliest, r) =>
-                r.tanggal < earliest ? r.tanggal : earliest, itemReports[0].tanggal
-              );
+                const itemReports = reports.filter(r => r.nama === nama && r.pabrik.includes(pKey));
+                const earliestReport = itemReports.reduce((earliest, r) =>
+                  r.tanggal < earliest ? r.tanggal : earliest, itemReports[0].tanggal
+                );
 
-              let prevSk = 0;
-              let cursor = earliestReport;
+                let prevSk = 0;
+                let cursor = earliestReport;
+                while (cursor <= today) {
+                  const cursorDocId = makeDocId(pabrik, nama, cursor);
+                  const pn = computePenerimaan(pabrik, nama, cursor);
+                  const pg = computePengiriman(pabrik, nama, cursor);
+                  const pk = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, cursor);
+                  const sa = prevSk;
+                  const sk = isOPT(pabrik) ? sa + pn - pg : sa + pn - pg - pk;
+
+                  await setDoc(doc(db, "stock_harian", cursorDocId), {
+                    pabrik, nama, tanggal: cursor,
+                    stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
+                    createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
+                  }, { merge: true });
+                  totalSaved++;
+
+                  prevSk = sk;
+                  cursor = addDays(cursor, 1);
+                }
+                continue;
+              }
+
+              // === NORMAL FLOW ===
+              // Anchor = dokumen paling awal (stockAwal-nya TIDAK diubah)
+              // Cascade dari anchor+1 sampai today
+              const existingDocs = new Map<string, any>();
+              docs.forEach(d => existingDocs.set(d.id, d.data));
+
+              // docs sorted desc → yang paling awal = docs[docs.length - 1]
+              const anchorDoc = docs[docs.length - 1];
+              const anchorDate = anchorDoc.data.tanggal;
+              const anchorSk = Number(anchorDoc.data.stockAkhir) || 0;
+
+              // Cascade dari anchor+1 sampai today
+              let prevSk = anchorSk;
+              let cursor = addDays(anchorDate, 1);
+
               while (cursor <= today) {
                 const cursorDocId = makeDocId(pabrik, nama, cursor);
+                const existingData = existingDocs.get(cursorDocId) || null;
+
                 const pn = computePenerimaan(pabrik, nama, cursor);
                 const pg = computePengiriman(pabrik, nama, cursor);
                 const pk = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, cursor);
                 const sa = prevSk;
                 const sk = isOPT(pabrik) ? sa + pn - pg : sa + pn - pg - pk;
 
-                await setDoc(doc(db, "stock_harian", cursorDocId), {
-                  pabrik, nama, tanggal: cursor,
-                  stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
-                  createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
-                }, { merge: true });
-                totalSaved++;
+                const existingSa = existingData ? Number(existingData.stockAwal) || 0 : -1;
+                const existingPn = existingData ? Number(existingData.penerimaan) || 0 : -1;
+                const existingPg = existingData ? Number(existingData.pengiriman) || 0 : -1;
+                const existingPk = existingData ? Number(existingData.pemakaian) || 0 : -1;
+                const existingSk = existingData ? Number(existingData.stockAkhir) || 0 : -1;
+                const needsWrite = !existingData
+                  || sa !== existingSa || pn !== existingPn || pg !== existingPg
+                  || pk !== existingPk || sk !== existingSk;
+
+                if (needsWrite) {
+                  await setDoc(doc(db, "stock_harian", cursorDocId), {
+                    pabrik, nama, tanggal: cursor,
+                    stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
+                    createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
+                  }, { merge: true });
+                  totalSaved++;
+                }
 
                 prevSk = sk;
                 cursor = addDays(cursor, 1);
               }
-              continue;
             }
 
-            // === NORMAL FLOW ===
-            // Anchor = dokumen paling awal (stockAwal-nya TIDAK diubah)
-            // Cascade dari anchor+1 sampai today
-            const existingDocs = new Map<string, any>();
-            docs.forEach(d => existingDocs.set(d.id, d.data));
-
-            // docs sorted desc → yang paling awal = docs[docs.length - 1]
-            const anchorDoc = docs[docs.length - 1];
-            const anchorDate = anchorDoc.data.tanggal;
-            const anchorSk = Number(anchorDoc.data.stockAkhir) || 0;
-
-            // Cascade dari anchor+1 sampai today
-            let prevSk = anchorSk;
-            let cursor = addDays(anchorDate, 1);
-
-            console.log(`[StockHarian] Cascade ${pabrik}/${nama}: anchor=${anchorDate} sk=${anchorSk}, from ${cursor} to ${today}`);
-
-            while (cursor <= today) {
-              const cursorDocId = makeDocId(pabrik, nama, cursor);
-              const existingData = existingDocs.get(cursorDocId) || null;
-
-              const pn = computePenerimaan(pabrik, nama, cursor);
-              const pg = computePengiriman(pabrik, nama, cursor);
-              const pk = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, cursor);
-              const sa = prevSk;
-              const sk = isOPT(pabrik) ? sa + pn - pg : sa + pn - pg - pk;
-
-              const existingSa = existingData ? Number(existingData.stockAwal) || 0 : -1;
-              const existingPn = existingData ? Number(existingData.penerimaan) || 0 : -1;
-              const existingPg = existingData ? Number(existingData.pengiriman) || 0 : -1;
-              const existingPk = existingData ? Number(existingData.pemakaian) || 0 : -1;
-              const existingSk = existingData ? Number(existingData.stockAkhir) || 0 : -1;
-              const needsWrite = !existingData
-                || sa !== existingSa || pn !== existingPn || pg !== existingPg
-                || pk !== existingPk || sk !== existingSk;
-
-              if (needsWrite) {
-                console.log(`[StockHarian] WRITE ${cursorDocId}: sa=${sa} pn=${pn} pg=${pg} pk=${pk} sk=${sk} (existing: sa=${existingSa} pn=${existingPn} pg=${existingPg} pk=${existingPk} sk=${existingSk})`);
-                await setDoc(doc(db, "stock_harian", cursorDocId), {
-                  pabrik, nama, tanggal: cursor,
-                  stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
-                  createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
-                }, { merge: true });
-                totalSaved++;
-              }
-
-              prevSk = sk;
-              cursor = addDays(cursor, 1);
+            if (i < ALL_LOCATIONS.length - 1) {
+              await new Promise(r => setTimeout(r, 100));
             }
           }
 
-          if (i < ALL_LOCATIONS.length - 1) {
-            await new Promise(r => setTimeout(r, 100));
+          if (totalSaved > 0) {
+            console.log(`[StockHarian] Cascade: ${totalSaved} rows updated`);
+            await bumpLastUpdate();
           }
+        } catch (e) {
+          console.error("[StockHarian] Cascade failed:", e);
+        } finally {
+          syncRunningRef.current = false;
         }
+      };
 
-        if (totalSaved > 0) {
-          console.log(`[StockHarian] Full sync: cascade ${totalSaved} rows dari anchor ke today`);
-          await bumpLastUpdate();
-        }
-      } catch (e) {
-        console.error("[StockHarian] Full sync failed:", e);
-      } finally {
-        syncRunningRef.current = false;
+      doFullSync();
+    }, 3000); // debounce 3 detik
+
+    return () => {
+      if (syncDebounceRef.current) {
+        clearTimeout(syncDebounceRef.current);
+        syncDebounceRef.current = null;
       }
     };
-
-    doFullSync();
   }, [currentUser, isAllowed, loading, selectedDate, penerimaanList, pengirimanList, reports]);
 
 

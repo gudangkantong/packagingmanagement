@@ -355,9 +355,14 @@ export default function StockHarianPage({
   // Cascade hanya MAJU: stockAwal[t+1] = stockAkhir[t]
   const syncRunningRef = useRef(false);
   const syncDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSyncRef = useRef(false);
   useEffect(() => {
     if (!currentUser || isAllowed !== true || loading) return;
-    if (syncRunningRef.current) return;
+    if (syncRunningRef.current) {
+      // Cascade sedang berjalan, tandai bahwa ada perubahan pending
+      pendingSyncRef.current = true;
+      return;
+    }
 
     // Debounce 3 detik supaya tidak rapid-fire saat banyak onSnapshot update
     if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
@@ -365,6 +370,7 @@ export default function StockHarianPage({
       const doFullSync = async () => {
         if (syncRunningRef.current) return;
         syncRunningRef.current = true;
+        pendingSyncRef.current = false;
         try {
           const today = getDateString(new Date());
           const isOPT = (pabrik: string) => pabrik === OPT_GUDANG;
@@ -430,7 +436,9 @@ export default function StockHarianPage({
                 // === FIX: Update besok stockAwal = hari ini stockAkhir ===
                 const tomorrowInit = addDays(today, 1);
                 const tomorrowInitId = makeDocId(pabrik, nama, tomorrowInit);
-                const tomorrowInitData = existingDocs.get(tomorrowInitId) || null;
+                // Note: existingDocs not available in this branch (docs.length === 0),
+                // so tomorrow doc definitely doesn't exist yet
+                const tomorrowInitData = null;
                 if (!tomorrowInitData || !tomorrowInitData.manuallyEdited) {
                   const tomorrowSa = prevSk;
                   const pnT = computePenerimaan(pabrik, nama, tomorrowInit);
@@ -553,6 +561,12 @@ export default function StockHarianPage({
           console.error("[StockHarian] Cascade failed:", e);
         } finally {
           syncRunningRef.current = false;
+          // Jika ada perubahan yang terlewat saat cascade berjalan, jalankan ulang
+          if (pendingSyncRef.current) {
+            pendingSyncRef.current = false;
+            console.log("[StockHarian] Pending sync detected, re-triggering cascade...");
+            setTimeout(() => setRefreshTrigger(prev => prev + 1), 100);
+          }
         }
       };
 

@@ -68,6 +68,15 @@ export default function StockHarianPage({
   const ALL_LOCATIONS = [OPT_GUDANG, ...PABRIK_LIST];
   const prevDate = (() => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate()-1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); })();
 
+  // Hapus semua cache stock_harian saat mount supaya data selalu fresh
+  useEffect(() => {
+    const keys = Object.keys(localStorage);
+    keys.forEach(key => {
+      if (key.includes("stock_harian_")) localStorage.removeItem(key);
+    });
+    console.log("[StockHarian] Cleared all stock_harian cache");
+  }, []);
+
   const makeDocId = (pabrik: string, nama: string, tanggal: string) => {
     const pKey = PABRIK_SHORT[pabrik] || pabrik;
     return `${pKey}_${nama.replace(/\s+/g, "_")}_${tanggal}`;
@@ -121,59 +130,20 @@ export default function StockHarianPage({
     return Object.entries(vendorMap).map(([vendor, total]) => ({ vendor, total }));
   };
 
-  // Stock data: real-time listener for recent dates, one-time getDocs for old dates
+  // Stock data: SELALU real-time onSnapshot (tanpa cache)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setStockData({}); setLoading(false); return; }
 
-    // === FUTURE DATE GUARD: hemat Firebase reads ===
     const todayStr = getDateString(new Date());
     if (selectedDate > todayStr) {
       setStockData({});
       setLoading(false);
-      return; // tidak perlu query Firestore untuk tanggal yang belum ada
+      return;
     }
 
     setLoading(true);
-
-    const cacheKey = `stock_harian_${selectedDate}`;
-    const cached = getCached<Record<string, StockHarian>>(cacheKey);
-    if (cached && Object.keys(cached).length > 0) {
-      setStockData(cached);
-      setLoading(false);
-    }
-
-    const todayMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
-    const selectedMs = new Date(selectedDate + "T00:00:00").getTime();
-    const isOldDate = Math.floor((todayMs - selectedMs) / 86400000) > 30;
-
     const q = query(collection(db, "stock_harian"), where("tanggal", "==", selectedDate));
 
-    if (isOldDate) {
-      // Old date: SKIP Firestore if cache exists (data doesn't change)
-      if (cached && Object.keys(cached).length > 0) {
-        setStockData(cached);
-        setLoading(false);
-        return; // no Firestore read needed
-      }
-      // Cache miss: one-time read
-      getDocs(q).then(snap => {
-        const data: Record<string, StockHarian> = {};
-        snap.forEach(d => {
-          const v = d.data();
-          data[d.id] = { id: d.id, pabrik: v.pabrik || "", nama: v.nama || "", tanggal: v.tanggal || "", stockAwal: Number(v.stockAwal) || 0, penerimaan: Number(v.penerimaan) || 0, pengiriman: Number(v.pengiriman) || 0, pemakaian: Number(v.pemakaian) || 0, stockAkhir: Number(v.stockAkhir) || 0, createdBy: v.createdBy || "", updatedAt: v.updatedAt || "" };
-        });
-        setStockData(data);
-        setLoading(false);
-        setCache(cacheKey, data, 30 * 24 * 60 * 60 * 1000); // 30 days for old data
-      }).catch(err => {
-        console.error("[StockHarian] getDocs error:", err);
-        triggerToast("Gagal load stock: " + (err?.code || err?.message || "unknown"), "er");
-        setLoading(false);
-      });
-      return; // no cleanup needed
-    }
-
-    // Recent date: real-time listener
     const unsub = onSnapshot(q, snap => {
       const data: Record<string, StockHarian> = {};
       snap.forEach(d => {
@@ -182,68 +152,38 @@ export default function StockHarianPage({
       });
       setStockData(data);
       setLoading(false);
-      setCache(cacheKey, data, 30 * 24 * 60 * 60 * 1000);
+      console.log(`[stockData] real-time update: ${Object.keys(data).length} docs for ${selectedDate}`);
     }, err => {
       console.error("[StockHarian] snapshot error:", err);
-      const _hasCache = cached && Object.keys(cached).length > 0;
-      if (!_hasCache) {
-        triggerToast("Gagal sync stock: " + (err?.code || err?.message || "unknown"), "er");
-      }
+      triggerToast("Gagal sync stock: " + (err?.code || err?.message || "unknown"), "er");
       setLoading(false);
     });
     return () => unsub();
   }, [currentUser, isAllowed, selectedDate]);
 
-  // Prev day data: real-time for recent, one-time getDocs for old
+  // Prev day data: SELALU real-time onSnapshot (tanpa cache)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setPrevDayData({}); setPrevDayLoaded(false); return; }
 
-    // === FUTURE DATE GUARD: hemat Firebase reads ===
     const todayStr = getDateString(new Date());
     if (selectedDate > todayStr) {
       setPrevDayData({});
       setPrevDayLoaded(true);
-      return; // tidak perlu query Firestore untuk tanggal yang belum ada
-    }
-
-    const cacheKey = `stock_harian_${prevDate}`;
-    const cached = getCached<Record<string, StockHarian>>(cacheKey);
-    if (cached && Object.keys(cached).length > 0) {
-      setPrevDayData(cached);
-      setPrevDayLoaded(true);
-    }
-
-    const todayMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
-    const prevMs = new Date(prevDate + "T00:00:00").getTime();
-    const isOldDate = Math.floor((todayMs - prevMs) / 86400000) > 30;
-
-    const q = query(collection(db, "stock_harian"), where("tanggal", "==", prevDate));
-
-    if (isOldDate) {
-      // Old date: SKIP Firestore if cache exists
-      if (cached && Object.keys(cached).length > 0) {
-        setPrevDayData(cached);
-        setPrevDayLoaded(true);
-        return;
-      }
-      getDocs(q).then(snap => {
-        const data: Record<string, StockHarian> = {};
-        snap.forEach(d => { data[d.id] = d.data() as StockHarian; });
-        setPrevDayData(data);
-        setPrevDayLoaded(true);
-        setCache(cacheKey, data, 30 * 24 * 60 * 60 * 1000);
-      }).catch(err => { console.error(err); setPrevDayLoaded(true); });
       return;
     }
+
+    const q = query(collection(db, "stock_harian"), where("tanggal", "==", prevDate));
 
     const unsub = onSnapshot(q, snap => {
       const data: Record<string, StockHarian> = {};
       snap.forEach(d => { data[d.id] = d.data() as StockHarian; });
       setPrevDayData(data);
       setPrevDayLoaded(true);
-      setCache(cacheKey, data, 30 * 24 * 60 * 60 * 1000);
-      console.log(`[prevDayData] loaded ${Object.keys(data).length} docs for ${prevDate}:`, Object.keys(data).slice(0, 5));
-    }, err => { console.error(err); setPrevDayLoaded(true); });
+      console.log(`[prevDayData] real-time update: ${Object.keys(data).length} docs for ${prevDate}`);
+    }, err => {
+      console.error("[prevDayData] snapshot error:", err);
+      setPrevDayLoaded(true);
+    });
     return () => unsub();
   }, [currentUser, isAllowed, prevDate]);
 

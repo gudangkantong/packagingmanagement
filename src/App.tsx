@@ -583,13 +583,13 @@ export default function App() {
 
     const doBackfill = async () => {
       try {
-        // Spark plan: backfill 7 hari instead of 30 untuk hemat reads
-        const sevenDaysAgo = getDateString(new Date(now - 7 * oneDayMs));
+        // Backfill 30 hari untuk konsisten dengan real-time range
+        const thirtyDaysAgo = getDateString(new Date(now - 30 * oneDayMs));
         const today = getDateString(new Date());
 
         // Only fetch dates that are NOT already cached
         const datesToFetch: string[] = [];
-        const d = new Date(sevenDaysAgo + "T00:00:00");
+        const d = new Date(thirtyDaysAgo + "T00:00:00");
         const end = new Date(today + "T00:00:00");
         while (d <= end) {
           const dateStr = getDateString(d);
@@ -697,14 +697,14 @@ export default function App() {
 
     // Real-time range: always from today to 7 days back
     const today = todayStr;
-    const realtimeFromDate = getDateString(new Date(new Date(today + "T00:00:00").getTime() - 7 * 86400000));
+    const realtimeFromDate = getDateString(new Date(new Date(today + "T00:00:00").getTime() - 30 * 86400000));
     const realtimeToDate = today;
 
     // Check if selectedDate is within the real-time range
     const selectedMs = new Date(selectedDate + "T00:00:00").getTime();
     const nowMs = new Date(today + "T00:00:00").getTime();
     const daysDiff = Math.floor((nowMs - selectedMs) / 86400000);
-    const isInRealtimeRange = daysDiff >= 0 && daysDiff <= 7;
+    const isInRealtimeRange = daysDiff >= 0 && daysDiff <= 30;
 
     // 1. Load from cache first (instant UI)
     const allCached: LaporanKantong[] = [];

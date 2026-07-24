@@ -136,7 +136,7 @@ export default function StockHarianPage({
 
     const todayMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
     const selectedMs = new Date(selectedDate + "T00:00:00").getTime();
-    const isOldDate = Math.floor((todayMs - selectedMs) / 86400000) > 7;
+    const isOldDate = Math.floor((todayMs - selectedMs) / 86400000) > 30;
 
     const q = query(collection(db, "stock_harian"), where("tanggal", "==", selectedDate));
 
@@ -207,7 +207,7 @@ export default function StockHarianPage({
 
     const todayMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
     const prevMs = new Date(prevDate + "T00:00:00").getTime();
-    const isOldDate = Math.floor((todayMs - prevMs) / 86400000) > 7;
+    const isOldDate = Math.floor((todayMs - prevMs) / 86400000) > 30;
 
     const q = query(collection(db, "stock_harian"), where("tanggal", "==", prevDate));
 
@@ -275,7 +275,7 @@ export default function StockHarianPage({
     const todayMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
     const selectedMs = new Date(selectedDate + "T00:00:00").getTime();
     const daysDiff = Math.floor((todayMs - selectedMs) / 86400000);
-    if (daysDiff < 0 || daysDiff > 7) return;
+    if (daysDiff < 0 || daysDiff > 30) return;
 
     // Find rows where editBuffer stockAwal differs from saved stockData
     const toSave: { docId: string; pabrik: string; nama: string; stockAwal: number }[] = [];

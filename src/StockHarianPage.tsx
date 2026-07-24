@@ -376,6 +376,9 @@ export default function StockHarianPage({
           const isOPT = (pabrik: string) => pabrik === OPT_GUDANG;
 
           let totalSaved = 0;
+          // Track stockAwal yang ditulis cascade untuk selectedDate
+          // supaya bisa sync editBuffer setelah selesai
+          const todayBufferUpdates = new Map<string, number>();
 
           for (let i = 0; i < ALL_LOCATIONS.length; i++) {
             const pabrik = ALL_LOCATIONS[i];
@@ -428,6 +431,11 @@ export default function StockHarianPage({
                     createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
                   }, { merge: true });
                   totalSaved++;
+
+                  // Track untuk sync editBuffer jika ini selectedDate
+                  if (cursor === selectedDate) {
+                    todayBufferUpdates.set(cursorDocId, sa);
+                  }
 
                   prevSk = sk;
                   cursor = addDays(cursor, 1);
@@ -521,6 +529,14 @@ export default function StockHarianPage({
                     createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
                   }, { merge: true });
                   totalSaved++;
+
+                  // Track untuk sync editBuffer jika ini selectedDate
+                  if (cursor === selectedDate) {
+                    todayBufferUpdates.set(cursorDocId, sa);
+                  }
+                } else if (cursor === selectedDate && existingData) {
+                  // Walau tidak perlu write, track juga supaya editBuffer sinkron
+                  todayBufferUpdates.set(cursorDocId, sa);
                 }
 
                 prevSk = sk;
@@ -551,6 +567,23 @@ export default function StockHarianPage({
             if (i < ALL_LOCATIONS.length - 1) {
               await new Promise(r => setTimeout(r, 100));
             }
+          }
+
+          // === SYNC EDIT BUFFER ===
+          // Setelah cascade menulis ke Firestore, update editBuffer untuk selectedDate
+          // supaya UI langsung menampilkan stockAwal yang benar (= prev day stockAkhir)
+          // tanpa menunggu onSnapshot yang bisa race condition
+          if (todayBufferUpdates.size > 0) {
+            setEditBuffer(prev => {
+              const next = { ...prev };
+              todayBufferUpdates.forEach((val, key) => {
+                // Jangan overwrite kalau admin sedang edit (touched)
+                if (!touchedInputs[key]) {
+                  next[key] = { stockAwal: String(val) };
+                }
+              });
+              return next;
+            });
           }
 
           if (totalSaved > 0) {

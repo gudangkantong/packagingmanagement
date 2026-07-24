@@ -546,13 +546,14 @@ export default function StockHarianPage({
   };
 
   const handleInputBlur = (docId: string) => {
-    // Kalau admin tidak jadi edit (nilai tidak berubah), hapus touched
-    const buf = editBuffer[docId];
+    // Admin batal edit (klik lain tanpa save) → revert ke nilai asli
     const original = originalValuesRef.current[docId];
-    if (buf && buf.stockAwal === original) {
-      // Nilai sama dengan asli → batal edit
-      setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });
+    if (original !== undefined) {
+      // Kembalikan ke nilai asli
+      setEditBuffer(p => ({ ...p, [docId]: { ...p[docId], stockAwal: original } }));
     }
+    // Selalu hapus touched supaya save icon hilang
+    setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });
     delete originalValuesRef.current[docId];
   };
 

@@ -343,36 +343,25 @@ export default function StockHarianPage({
   };
 
   // === FULL SYNC: Fill all gaps from last known stock to today ===
+  // FIX: Jalankan untuk SEMUA user (bukan hanya super_admin) supaya semua kebagian data terbaru
+  // FIX: Inisialisasi dari reports kalau belum ada data stock_harian sama sekali
   const syncRunningRef = useRef(false);
   useEffect(() => {
-    if (!currentUser || !isMasterAdmin || loading) return;
+    if (!currentUser || isAllowed !== true || loading) return;
     if (syncRunningRef.current) return;
 
     const doFullSync = async () => {
       syncRunningRef.current = true;
       try {
-        const today = getDateString(new Date()); // sync sampai hari ini, bukan selectedDate
-        const todayMs = new Date(today + "T00:00:00").getTime();
-        const nowMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
-        const daysDiff = Math.floor((nowMs - todayMs) / 86400000);
-
-        // Skip full sync for future dates and dates older than 7 days
-        if (daysDiff < 0 || daysDiff > 7) {
-          syncRunningRef.current = false;
-          return;
-        }
-
-        let totalSaved = 0;
+        const today = getDateString(new Date());
         const isOPT = (pabrik: string) => pabrik === OPT_GUDANG;
 
-        // OPTIMIZED: 1 query per location instead of 2 queries per item
-        // Old: 5 locations × 9 items × 2 queries = 90 queries
-        // New: 5 locations × 1 query = 5 queries
+        let totalSaved = 0;
+
         for (let i = 0; i < ALL_LOCATIONS.length; i++) {
           const pabrik = ALL_LOCATIONS[i];
           const pKey = PABRIK_SHORT[pabrik] || pabrik;
 
-          // Single query: fetch ALL stock_harian docs for this location up to today
           const locQuery = query(
             collection(db, "stock_harian"),
             where("pabrik", "==", pabrik),
@@ -381,7 +370,6 @@ export default function StockHarianPage({
           );
           const locSnap = await getDocs(locQuery);
 
-          // Group docs by item name (nama)
           const docsByNama = new Map<string, { id: string; data: any }[]>();
           locSnap.forEach(d => {
             const v = d.data();
@@ -390,18 +378,54 @@ export default function StockHarianPage({
             docsByNama.get(nama)!.push({ id: d.id, data: v });
           });
 
-          // Process each item type for this location
           for (const nama of JENIS_KANTONG) {
             const docs = docsByNama.get(nama) || [];
-            if (docs.length === 0) continue; // no data at all for this item
 
-            // docs are already sorted desc by tanggal from the query
+            // FIX: Kalau belum ada data stock_harian sama sekali, inisialisasi dari reports
+            if (docs.length === 0) {
+              // Cek apakah ada laporan untuk item ini
+              const hasAnyReport = reports.some(r =>
+                r.nama === nama && r.pabrik.includes(pKey)
+              );
+              if (!hasAnyReport) continue; // benar2 tidak ada data, skip
+
+              // Inisialisasi: buat dokumen pertama dari laporan yang ada
+              // Cari tanggal laporan paling awal
+              const itemReports = reports.filter(r => r.nama === nama && r.pabrik.includes(pKey));
+              const earliestReport = itemReports.reduce((earliest, r) =>
+                r.tanggal < earliest ? r.tanggal : earliest, itemReports[0].tanggal
+              );
+
+              // Mulai cascade dari tanggal laporan paling awal sampai hari ini
+              let prevSk = 0;
+              let cursor = earliestReport;
+              while (cursor <= today) {
+                const cursorDocId = makeDocId(pabrik, nama, cursor);
+                const pn = computePenerimaan(pabrik, nama, cursor);
+                const pg = computePengiriman(pabrik, nama, cursor);
+                const pk = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, cursor);
+                const sa = prevSk;
+                const sk = isOPT(pabrik) ? sa + pn - pg : sa + pn - pg - pk;
+
+                await setDoc(doc(db, "stock_harian", cursorDocId), {
+                  pabrik, nama, tanggal: cursor,
+                  stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
+                  createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
+                }, { merge: true });
+                totalSaved++;
+
+                prevSk = sk;
+                cursor = addDays(cursor, 1);
+              }
+              continue;
+            }
+
+            // Normal flow: cascade dari dokumen terakhir
             const lastDoc = docs[0];
             const lastData = lastDoc.data;
             const lastDate = lastData.tanggal;
             const lastStockAkhir = Number(lastData.stockAkhir) || 0;
 
-            // Build lookup map for existing docs
             const existingDocs = new Map<string, any>();
             docs.forEach(d => existingDocs.set(d.id, d.data));
 
@@ -431,7 +455,7 @@ export default function StockHarianPage({
               totalSaved++;
             }
 
-            // Cascade forward: recalculate each day AFTER lastDate up to today
+            // Cascade forward
             let prevStockAkhir = lastSk;
             let cursor = addDays(lastDate, 1);
 
@@ -468,14 +492,14 @@ export default function StockHarianPage({
             }
           }
 
-          // Small delay between locations to avoid quota exhaustion
           if (i < ALL_LOCATIONS.length - 1) {
             await new Promise(r => setTimeout(r, 100));
           }
         }
 
         if (totalSaved > 0) {
-          console.log(`[StockHarian] Full sync: filled ${totalSaved} rows`);
+          console.log(`[StockHarian] Full sync: filled/updated ${totalSaved} rows`);
+          await bumpLastUpdate(); // notify other devices
         }
       } catch (e) {
         console.error("[StockHarian] Full sync failed:", e);
@@ -485,7 +509,7 @@ export default function StockHarianPage({
     };
 
     doFullSync();
-  }, [currentUser, isMasterAdmin, loading, selectedDate, penerimaanList, pengirimanList, reports]);
+  }, [currentUser, isAllowed, loading, selectedDate, penerimaanList, pengirimanList, reports]);
 
 
 

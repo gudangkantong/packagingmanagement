@@ -830,63 +830,48 @@ export default function App() {
     }
   }, [currentUser, isAllowed, selectedDate, refreshTrigger]);
 
-  // Penerimaan: getDocs + cache (jarang berubah, hemat reads)
+  // Penerimaan: onSnapshot real-time untuk semua user (fix: data stale sebelumnya)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setPenerimaanList([]); return; }
 
-    // Cek cache dulu
-    const cachedPn = getCached<PenerimaanData[]>("penerimaan_data");
-    if (cachedPn) {
-      setPenerimaanList(cachedPn);
-      return;
-    }
+    const unsub = onSnapshot(collection(db, "penerimaan_data"), (snap) => {
+      const items: PenerimaanData[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+      });
+      setPenerimaanList(items);
+      setCache("penerimaan_data", items, 30 * 24 * 60 * 60 * 1000);
+    }, (err) => {
+      console.error("Failed to sync penerimaan_data:", err);
+      // Fallback ke cache kalau onSnapshot gagal
+      const cached = getCached<PenerimaanData[]>("penerimaan_data");
+      if (cached) setPenerimaanList(cached);
+    });
 
-    const loadPenerimaan = async () => {
-      try {
-        const pnQuery = query(collection(db, "penerimaan_data"));
-        const snap = await getDocs(pnQuery);
-        const items: PenerimaanData[] = [];
-        snap.forEach((d) => {
-          const data = d.data();
-          items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
-        });
-        setPenerimaanList(items);
-        setCache("penerimaan_data", items, 30 * 24 * 60 * 60 * 1000); // cache 30 hari
-      } catch (err) {
-        console.error("Failed to load penerimaan_data:", err);
-        handleFirestoreError(err, OperationType.GET, "penerimaan_data");
-      }
-    };
-    loadPenerimaan();
-  }, [currentUser, isAllowed, refreshTrigger]);
+    return () => unsub();
+  }, [currentUser, isAllowed]);
+  // Pengiriman: onSnapshot real-time untuk semua user (fix: data stale sebelumnya)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setPengirimanList([]); return; }
 
-    // Cek cache dulu
-    const cachedPg = getCached<PengirimanData[]>("pengiriman_data");
-    if (cachedPg) {
-      setPengirimanList(cachedPg);
-      return;
-    }
+    const unsub = onSnapshot(collection(db, "pengiriman_data"), (snap) => {
+      const items: PengirimanData[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+      });
+      setPengirimanList(items);
+      setCache("pengiriman_data", items, 30 * 24 * 60 * 60 * 1000);
+    }, (err) => {
+      console.error("Failed to sync pengiriman_data:", err);
+      // Fallback ke cache kalau onSnapshot gagal
+      const cached = getCached<PengirimanData[]>("pengiriman_data");
+      if (cached) setPengirimanList(cached);
+    });
 
-    const loadPengiriman = async () => {
-      try {
-        const pgQuery = query(collection(db, "pengiriman_data"));
-        const snap = await getDocs(pgQuery);
-        const items: PengirimanData[] = [];
-        snap.forEach((d) => {
-          const data = d.data();
-          items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
-        });
-        setPengirimanList(items);
-        setCache("pengiriman_data", items, 30 * 24 * 60 * 60 * 1000); // cache 30 hari
-      } catch (err) {
-        console.error("Failed to load pengiriman_data:", err);
-        handleFirestoreError(err, OperationType.GET, "pengiriman_data");
-      }
-    };
-    loadPengiriman();
-  }, [currentUser, isAllowed, refreshTrigger]);
+    return () => unsub();
+  }, [currentUser, isAllowed]);
 
   // allowed_users: onSnapshot (lebih murah drpd polling buat 50 user)
   useEffect(() => {

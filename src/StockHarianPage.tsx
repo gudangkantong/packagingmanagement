@@ -420,45 +420,76 @@ export default function StockHarianPage({
               continue;
             }
 
-            // Normal flow: cascade dari dokumen terakhir
-            const lastDoc = docs[0];
-            const lastData = lastDoc.data;
-            const lastDate = lastData.tanggal;
-            const lastStockAkhir = Number(lastData.stockAkhir) || 0;
-
+            // Normal flow: cascade dari dokumen PALING AWAL (bukan paling akhir)
+            // supaya gap di tengah (misal Juli 2-23) juga ikut ter-fix
             const existingDocs = new Map<string, any>();
             docs.forEach(d => existingDocs.set(d.id, d.data));
 
-            // Recalculate lastDate's document first
-            const lastDocId = makeDocId(pabrik, nama, lastDate);
-            const lastExistingData = existingDocs.get(lastDocId) || null;
-            const lastPn = computePenerimaan(pabrik, nama, lastDate);
-            const lastPg = computePengiriman(pabrik, nama, lastDate);
-            const lastPk = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, lastDate);
-            const lastSa = lastExistingData ? Number(lastExistingData.stockAwal) || 0 : 0;
-            const lastSk = isOPT(pabrik) ? lastSa + lastPn - lastPg : lastSa + lastPn - lastPg - lastPk;
+            // docs sorted desc, jadi yang paling awal = docs[docs.length - 1]
+            const earliestDoc = docs[docs.length - 1];
+            const earliestDate = earliestDoc.data.tanggal;
 
-            const lastExistingPn = lastExistingData ? Number(lastExistingData.penerimaan) || 0 : -1;
-            const lastExistingPg = lastExistingData ? Number(lastExistingData.pengiriman) || 0 : -1;
-            const lastExistingPk = lastExistingData ? Number(lastExistingData.pemakaian) || 0 : -1;
-            const lastExistingSk = lastExistingData ? Number(lastExistingData.stockAkhir) || 0 : -1;
-            const lastNeedsWrite = !lastExistingData
-              || lastPn !== lastExistingPn || lastPg !== lastExistingPg
-              || lastPk !== lastExistingPk || lastSk !== lastExistingSk;
-
-            if (lastNeedsWrite) {
-              await setDoc(doc(db, "stock_harian", lastDocId), {
-                pabrik, nama, tanggal: lastDate,
-                stockAwal: lastSa, penerimaan: lastPn, pengiriman: lastPg, pemakaian: lastPk, stockAkhir: lastSk,
-                createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
-              }, { merge: true });
-              totalSaved++;
+            // Cek apakah ada yang perlu di-fix: scan dari awal ke akhir
+            // untuk menemukan tanggal pertama di mana stockAwal != prev day stockAkhir
+            let firstBrokenIdx = -1;
+            for (let idx = docs.length - 1; idx >= 0; idx--) {
+              const d = docs[idx];
+              const docDate = d.data.tanggal;
+              if (docDate <= earliestDate) continue; // skip yang paling awal
+              const prevDate = getPrevDate(docDate);
+              const prevDocId = makeDocId(pabrik, nama, prevDate);
+              const prevDoc = existingDocs.get(prevDocId);
+              if (!prevDoc) { firstBrokenIdx = idx; break; }
+              const expectedSa = Number(prevDoc.stockAkhir) || 0;
+              const actualSa = Number(d.data.stockAwal) || 0;
+              if (expectedSa !== actualSa) { firstBrokenIdx = idx; break; }
+              // Also check if penerimaan/pengiriman/pemakaian changed
+              const pn = computePenerimaan(pabrik, nama, docDate);
+              const pg = computePengiriman(pabrik, nama, docDate);
+              const pk = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, docDate);
+              if (pn !== Number(d.data.penerimaan) || pg !== Number(d.data.pengiriman) || pk !== Number(d.data.pemakaian)) {
+                firstBrokenIdx = idx;
+                break;
+              }
             }
 
-            // Cascade forward
-            let prevStockAkhir = lastSk;
-            let cursor = addDays(lastDate, 1);
+            // Juga cek: apakah ada tanggal yang SAMA SEKALI tidak ada dokumennya?
+            // (gap antara earliestDate dan today)
+            let cursor = earliestDate;
+            while (cursor <= today) {
+              const cursorDocId = makeDocId(pabrik, nama, cursor);
+              if (!existingDocs.has(cursorDocId)) {
+                // Ada gap! Cascade dari sini
+                break;
+              }
+              cursor = addDays(cursor, 1);
+            }
+            const hasGap = cursor <= today;
 
+            if (firstBrokenIdx === -1 && !hasGap) continue; // semua sudah konsisten, skip
+
+            // Tentukan tanggal mulai cascade
+            let cascadeStartDate = earliestDate;
+            if (firstBrokenIdx >= 0) {
+              const brokenDate = docs[firstBrokenIdx].data.tanggal;
+              // Mulai 1 hari SEBELUM broken date supaya stockAkhir hari sebelumnya benar
+              cascadeStartDate = getPrevDate(brokenDate);
+              if (cascadeStartDate < earliestDate) cascadeStartDate = earliestDate;
+            }
+
+            // Ambil stockAkhir dari hari sebelum cascadeStartDate
+            let prevSk = 0;
+            if (cascadeStartDate > earliestDate) {
+              const prevCascadeDate = getPrevDate(cascadeStartDate);
+              const prevCascadeDocId = makeDocId(pabrik, nama, prevCascadeDate);
+              const prevCascadeDoc = existingDocs.get(prevCascadeDocId);
+              if (prevCascadeDoc) {
+                prevSk = Number(prevCascadeDoc.stockAkhir) || 0;
+              }
+            }
+
+            // Cascade dari cascadeStartDate sampai today
+            cursor = cascadeStartDate;
             while (cursor <= today) {
               const cursorDocId = makeDocId(pabrik, nama, cursor);
               const existingData = existingDocs.get(cursorDocId) || null;
@@ -466,7 +497,7 @@ export default function StockHarianPage({
               const pn = computePenerimaan(pabrik, nama, cursor);
               const pg = computePengiriman(pabrik, nama, cursor);
               const pk = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, cursor);
-              const sa = prevStockAkhir;
+              const sa = prevSk;
               const sk = isOPT(pabrik) ? sa + pn - pg : sa + pn - pg - pk;
 
               const existingSa = existingData ? Number(existingData.stockAwal) || 0 : -1;
@@ -487,7 +518,7 @@ export default function StockHarianPage({
                 totalSaved++;
               }
 
-              prevStockAkhir = sk;
+              prevSk = sk;
               cursor = addDays(cursor, 1);
             }
           }

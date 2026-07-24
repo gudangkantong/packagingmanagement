@@ -1961,12 +1961,12 @@ export default function App() {
     }
   };
 
-  // Re-fetch monthly data on mount or when month changes
+  // Re-fetch monthly data on mount, month change, or data update
   useEffect(() => {
     if (showExportPreview && exportPreviewType === "bulanan" && exportMonth) {
       fetchMonthlyData(exportMonth);
     }
-  }, [showExportPreview, exportPreviewType, exportMonth]);
+  }, [showExportPreview, exportPreviewType, exportMonth, refreshTrigger]);
 
   // Excel Export — modals flow
   const handleOpenExportOption = () => {

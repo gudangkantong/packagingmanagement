@@ -782,20 +782,13 @@ export default function App() {
       });
       return () => unsub();
     } else {
-      // Old date: SKIP Firestore if cache exists (data doesn't change)
-      const cachedLaporan = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
-      if (cachedLaporan && cachedLaporan.length > 0) {
-        setReports(cachedLaporan);
-        setDataLoading(false);
-        return;
-      }
-      // Cache miss: one-time getDocs
+      // Old date: onSnapshot supaya tetap real-time saat user lain update
       const selectedDateQuery = query(
         collection(db, "laporan_kantong"),
         where("tanggal", "==", selectedDate),
         orderBy("tanggal", "desc")
       );
-      getDocs(selectedDateQuery).then(snap => {
+      const unsub = onSnapshot(selectedDateQuery, (snap) => {
         const items: LaporanKantong[] = [];
         snap.forEach((docSnap) => {
           const data = docSnap.data();
@@ -817,16 +810,15 @@ export default function App() {
         setReports(items);
         setDataLoading(false);
         setCache(`laporan_${selectedDate}`, items, 30 * 24 * 60 * 60 * 1000);
-      }).catch(err => {
-        console.error("Failed to fetch reports:", err);
-        const errMsg = err?.code || err?.message || String(err);
-        const hasCachedData = allCached.length > 0;
-        if (!hasCachedData) {
-          triggerToast(`Gagal load data: ${errMsg}`, "er");
+      }, (err) => {
+        console.error("Failed to sync old date reports:", err);
+        const cachedLaporan = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
+        if (cachedLaporan && cachedLaporan.length > 0) {
+          setReports(cachedLaporan);
         }
         setDataLoading(false);
       });
-      return;
+      return () => unsub();
     }
   }, [currentUser, isAllowed, selectedDate, refreshTrigger]);
 

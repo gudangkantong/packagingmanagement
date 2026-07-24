@@ -457,19 +457,23 @@ export default function StockHarianPage({
               const docs = docsByNama.get(nama) || [];
 
               if (docs.length === 0) {
-                // Belum ada data stock_harian → inisialisasi dari laporan
-                const hasAnyReport = reports.some(r =>
-                  r.nama === nama && r.pabrik.includes(pKey)
-                );
-                if (!hasAnyReport) continue;
+                // Belum ada data stock_harian → inisialisasi dari penerimaan/pengiriman/laporan
+                // (Gudang OPT tidak punya laporan, jadi cek juga penerimaan & pengiriman)
+                const hasAnyData = reports.some(r => r.nama === nama && r.pabrik.includes(pKey))
+                  || penerimaanList.some(r => r.nama === nama && r.pabrik === pabrik)
+                  || pengirimanList.some(r => r.nama === nama && (r.pabrik === pabrik || r.tujuan === pabrik));
+                if (!hasAnyData) continue;
 
-                const itemReports = reports.filter(r => r.nama === nama && r.pabrik.includes(pKey));
-                const earliestReport = itemReports.reduce((earliest, r) =>
-                  r.tanggal < earliest ? r.tanggal : earliest, itemReports[0].tanggal
-                );
+                // Cari tanggal paling awal dari semua sumber data
+                const dates: string[] = [];
+                reports.filter(r => r.nama === nama && r.pabrik.includes(pKey)).forEach(r => dates.push(r.tanggal));
+                penerimaanList.filter(r => r.nama === nama && r.pabrik === pabrik).forEach(r => dates.push(r.tanggal));
+                pengirimanList.filter(r => r.nama === nama && (r.pabrik === pabrik || r.tujuan === pabrik)).forEach(r => dates.push(r.tanggal));
+                if (dates.length === 0) continue;
+                const earliestDate = dates.reduce((a, b) => a < b ? a : b);
 
                 let prevSk = 0;
-                let cursor = earliestReport;
+                let cursor = earliestDate;
                 while (cursor <= today) {
                   const cursorDocId = makeDocId(pabrik, nama, cursor);
                   const pn = computePenerimaan(pabrik, nama, cursor);

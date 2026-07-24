@@ -562,13 +562,12 @@ export default function StockHarianPage({
                 const pn = computePenerimaan(pabrik, nama, cursor);
                 const pg = computePengiriman(pabrik, nama, cursor);
                 const pk = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, cursor);
-                const sa = prevSk;
-                const sk = isOPT(pabrik) ? sa + pn - pg : sa + pn - pg - pk;
 
-                // Debug logging untuk OPT pada selectedDate
-                if (pabrik === OPT_GUDANG && cursor === selectedDate) {
-                  console.log(`[StockHarian] OPT ${nama} ${cursor}: sa=${sa} pn=${pn} pg=${pg} sk=${sk} existingSa=${existingData ? Number(existingData.stockAwal) : 'none'} needsWrite=${!existingData || sa !== (existingData ? Number(existingData.stockAwal) : -1) || pn !== (existingData ? Number(existingData.penerimaan) : -1)}`);
-                }
+                // Jika dokumen sudah ada, JANGAN overwrite stockAwal
+                // (admin mungkin sudah edit manual, atau ini data asli)
+                // Hanya update penerimaan/pengiriman/pemakaian dan recalculate stockAkhir
+                const sa = existingData ? Number(existingData.stockAwal) || 0 : prevSk;
+                const sk = isOPT(pabrik) ? sa + pn - pg : sa + pn - pg - pk;
 
                 const existingSa = existingData ? Number(existingData.stockAwal) || 0 : -1;
                 const existingPn = existingData ? Number(existingData.penerimaan) || 0 : -1;
@@ -576,7 +575,7 @@ export default function StockHarianPage({
                 const existingPk = existingData ? Number(existingData.pemakaian) || 0 : -1;
                 const existingSk = existingData ? Number(existingData.stockAkhir) || 0 : -1;
                 const needsWrite = !existingData
-                  || sa !== existingSa || pn !== existingPn || pg !== existingPg
+                  || pn !== existingPn || pg !== existingPg
                   || pk !== existingPk || sk !== existingSk;
 
                 if (needsWrite) {

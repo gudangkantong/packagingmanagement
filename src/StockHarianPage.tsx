@@ -56,6 +56,8 @@ export default function StockHarianPage({
   const [saving, setSaving] = useState<string | null>(null);
   const [editBuffer, setEditBuffer] = useState<Record<string, { stockAwal: string }>>({});
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+  const [touchedInputs, setTouchedInputs] = useState<Record<string, boolean>>({});
+  const originalValuesRef = useRef<Record<string, string>>({});
 
   const ALL_LOCATIONS = [OPT_GUDANG, ...PABRIK_LIST];
   const prevDate = (() => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate()-1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); })();
@@ -528,6 +530,26 @@ export default function StockHarianPage({
   const handleInputChange = (docId: string, value: string) => {
     const digits = value.replace(/[^\d]/g, "");
     setEditBuffer(p => ({ ...p, [docId]: { ...p[docId], stockAwal: digits } }));
+    setTouchedInputs(p => ({ ...p, [docId]: true }));
+  };
+
+  const handleInputFocus = (docId: string) => {
+    // Simpan nilai asli saat pertama kali fokus
+    if (!(docId in originalValuesRef.current)) {
+      const buf = editBuffer[docId];
+      originalValuesRef.current[docId] = buf?.stockAwal || "";
+    }
+  };
+
+  const handleInputBlur = (docId: string) => {
+    // Kalau admin tidak jadi edit (nilai tidak berubah), hapus touched
+    const buf = editBuffer[docId];
+    const original = originalValuesRef.current[docId];
+    if (buf && buf.stockAwal === original) {
+      // Nilai sama dengan asli → batal edit
+      setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });
+    }
+    delete originalValuesRef.current[docId];
   };
 
   const handleSaveRow = async (pabrik: string, nama: string, docId: string) => {
@@ -546,6 +568,8 @@ export default function StockHarianPage({
       setStockData(prev => ({ ...prev, [docId]: { id: docId, pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, manuallyEdited: true, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() } }));
       // Invalidate cache supaya reload baca dari Firestore, bukan data lama
       removeCache(`stock_harian_${selectedDate}`);
+      // Hapus touched state supaya save icon hilang
+      setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });
       await bumpLastUpdate(); // notify other devices
       triggerToast(`Stock ${nama} (${PABRIK_SHORT[pabrik]}) disimpan`, "ok");
     } catch (e) { console.error(e); triggerToast("Gagal simpan", "er"); }
@@ -628,11 +652,8 @@ export default function StockHarianPage({
 
   // Check if stock awal has been changed from saved value
   const isStockAwalChanged = (docId: string): boolean => {
-    const buf = editBuffer[docId];
-    if (!buf) return false;
-    const saved = stockData[docId];
-    const savedVal = saved ? String(saved.stockAwal) : "";
-    return buf.stockAwal !== savedVal && buf.stockAwal !== "";
+    // Hanya tampilkan save icon kalau admin benar-benar mengubah nilai
+    return !!touchedInputs[docId];
   };
 
   const renderOPTTable = () => (
@@ -672,7 +693,7 @@ export default function StockHarianPage({
                   <td className="px-3 py-2 text-right">
                     {isMasterAdmin ? (
                       <div className="flex items-center justify-end gap-1.5">
-                        <input type="text" inputMode="numeric" value={buf.stockAwal ? Number(buf.stockAwal).toLocaleString("en-US") : ""} onChange={e => handleInputChange(docId, e.target.value)} className="w-28 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
+                        <input type="text" inputMode="numeric" value={buf.stockAwal ? Number(buf.stockAwal).toLocaleString("en-US") : ""} onChange={e => handleInputChange(docId, e.target.value)} onFocus={() => handleInputFocus(docId)} onBlur={() => handleInputBlur(docId)} className="w-28 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
                         {changed && (
                           <button onClick={(e) => { e.stopPropagation(); handleSaveRow(OPT_GUDANG, nama, docId); }} disabled={saving === docId} className="text-emerald-600 hover:text-emerald-800 disabled:text-gray-300 transition-colors" title="Simpan">
                             {saving === docId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -778,7 +799,7 @@ export default function StockHarianPage({
                     <td className="px-3 py-2 text-right">
                       {isMasterAdmin ? (
                         <div className="flex items-center justify-end gap-1.5">
-                          <input type="text" inputMode="numeric" value={buf.stockAwal ? Number(buf.stockAwal).toLocaleString("en-US") : ""} onChange={e => handleInputChange(docId, e.target.value)} className="w-28 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
+                          <input type="text" inputMode="numeric" value={buf.stockAwal ? Number(buf.stockAwal).toLocaleString("en-US") : ""} onChange={e => handleInputChange(docId, e.target.value)} onFocus={() => handleInputFocus(docId)} onBlur={() => handleInputBlur(docId)} className="w-28 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
                           {changed && (
                             <button onClick={(e) => { e.stopPropagation(); handleSaveRow(pabrik, nama, docId); }} disabled={saving === docId} className="text-emerald-600 hover:text-emerald-800 disabled:text-gray-300 transition-colors" title="Simpan">
                               {saving === docId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

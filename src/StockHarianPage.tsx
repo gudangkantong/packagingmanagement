@@ -749,7 +749,7 @@ export default function StockHarianPage({
     // Simpan nilai asli saat pertama kali fokus
     if (!(docId in originalValuesRef.current)) {
       const buf = editBuffer[docId];
-      originalValuesRef.current[docId] = buf?.stockAwal || "";
+      originalValuesRef.current[docId] = buf?.stockAwal || "0";
     }
   };
 
@@ -852,17 +852,34 @@ export default function StockHarianPage({
   // getRowDisplay: SELALU hitung dari list terkini
   // stockAkhir = stockAwal + penerimaan(vendor+transfer masuk) - pengiriman(keluar) - pemakaian
   const getRowDisplay = (pabrik: string, nama: string, docId: string) => {
-    const b = editBuffer[docId] || { stockAwal: "0" };
-    const sa = parseInt(b.stockAwal) || 0;
     const isOPT = pabrik === OPT_GUDANG;
+    let sa: number;
+
+    if (isOPT) {
+      // === GUDANG OPT: hitung stockAwal langsung dari prevDayData ===
+      // Sama seperti table pabrik — stockAwal = stockAkhir kemarin
+      // Jangan baca dari editBuffer karena bisa stale akibat cascade race condition
+      const saved = stockData[docId];
+      if (saved && saved.manuallyEdited) {
+        // Admin pernah edit manual → pakai nilai admin
+        sa = Number(saved.stockAwal) || 0;
+      } else {
+        // Default: stockAwal = stockAkhir kemarin (seperti table pabrik)
+        const prevId = makeDocId(pabrik, nama, prevDate);
+        const pv = prevDayData[prevId];
+        sa = pv ? (Number(pv.stockAkhir) || 0) : (saved ? Number(saved.stockAwal) || 0 : 0);
+      }
+    } else {
+      // Table pabrik: baca dari editBuffer (sudah di-set dari prevDayData oleh effect)
+      const b = editBuffer[docId] || { stockAwal: "0" };
+      sa = parseInt(b.stockAwal) || 0;
+    }
+
     const pn = computePenerimaan(pabrik, nama, selectedDate);
     const pg = computePengiriman(pabrik, nama, selectedDate);
     const inc = computeIncomingPengiriman(pabrik, nama, selectedDate);
     const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
     const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
-    if (isOPT && sa > 0) {
-      console.log(`[StockHarian] UI ${nama}: sa=${sa} pn=${pn} pg=${pg} inc=${inc} sk=${sk}`);
-    }
     return { stockAwal: sa, penerimaan: pn, pengiriman: pg, incomingPengiriman: inc, pemakaian: pk, stockAkhir: sk };
   };
 
@@ -917,7 +934,7 @@ export default function StockHarianPage({
                   <td className="px-3 py-2 text-right">
                     {isMasterAdmin ? (
                       <div className="flex items-center justify-end gap-1.5">
-                        <input type="text" inputMode="numeric" value={buf.stockAwal ? Number(buf.stockAwal).toLocaleString("en-US") : ""} onChange={e => handleInputChange(docId, e.target.value)} onFocus={() => handleInputFocus(docId)} onBlur={() => handleInputBlur(docId)} className="w-28 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
+                        <input type="text" inputMode="numeric" value={touchedInputs[docId] ? (buf.stockAwal ? Number(buf.stockAwal).toLocaleString("en-US") : "") : (d.stockAwal ? d.stockAwal.toLocaleString("en-US") : "")} onChange={e => handleInputChange(docId, e.target.value)} onFocus={() => handleInputFocus(docId)} onBlur={() => handleInputBlur(docId)} className="w-28 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
                         {changed && (
                           <button onClick={(e) => { e.stopPropagation(); handleSaveRow(OPT_GUDANG, nama, docId); }} disabled={saving === docId} className="text-emerald-600 hover:text-emerald-800 disabled:text-gray-300 transition-colors" title="Simpan">
                             {saving === docId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

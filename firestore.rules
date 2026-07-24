@@ -87,12 +87,12 @@ service cloud.firestore {
     }
 
     // === Stock Harian Kantong ===
-    // Only super_admin can read/write; others can only read
+    // Admin & super_admin can write (cascade from laporan_kantong)
     match /stock_harian/{id} {
       allow read: if isAuthenticated();
-      allow create: if isSuperAdmin();
-      allow update: if isSuperAdmin();
-      allow delete: if isSuperAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     // === Penerimaan Data (from Pelaporan page) ===

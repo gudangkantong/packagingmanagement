@@ -1854,104 +1854,46 @@ export default function App() {
     { utuh: 0, pecah: 0, sortir: 0, total: 0 }
   );
 
-  // Fetch full month data for monthly preview
+  // Fetch full month data for monthly preview — always fresh from Firestore
   const fetchMonthlyData = async (month: string) => {
     if (!month || !currentUser || isAllowed !== true) return;
     setMonthlyLoading(true);
 
-    const cacheKey = `monthly_${month}`;
-    const cached = getCached<LaporanKantong[]>(cacheKey);
-    const dirtyDates = consumeDirtyDates(); // ambil & hapus dirty dates
     const [year, m] = month.split('-');
     const startDate = `${year}-${m}-01`;
     const lastDay = new Date(parseInt(year), parseInt(m), 0).getDate();
     const endDate = `${year}-${m}-${String(lastDay).padStart(2, '0')}`;
 
-    // Filter dirty dates yang masuk di bulan ini
-    const dirtyInMonth = dirtyDates.filter(d => d >= startDate && d <= endDate);
-
-    // === CASE 1: Cache ada & tidak ada dirty dates → 0 reads ===
-    if (cached && cached.length > 0 && dirtyInMonth.length === 0) {
-      setMonthlyData(cached);
-      const firstWithData = PABRIK_LIST.find(f => cached.some(r => r.pabrik === f));
-      setSelectedFactory(firstWithData || "Pabrik Baturaja 1 (PBR 1)");
-      setMonthlyLoading(false);
-      console.log(`[MonthlyPreview] Cache hit: ${cached.length} items for ${month} (0 reads)`);
-      return;
-    }
-
     try {
-      let items: LaporanKantong[];
-
-      if (cached && cached.length > 0 && dirtyInMonth.length > 0) {
-        // === CASE 2: Cache ada & ada dirty dates → incremental update ===
-        console.log(`[MonthlyPreview] Incremental update: ${dirtyInMonth.length} dirty dates`);
-
-        // Hapus data lama untuk dirty dates dari cache
-        let updated = cached.filter(r => !dirtyInMonth.includes(r.tanggal));
-
-        // Fetch hanya dirty dates dari Firestore
-        for (const dirtyDate of dirtyInMonth) {
-          const dateQuery = query(
-            collection(db, "laporan_kantong"),
-            where("tanggal", "==", dirtyDate),
-          );
-          const dateSnap = await getDocs(dateQuery);
-          dateSnap.forEach((docSnap) => {
-            const data = docSnap.data();
-            updated.push({
-              id: docSnap.id,
-              vendor: data.vendor || "",
-              nama: data.nama || "",
-              pabrik: data.pabrik || "",
-              shift: Number(data.shift) || 1,
-              tanggal: data.tanggal || "",
-              utuh: Number(data.utuh) || 0,
-              pecah: Number(data.pecah) || 0,
-              sortir: Number(data.sortir) || 0,
-              total: Number(data.total) || 0,
-              createdBy: data.createdBy || "",
-              updatedAt: data.updatedAt || ""
-            });
-          });
-        }
-        items = updated;
-        console.log(`[MonthlyPreview] Incremental: fetched ${dirtyInMonth.length} dates, total ${items.length} items`);
-
-      } else {
-        // === CASE 3: Cache kosong → fetch semua dari Firestore ===
-        console.log(`[MonthlyPreview] Cache miss: fetching all data for ${month}`);
-        const q = query(
-          collection(db, "laporan_kantong"),
-          where("tanggal", ">=", startDate),
-          where("tanggal", "<=", endDate),
-        );
-        const snap = await getDocs(q);
-        items = [];
-        snap.forEach((docSnap) => {
-          const data = docSnap.data();
-          items.push({
-            id: docSnap.id,
-            vendor: data.vendor || "",
-            nama: data.nama || "",
-            pabrik: data.pabrik || "",
-            shift: Number(data.shift) || 1,
-            tanggal: data.tanggal || "",
-            utuh: Number(data.utuh) || 0,
-            pecah: Number(data.pecah) || 0,
-            sortir: Number(data.sortir) || 0,
-            total: Number(data.total) || 0,
-            createdBy: data.createdBy || "",
-            updatedAt: data.updatedAt || ""
-          });
+      const q = query(
+        collection(db, "laporan_kantong"),
+        where("tanggal", ">=", startDate),
+        where("tanggal", "<=", endDate),
+      );
+      const snap = await getDocs(q);
+      const items: LaporanKantong[] = [];
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        items.push({
+          id: docSnap.id,
+          vendor: data.vendor || "",
+          nama: data.nama || "",
+          pabrik: data.pabrik || "",
+          shift: Number(data.shift) || 1,
+          tanggal: data.tanggal || "",
+          utuh: Number(data.utuh) || 0,
+          pecah: Number(data.pecah) || 0,
+          sortir: Number(data.sortir) || 0,
+          total: Number(data.total) || 0,
+          createdBy: data.createdBy || "",
+          updatedAt: data.updatedAt || ""
         });
-        console.log(`[MonthlyPreview] Fetched ${items.length} items for ${month} from Firestore`);
-      }
+      });
 
       setMonthlyData(items);
-      setCache(cacheKey, items, 30 * 24 * 60 * 60 * 1000);
       const firstWithData = PABRIK_LIST.find(f => items.some(r => r.pabrik === f));
       setSelectedFactory(firstWithData || "Pabrik Baturaja 1 (PBR 1)");
+      console.log(`[MonthlyPreview] Fetched ${items.length} items for ${month}`);
     } catch (e) {
       console.error("fetch monthly data error:", e);
       triggerToast("Gagal memuat data bulanan: " + (e instanceof Error ? e.message : String(e)), "er");

@@ -102,7 +102,6 @@ function updateLaporanCache(item: LaporanKantong) {
     cached.push(item); // add new
   }
   setCache(cacheKey, cached, 30 * 24 * 60 * 60 * 1000);
-  markDateDirty(item.tanggal); // tandai tanggal ini sebagai dirty
 }
 
 /** Remove a laporan item from the date's cache */
@@ -112,7 +111,6 @@ function removeLaporanFromCache(id: string, tanggal: string) {
   if (!cached) return;
   const filtered = cached.filter(r => r.id !== id);
   setCache(cacheKey, filtered, 30 * 24 * 60 * 60 * 1000);
-  markDateDirty(tanggal); // tandai tanggal ini sebagai dirty
 }
 
 

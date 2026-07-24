@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   collection, doc, setDoc, onSnapshot, query, where, getDocs, orderBy, limit,
 } from "firebase/firestore";
-import { getDocsFromServer } from "firebase/firestore";
 import { Save, Loader2, Package, RefreshCw, Edit2, Trash2 } from "lucide-react";
 import { db } from "./firebase";
 import { StockHarian, LaporanKantong, AllowedUser, PenerimaanData, PengirimanData } from "./types";
@@ -68,13 +67,12 @@ export default function StockHarianPage({
   const ALL_LOCATIONS = [OPT_GUDANG, ...PABRIK_LIST];
   const prevDate = (() => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate()-1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); })();
 
-  // Hapus semua cache stock_harian saat mount supaya data selalu fresh
+  // Hapus semua cache stock_harian HANYA sekali saat mount
   useEffect(() => {
     const keys = Object.keys(localStorage);
     keys.forEach(key => {
       if (key.includes("stock_harian_")) localStorage.removeItem(key);
     });
-    console.log("[StockHarian] Cleared all stock_harian cache");
   }, []);
 
   const makeDocId = (pabrik: string, nama: string, tanggal: string) => {
@@ -130,7 +128,7 @@ export default function StockHarianPage({
     return Object.entries(vendorMap).map(([vendor, total]) => ({ vendor, total }));
   };
 
-  // Stock data: SELALU real-time onSnapshot (tanpa cache)
+  // Stock data: real-time listener for recent dates, cache for old dates
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setStockData({}); setLoading(false); return; }
 
@@ -142,7 +140,42 @@ export default function StockHarianPage({
     }
 
     setLoading(true);
+
+    const cacheKey = `stock_harian_${selectedDate}`;
+    const cached = getCached<Record<string, StockHarian>>(cacheKey);
+    if (cached && Object.keys(cached).length > 0) {
+      setStockData(cached);
+      setLoading(false);
+    }
+
+    const todayMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
+    const selectedMs = new Date(selectedDate + "T00:00:00").getTime();
+    const isOldDate = Math.floor((todayMs - selectedMs) / 86400000) > 7;
+
     const q = query(collection(db, "stock_harian"), where("tanggal", "==", selectedDate));
+
+    if (isOldDate) {
+      if (cached && Object.keys(cached).length > 0) {
+        setStockData(cached);
+        setLoading(false);
+        return;
+      }
+      getDocs(q).then(snap => {
+        const data: Record<string, StockHarian> = {};
+        snap.forEach(d => {
+          const v = d.data();
+          data[d.id] = { id: d.id, pabrik: v.pabrik || "", nama: v.nama || "", tanggal: v.tanggal || "", stockAwal: Number(v.stockAwal) || 0, penerimaan: Number(v.penerimaan) || 0, pengiriman: Number(v.pengiriman) || 0, pemakaian: Number(v.pemakaian) || 0, stockAkhir: Number(v.stockAkhir) || 0, createdBy: v.createdBy || "", updatedAt: v.updatedAt || "" };
+        });
+        setStockData(data);
+        setLoading(false);
+        setCache(cacheKey, data, 7 * 24 * 60 * 60 * 1000);
+      }).catch(err => {
+        console.error("[StockHarian] getDocs error:", err);
+        triggerToast("Gagal load stock: " + (err?.code || err?.message || "unknown"), "er");
+        setLoading(false);
+      });
+      return;
+    }
 
     const unsub = onSnapshot(q, snap => {
       const data: Record<string, StockHarian> = {};
@@ -152,16 +185,19 @@ export default function StockHarianPage({
       });
       setStockData(data);
       setLoading(false);
-      console.log(`[stockData] real-time update: ${Object.keys(data).length} docs for ${selectedDate}`);
+      setCache(cacheKey, data, 7 * 24 * 60 * 60 * 1000);
     }, err => {
       console.error("[StockHarian] snapshot error:", err);
-      triggerToast("Gagal sync stock: " + (err?.code || err?.message || "unknown"), "er");
+      const _hasCache = cached && Object.keys(cached).length > 0;
+      if (!_hasCache) {
+        triggerToast("Gagal sync stock: " + (err?.code || err?.message || "unknown"), "er");
+      }
       setLoading(false);
     });
     return () => unsub();
   }, [currentUser, isAllowed, selectedDate]);
 
-  // Prev day data: SELALU real-time onSnapshot (tanpa cache)
+  // Prev day data: real-time for recent, cache for old
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setPrevDayData({}); setPrevDayLoaded(false); return; }
 
@@ -172,18 +208,42 @@ export default function StockHarianPage({
       return;
     }
 
+    const cacheKey = `stock_harian_${prevDate}`;
+    const cached = getCached<Record<string, StockHarian>>(cacheKey);
+    if (cached && Object.keys(cached).length > 0) {
+      setPrevDayData(cached);
+      setPrevDayLoaded(true);
+    }
+
+    const todayMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
+    const prevMs = new Date(prevDate + "T00:00:00").getTime();
+    const isOldDate = Math.floor((todayMs - prevMs) / 86400000) > 7;
+
     const q = query(collection(db, "stock_harian"), where("tanggal", "==", prevDate));
+
+    if (isOldDate) {
+      if (cached && Object.keys(cached).length > 0) {
+        setPrevDayData(cached);
+        setPrevDayLoaded(true);
+        return;
+      }
+      getDocs(q).then(snap => {
+        const data: Record<string, StockHarian> = {};
+        snap.forEach(d => { data[d.id] = d.data() as StockHarian; });
+        setPrevDayData(data);
+        setPrevDayLoaded(true);
+        setCache(cacheKey, data, 7 * 24 * 60 * 60 * 1000);
+      }).catch(err => { console.error(err); setPrevDayLoaded(true); });
+      return;
+    }
 
     const unsub = onSnapshot(q, snap => {
       const data: Record<string, StockHarian> = {};
       snap.forEach(d => { data[d.id] = d.data() as StockHarian; });
       setPrevDayData(data);
       setPrevDayLoaded(true);
-      console.log(`[prevDayData] real-time update: ${Object.keys(data).length} docs for ${prevDate}`);
-    }, err => {
-      console.error("[prevDayData] snapshot error:", err);
-      setPrevDayLoaded(true);
-    });
+      setCache(cacheKey, data, 7 * 24 * 60 * 60 * 1000);
+    }, err => { console.error(err); setPrevDayLoaded(true); });
     return () => unsub();
   }, [currentUser, isAllowed, prevDate]);
 
@@ -384,7 +444,7 @@ export default function StockHarianPage({
         }
       };
       doDirectSync();
-    }, 1000); // debounce 1 detik
+    }, 5000); // debounce 5 detik
 
     return () => {
       if (directSyncTimerRef.current) {
@@ -416,7 +476,7 @@ export default function StockHarianPage({
       return;
     }
 
-    // Debounce 3 detik supaya tidak rapid-fire saat banyak onSnapshot update
+    // Debounce 10 detik supaya tidak rapid-fire saat banyak onSnapshot update
     if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
     syncDebounceRef.current = setTimeout(() => {
       const doFullSync = async () => {
@@ -445,7 +505,7 @@ export default function StockHarianPage({
               where("tanggal", "<=", today),
               orderBy("tanggal", "desc")
             );
-            const locSnap = await getDocsFromServer(locQuery);
+            const locSnap = await getDocs(locQuery);
 
             if (pabrik === OPT_GUDANG) {
               console.log(`[StockHarian] OPT: fetched ${locSnap.size} stock_harian docs FROM SERVER`);
@@ -672,7 +732,7 @@ export default function StockHarianPage({
       };
 
       doFullSync();
-    }, 3000); // debounce 3 detik
+    }, 10000); // debounce 10 detik
 
     return () => {
       if (syncDebounceRef.current) {

@@ -457,20 +457,15 @@ export default function StockHarianPage({
               const docs = docsByNama.get(nama) || [];
 
               if (docs.length === 0) {
-                // Belum ada data stock_harian → inisialisasi dari penerimaan/pengiriman/laporan
-                // (Gudang OPT tidak punya laporan, jadi cek juga penerimaan & pengiriman)
-                const hasAnyData = reports.some(r => r.nama === nama && r.pabrik.includes(pKey))
-                  || penerimaanList.some(r => r.nama === nama && r.pabrik === pabrik)
-                  || pengirimanList.some(r => r.nama === nama && (r.pabrik === pabrik || r.tujuan === pabrik));
-                if (!hasAnyData) continue;
+                // Belum ada data stock_harian → inisialisasi dari 0
+                // Untuk SEMUA lokasi termasuk Gudang OPT (tidak perlu cek data)
 
-                // Cari tanggal paling awal dari semua sumber data
+                // Cari tanggal paling awal dari semua sumber data, atau pakai hari ini
                 const dates: string[] = [];
                 reports.filter(r => r.nama === nama && r.pabrik.includes(pKey)).forEach(r => dates.push(r.tanggal));
                 penerimaanList.filter(r => r.nama === nama && r.pabrik === pabrik).forEach(r => dates.push(r.tanggal));
                 pengirimanList.filter(r => r.nama === nama && (r.pabrik === pabrik || r.tujuan === pabrik)).forEach(r => dates.push(r.tanggal));
-                if (dates.length === 0) continue;
-                const earliestDate = dates.reduce((a, b) => a < b ? a : b);
+                const earliestDate = dates.length > 0 ? dates.reduce((a, b) => a < b ? a : b) : today;
 
                 let prevSk = 0;
                 let cursor = earliestDate;

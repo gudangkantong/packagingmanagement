@@ -241,21 +241,25 @@ export default function StockHarianPage({
   }, [currentUser, isAllowed, prevDate]);
 
   useEffect(() => {
-    if (!prevDayLoaded) return; // tunggu data kemarin resolve dulu biar gak keisi 0 salah
+    if (!prevDayLoaded) return;
     const buf: Record<string, { stockAwal: string }> = {};
     ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
       const id = makeDocId(p, n, selectedDate);
+
+      // JANGAN overwrite kalau admin sedang edit (touched)
+      if (touchedInputs[id]) {
+        buf[id] = editBuffer[id]; // pertahankan nilai yang sedang diedit
+        return;
+      }
+
       const prevId = makeDocId(p, n, prevDate);
       const pv = prevDayData[prevId];
       const saved = stockData[id];
 
       if (pv) {
-        // Always derive stockAwal from previous day's stockAkhir
-        // This ensures changes to past data propagate correctly
         const ps = Number(pv.stockAkhir) || 0;
         buf[id] = { stockAwal: ps !== 0 ? String(ps) : "" };
       } else if (saved) {
-        // Fallback: use saved value if no prev day data
         buf[id] = { stockAwal: String(saved.stockAwal) };
       } else {
         buf[id] = { stockAwal: "" };

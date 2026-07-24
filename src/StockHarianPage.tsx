@@ -350,6 +350,95 @@ export default function StockHarianPage({
     };
   }, [editBuffer, prevDayData, prevDayLoaded, stockData, loading]);
 
+  // === DIRECT SYNC: stockAwal[today] = stockAkhir[yesterday] ===
+  // Effect ini JAUH lebih cepat dari cascade karena:
+  // 1. Hanya proses selectedDate (bukan semua tanggal)
+  // 2. Langsung baca dari prevDayData (sudah di-cache)
+  // 3. Langsung tulis ke Firestore tanpa query tambahan
+  // Ini memastikan stockAkhir kemarin SELALU ter-refleksi sebagai stockAwal hari ini
+  const directSyncRef = useRef(false);
+  const directSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!currentUser || isAllowed !== true || !prevDayLoaded || loading) return;
+    if (directSyncRef.current) return;
+
+    // Debounce 1 detik supaya tidak rapid-fire
+    if (directSyncTimerRef.current) clearTimeout(directSyncTimerRef.current);
+    directSyncTimerRef.current = setTimeout(() => {
+      const doDirectSync = async () => {
+        if (directSyncRef.current) return;
+        directSyncRef.current = true;
+        try {
+          let writeCount = 0;
+          const bufferUpdates = new Map<string, number>();
+
+          for (const pabrik of ALL_LOCATIONS) {
+            const pKey = PABRIK_SHORT[pabrik] || pabrik;
+            const isOPT = pabrik === OPT_GUDANG;
+
+            for (const nama of JENIS_KANTONG) {
+              const prevId = makeDocId(pabrik, nama, prevDate);
+              const pv = prevDayData[prevId];
+              if (!pv) continue; // Tidak ada data kemarin
+
+              const prevSk = Number(pv.stockAkhir) || 0;
+              const docId = makeDocId(pabrik, nama, selectedDate);
+              const existing = stockData[docId];
+              const existingSa = existing ? Number(existing.stockAwal) || 0 : -1;
+
+              // Hanya tulis jika stockAwal berbeda dari stockAkhir kemarin
+              if (prevSk !== existingSa) {
+                const pn = computePenerimaan(pabrik, nama, selectedDate);
+                const pg = computePengiriman(pabrik, nama, selectedDate);
+                const pk = isOPT ? 0 : computePemakaian(pKey, nama, selectedDate);
+                const sk = isOPT ? prevSk + pn - pg : prevSk + pn - pg - pk;
+
+                await setDoc(doc(db, "stock_harian", docId), {
+                  pabrik, nama, tanggal: selectedDate,
+                  stockAwal: prevSk, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
+                  createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
+                }, { merge: true });
+                writeCount++;
+                bufferUpdates.set(docId, prevSk);
+
+                if (isOPT) {
+                  console.log(`[DirectSync] OPT ${nama}: stockAkhir kemarin=${prevSk} → stockAwal hari ini=${prevSk}, pn=${pn}, pg=${pg}, sk=${sk}`);
+                }
+              }
+            }
+          }
+
+          // Update editBuffer langsung supaya UI sinkron
+          if (bufferUpdates.size > 0) {
+            setEditBuffer(prev => {
+              const next = { ...prev };
+              bufferUpdates.forEach((val, key) => {
+                if (!touchedInputs[key]) {
+                  next[key] = { stockAwal: String(val) };
+                }
+              });
+              return next;
+            });
+            await bumpLastUpdate();
+            console.log(`[DirectSync] ${writeCount} docs synced: stockAwal = stockAkhir kemarin`);
+          }
+        } catch (e) {
+          console.error("[DirectSync] Failed:", e);
+        } finally {
+          directSyncRef.current = false;
+        }
+      };
+      doDirectSync();
+    }, 1000); // debounce 1 detik
+
+    return () => {
+      if (directSyncTimerRef.current) {
+        clearTimeout(directSyncTimerRef.current);
+        directSyncTimerRef.current = null;
+      }
+    };
+  }, [prevDayData, prevDayLoaded, selectedDate, penerimaanList, pengirimanList, reports, loading]);
+
   // === HELPER: add days to YYYY-MM-DD string ===
   const addDays = (dateStr: string, days: number): string => {
     const d = new Date(dateStr + "T00:00:00");

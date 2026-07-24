@@ -206,9 +206,15 @@ export default function StockHarianPage({
           return;
         }
 
+        // JANGAN overwrite kalau admin sudah edit manual (manuallyEdited)
+        const saved = stockData[id];
+        if (saved && saved.manuallyEdited) {
+          buf[id] = { stockAwal: String(saved.stockAwal) };
+          return;
+        }
+
         const prevId = makeDocId(p, n, prevDate);
         const pv = prevDayData[prevId];
-        const saved = stockData[id];
 
         if (pv) {
           const ps = Number(pv.stockAkhir) || 0;
@@ -333,8 +339,8 @@ export default function StockHarianPage({
               const existing = stockData[docId];
               const existingSa = existing ? Number(existing.stockAwal) || 0 : -1;
 
-              // Hanya tulis jika stockAwal berbeda dari stockAkhir kemarin
-              if (prevSk !== existingSa) {
+              // Hanya tulis jika stockAwal berbeda DAN BUKAN edit manual admin
+              if (prevSk !== existingSa && !(existing && existing.manuallyEdited)) {
                 const pn = computePenerimaan(pabrik, nama, selectedDate);
                 const pg = computePengiriman(pabrik, nama, selectedDate);
                 const pk = isOPT ? 0 : computePemakaian(pKey, nama, selectedDate);

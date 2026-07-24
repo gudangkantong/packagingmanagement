@@ -2632,18 +2632,18 @@ export default function App() {
 
                             {/* Consolidated Factory Bag Usage Grid/Table */}
                             <div className="space-y-2 -mt-4">
-                              <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center justify-center gap-3 mb-2">
                                 <h3 className="text-sm font-extrabold text-[#6b6560] tracking-wide uppercase [text-shadow:0_1px_0_rgba(255,255,255,0.8)]">TOTAL PEMAKAIAN KANTONG</h3>
                                 <button
                                   onClick={() => setShowAllBagTypes(p => !p)}
-                                  className="text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-colors "
+                                  className="text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-colors shrink-0"
                                   style={{
                                     backgroundColor: showAllBagTypes ? '#e8f0e6' : '#faf9f7',
                                     color: showAllBagTypes ? '#2d6a4f' : '#9e9892',
                                     borderColor: showAllBagTypes ? '#2d6a4f33' : '#e8e4de'
                                   }}
                                 >
-                                  {showAllBagTypes ? '✓ Tampilkan Semua' : 'Tampilkan Semua'}
+                                  {showAllBagTypes ? '✓ Semua' : 'Semua'}
                                 </button>
                               </div>
                               <div className="border border-brand-green/30 rounded-2xl overflow-hidden bg-[#fdfcfb]">

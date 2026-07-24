@@ -928,14 +928,8 @@ export default function App() {
             });
           }
         }
-
-        // Remove items no longer in defaults
-        const defaultsSet = new Set(defaults);
-        for (const [name, docId] of Object.entries(existingDocs)) {
-          if (!defaultsSet.has(name)) {
-            await deleteDoc(doc(db, collectionName, docId));
-          }
-        }
+        // NOTE: Tidak menghapus item yang tidak ada di defaults,
+        // karena bisa jadi itu master data custom yang ditambah admin.
       } catch (e) {
         console.error(`Bootstrap ${collectionName} failed:`, e);
       }
@@ -1237,6 +1231,26 @@ export default function App() {
         addedBy: currentUser?.email || "unknown"
       });
       removeCache(collectionName); // invalidate cache
+      // Update state langsung agar UI langsung berubah
+      if (collectionName === "vendors") {
+        setDynamicVendors(prev => {
+          const next = prev.includes(trimmed) ? prev : [...prev, trimmed];
+          const orderMap = new Map(VENDORS.map((n, i) => [n, i]));
+          return next.sort((a, b) => (orderMap.get(a) ?? 999) - (orderMap.get(b) ?? 999));
+        });
+      } else if (collectionName === "jenis_kantong") {
+        setDynamicJenisKantong(prev => {
+          const next = prev.includes(trimmed) ? prev : [...prev, trimmed];
+          const orderMap = new Map(JENIS_KANTONG.map((n, i) => [n, i]));
+          return next.sort((a, b) => (orderMap.get(a) ?? 999) - (orderMap.get(b) ?? 999));
+        });
+      } else if (collectionName === "pabrik_list") {
+        setDynamicPabrikList(prev => {
+          const next = prev.includes(trimmed) ? prev : [...prev, trimmed];
+          const orderMap = new Map(PABRIK_LIST.map((n, i) => [n, i]));
+          return next.sort((a, b) => (orderMap.get(a) ?? 999) - (orderMap.get(b) ?? 999));
+        });
+      }
       bumpLastUpdate(); // notify other devices
       setValue("");
       triggerToast(`${label} "${trimmed}" berhasil ditambahkan`, "ok");
@@ -1263,6 +1277,14 @@ export default function App() {
         try {
           await deleteDoc(doc(db, collectionName, docId));
           removeCache(collectionName); // invalidate cache
+          // Update state langsung
+          if (collectionName === "vendors") {
+            setDynamicVendors(prev => prev.filter(v => v !== displayName));
+          } else if (collectionName === "jenis_kantong") {
+            setDynamicJenisKantong(prev => prev.filter(v => v !== displayName));
+          } else if (collectionName === "pabrik_list") {
+            setDynamicPabrikList(prev => prev.filter(v => v !== displayName));
+          }
           bumpLastUpdate(); // notify other devices
           triggerToast(`${label} "${displayName}" berhasil dihapus`, "ok");
         } catch (err) {
@@ -1305,6 +1327,14 @@ export default function App() {
         updatedBy: currentUser?.email || "unknown"
       }, { merge: true });
       removeCache(coll); // invalidate cache
+      // Update state langsung
+      if (coll === "vendors") {
+        setDynamicVendors(prev => prev.map(v => v === editingMasterData.originalName ? trimmed : v));
+      } else if (coll === "jenis_kantong") {
+        setDynamicJenisKantong(prev => prev.map(v => v === editingMasterData.originalName ? trimmed : v));
+      } else if (coll === "pabrik_list") {
+        setDynamicPabrikList(prev => prev.map(v => v === editingMasterData.originalName ? trimmed : v));
+      }
       bumpLastUpdate(); // notify other devices
       setEditingMasterData(null);
       triggerToast(`Berhasil mengubah nama menjadi "${trimmed}"`, "ok");

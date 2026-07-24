@@ -112,5 +112,11 @@ service cloud.firestore {
       allow update: if isSuperAdmin();
       allow delete: if isSuperAdmin();
     }
+
+    // === App Meta (cross-device sync) ===
+    match /app_meta/{doc} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
   }
 }

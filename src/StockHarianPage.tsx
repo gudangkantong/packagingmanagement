@@ -426,6 +426,24 @@ export default function StockHarianPage({
                   prevSk = sk;
                   cursor = addDays(cursor, 1);
                 }
+
+                // === FIX: Update besok stockAwal = hari ini stockAkhir ===
+                const tomorrowInit = addDays(today, 1);
+                const tomorrowInitId = makeDocId(pabrik, nama, tomorrowInit);
+                const tomorrowInitData = existingDocs.get(tomorrowInitId) || null;
+                if (!tomorrowInitData || !tomorrowInitData.manuallyEdited) {
+                  const tomorrowSa = prevSk;
+                  const pnT = computePenerimaan(pabrik, nama, tomorrowInit);
+                  const pgT = computePengiriman(pabrik, nama, tomorrowInit);
+                  const pkT = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, tomorrowInit);
+                  const skT = isOPT(pabrik) ? tomorrowSa + pnT - pgT : tomorrowSa + pnT - pgT - pkT;
+                  await setDoc(doc(db, "stock_harian", tomorrowInitId), {
+                    pabrik, nama, tanggal: tomorrowInit,
+                    stockAwal: tomorrowSa, penerimaan: pnT, pengiriman: pgT, pemakaian: pkT, stockAkhir: skT,
+                    createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
+                  }, { merge: true });
+                  totalSaved++;
+                }
                 continue;
               }
 
@@ -499,6 +517,26 @@ export default function StockHarianPage({
 
                 prevSk = sk;
                 cursor = addDays(cursor, 1);
+              }
+
+              // === FIX: Update besok stockAwal = hari ini stockAkhir ===
+              const tomorrow = addDays(today, 1);
+              const tomorrowDocId = makeDocId(pabrik, nama, tomorrow);
+              const tomorrowData = existingDocs.get(tomorrowDocId) || null;
+              if (!tomorrowData || !tomorrowData.manuallyEdited) {
+                const tomorrowSa = prevSk;
+                if (!tomorrowData || Number(tomorrowData.stockAwal) !== tomorrowSa) {
+                  const pnT = computePenerimaan(pabrik, nama, tomorrow);
+                  const pgT = computePengiriman(pabrik, nama, tomorrow);
+                  const pkT = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, tomorrow);
+                  const skT = isOPT(pabrik) ? tomorrowSa + pnT - pgT : tomorrowSa + pnT - pgT - pkT;
+                  await setDoc(doc(db, "stock_harian", tomorrowDocId), {
+                    pabrik, nama, tanggal: tomorrow,
+                    stockAwal: tomorrowSa, penerimaan: pnT, pengiriman: pgT, pemakaian: pkT, stockAkhir: skT,
+                    createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
+                  }, { merge: true });
+                  totalSaved++;
+                }
               }
             }
 

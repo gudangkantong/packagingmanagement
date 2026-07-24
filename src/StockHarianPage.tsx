@@ -348,7 +348,10 @@ export default function StockHarianPage({
   // Cascade hanya MAJU: stockAwal[t+1] = stockAkhir[t]
   const syncRunningRef = useRef(false);
   useEffect(() => {
-    if (!currentUser || isAllowed !== true || loading) return;
+    if (!currentUser || isAllowed !== true || loading) {
+      console.log("[StockHarian] Sync skipped:", { hasUser: !!currentUser, isAllowed, loading });
+      return;
+    }
     if (syncRunningRef.current) return;
 
     const doFullSync = async () => {
@@ -357,6 +360,7 @@ export default function StockHarianPage({
         const today = getDateString(new Date());
         const isOPT = (pabrik: string) => pabrik === OPT_GUDANG;
 
+        console.log(`[StockHarian] Full sync START — anchor to ${today}, reports=${reports.length}, penerimaan=${penerimaanList.length}, pengiriman=${pengirimanList.length}`);
         let totalSaved = 0;
 
         for (let i = 0; i < ALL_LOCATIONS.length; i++) {
@@ -432,6 +436,8 @@ export default function StockHarianPage({
             let prevSk = anchorSk;
             let cursor = addDays(anchorDate, 1);
 
+            console.log(`[StockHarian] Cascade ${pabrik}/${nama}: anchor=${anchorDate} sk=${anchorSk}, from ${cursor} to ${today}`);
+
             while (cursor <= today) {
               const cursorDocId = makeDocId(pabrik, nama, cursor);
               const existingData = existingDocs.get(cursorDocId) || null;
@@ -452,6 +458,7 @@ export default function StockHarianPage({
                 || pk !== existingPk || sk !== existingSk;
 
               if (needsWrite) {
+                console.log(`[StockHarian] WRITE ${cursorDocId}: sa=${sa} pn=${pn} pg=${pg} pk=${pk} sk=${sk} (existing: sa=${existingSa} pn=${existingPn} pg=${existingPg} pk=${existingPk} sk=${existingSk})`);
                 await setDoc(doc(db, "stock_harian", cursorDocId), {
                   pabrik, nama, tanggal: cursor,
                   stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,

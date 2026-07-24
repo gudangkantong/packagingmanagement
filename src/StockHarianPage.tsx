@@ -59,6 +59,11 @@ export default function StockHarianPage({
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const [touchedInputs, setTouchedInputs] = useState<Record<string, boolean>>({});
   const originalValuesRef = useRef<Record<string, string>>({});
+  // Track doc IDs yang sudah di-sync oleh cascade/DirectSync
+  // supaya effect editBuffer tidak menimpa nilai yang sudah benar
+  const cascadeSyncedRef = useRef<Set<string>>(new Set());
+  // Reset cascadeSyncedRef saat selectedDate berubah
+  useEffect(() => { cascadeSyncedRef.current = new Set(); }, [selectedDate]);
 
   const ALL_LOCATIONS = [OPT_GUDANG, ...PABRIK_LIST];
   const prevDate = (() => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate()-1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); })();
@@ -243,37 +248,38 @@ export default function StockHarianPage({
 
   useEffect(() => {
     if (!prevDayLoaded) return;
-    const buf: Record<string, { stockAwal: string }> = {};
-    ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
-      const id = makeDocId(p, n, selectedDate);
+    setEditBuffer(prev => {
+      const buf: Record<string, { stockAwal: string }> = {};
+      ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
+        const id = makeDocId(p, n, selectedDate);
 
-      // JANGAN overwrite kalau admin sedang edit (touched)
-      if (touchedInputs[id]) {
-        buf[id] = editBuffer[id]; // pertahankan nilai yang sedang diedit
-        return;
-      }
-
-      const prevId = makeDocId(p, n, prevDate);
-      const pv = prevDayData[prevId];
-      const saved = stockData[id];
-
-      if (pv) {
-        const ps = Number(pv.stockAkhir) || 0;
-        buf[id] = { stockAwal: ps !== 0 ? String(ps) : "" };
-        // Debug: log untuk OPT
-        if (p === OPT_GUDANG && selectedDate === getDateString(new Date())) {
-          console.log(`[StockHarian] editBuffer ${n}: from prevDayData.stockAkhir=${ps} (prevDate=${prevDate})`);
+        // JANGAN overwrite kalau admin sedang edit (touched)
+        if (touchedInputs[id]) {
+          buf[id] = prev[id] || { stockAwal: "" };
+          return;
         }
-      } else if (saved) {
-        buf[id] = { stockAwal: String(saved.stockAwal) };
-        if (p === OPT_GUDANG && selectedDate === getDateString(new Date())) {
-          console.log(`[StockHarian] editBuffer ${n}: from stockData.stockAwal=${saved.stockAwal}`);
+
+        // JANGAN overwrite kalau cascade/DirectSync sudah set nilai ini
+        if (cascadeSyncedRef.current.has(id)) {
+          buf[id] = prev[id] || { stockAwal: "" };
+          return;
         }
-      } else {
-        buf[id] = { stockAwal: "" };
-      }
-    }));
-    setEditBuffer(buf);
+
+        const prevId = makeDocId(p, n, prevDate);
+        const pv = prevDayData[prevId];
+        const saved = stockData[id];
+
+        if (pv) {
+          const ps = Number(pv.stockAkhir) || 0;
+          buf[id] = { stockAwal: ps !== 0 ? String(ps) : "" };
+        } else if (saved) {
+          buf[id] = { stockAwal: String(saved.stockAwal) };
+        } else {
+          buf[id] = { stockAwal: "" };
+        }
+      }));
+      return buf;
+    });
   }, [stockData, prevDayData, prevDayLoaded, selectedDate]);
 
   // === AUTO-SAVE: persist stockAwal changes to Firestore when prev day data changes ===
@@ -410,6 +416,8 @@ export default function StockHarianPage({
 
           // Update editBuffer langsung supaya UI sinkron
           if (bufferUpdates.size > 0) {
+            // Tandai doc yang sudah di-sync supaya effect tidak overwrite
+            bufferUpdates.forEach((_, key) => cascadeSyncedRef.current.add(key));
             setEditBuffer(prev => {
               const next = { ...prev };
               bufferUpdates.forEach((val, key) => {
@@ -687,6 +695,8 @@ export default function StockHarianPage({
             console.log(`[StockHarian] Buffer: ${key} = ${val}`);
           });
           if (todayBufferUpdates.size > 0) {
+            // Tandai doc yang sudah di-sync cascade supaya effect tidak overwrite
+            todayBufferUpdates.forEach((_, key) => cascadeSyncedRef.current.add(key));
             setEditBuffer(prev => {
               const next = { ...prev };
               todayBufferUpdates.forEach((val, key) => {

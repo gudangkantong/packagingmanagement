@@ -242,6 +242,7 @@ export default function StockHarianPage({
       setPrevDayData(data);
       setPrevDayLoaded(true);
       setCache(cacheKey, data, 30 * 24 * 60 * 60 * 1000);
+      console.log(`[prevDayData] loaded ${Object.keys(data).length} docs for ${prevDate}:`, Object.keys(data).slice(0, 5));
     }, err => { console.error(err); setPrevDayLoaded(true); });
     return () => unsub();
   }, [currentUser, isAllowed, prevDate]);
@@ -857,20 +858,18 @@ export default function StockHarianPage({
 
     if (isOPT) {
       // === GUDANG OPT: hitung stockAwal langsung dari prevDayData ===
-      // Sama seperti table pabrik — stockAwal = stockAkhir kemarin
-      // Jangan baca dari editBuffer karena bisa stale akibat cascade race condition
       const saved = stockData[docId];
       if (saved && saved.manuallyEdited) {
-        // Admin pernah edit manual → pakai nilai admin
         sa = Number(saved.stockAwal) || 0;
       } else {
-        // Default: stockAwal = stockAkhir kemarin (seperti table pabrik)
         const prevId = makeDocId(pabrik, nama, prevDate);
         const pv = prevDayData[prevId];
-        sa = pv ? (Number(pv.stockAkhir) || 0) : (saved ? Number(saved.stockAwal) || 0 : 0);
+        const prevAkhir = pv ? Number(pv.stockAkhir) : NaN;
+        sa = !isNaN(prevAkhir) ? prevAkhir : (saved ? Number(saved.stockAwal) || 0 : 0);
+        // Debug: log SETIAP render untuk diagnosa
+        console.log(`[OPT] ${nama}: prevId=${prevId} prevDayData.exists=${!!pv} prevAkhir=${prevAkhir} → sa=${sa}`);
       }
     } else {
-      // Table pabrik: baca dari editBuffer (sudah di-set dari prevDayData oleh effect)
       const b = editBuffer[docId] || { stockAwal: "0" };
       sa = parseInt(b.stockAwal) || 0;
     }

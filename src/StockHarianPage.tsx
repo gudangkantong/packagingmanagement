@@ -312,6 +312,7 @@ export default function StockHarianPage({
             return setDoc(doc(db, "stock_harian", docId), {
               pabrik, nama, tanggal: selectedDate,
               stockAwal, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
+              manuallyEdited: true,
               createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
             }, { merge: true });
           }));
@@ -441,6 +442,31 @@ export default function StockHarianPage({
                 const cursorDocId = makeDocId(pabrik, nama, cursor);
                 const existingData = existingDocs.get(cursorDocId) || null;
 
+                // Hormati edit manual: kalau admin sudah edit stockAwal,
+                // jangan overwrite, tapi pakai stockAkhir-nya sebagai anchor baru
+                if (existingData && existingData.manuallyEdited) {
+                  const manualSk = Number(existingData.stockAkhir) || 0;
+                  // Recalculate stockAkhir kalau penerimaan/pengiriman/pemakaian berubah
+                  const manualSa = Number(existingData.stockAwal) || 0;
+                  const pn = computePenerimaan(pabrik, nama, cursor);
+                  const pg = computePengiriman(pabrik, nama, cursor);
+                  const pk = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, cursor);
+                  const newSk = isOPT(pabrik) ? manualSa + pn - pg : manualSa + pn - pg - pk;
+                  if (newSk !== manualSk || pn !== Number(existingData.penerimaan) || pg !== Number(existingData.pengiriman) || pk !== Number(existingData.pemakaian)) {
+                    await setDoc(doc(db, "stock_harian", cursorDocId), {
+                      pabrik, nama, tanggal: cursor,
+                      stockAwal: manualSa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: newSk,
+                      manuallyEdited: true,
+                      createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
+                    }, { merge: true });
+                    totalSaved++;
+                  }
+                  prevSk = newSk; // anchor baru dari edit manual
+                  cursor = addDays(cursor, 1);
+                  continue;
+                }
+
+                // Normal: hitung dari prevSk
                 const pn = computePenerimaan(pabrik, nama, cursor);
                 const pg = computePengiriman(pabrik, nama, cursor);
                 const pk = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, cursor);
@@ -495,7 +521,7 @@ export default function StockHarianPage({
         syncDebounceRef.current = null;
       }
     };
-  }, [currentUser, isAllowed, loading, selectedDate, penerimaanList, pengirimanList, reports]);
+  }, [currentUser, isAllowed, loading, selectedDate, penerimaanList, pengirimanList, reports, refreshTrigger]);
 
 
 
@@ -515,9 +541,9 @@ export default function StockHarianPage({
       const isOPT = pabrik === OPT_GUDANG;
       const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
       const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
-      await setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
+      await setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, manuallyEdited: true, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
       // Update stockData supaya UI langsung sinkron & isStockAwalChanged jadi false
-      setStockData(prev => ({ ...prev, [docId]: { id: docId, pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() } }));
+      setStockData(prev => ({ ...prev, [docId]: { id: docId, pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, manuallyEdited: true, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() } }));
       // Invalidate cache supaya reload baca dari Firestore, bukan data lama
       removeCache(`stock_harian_${selectedDate}`);
       await bumpLastUpdate(); // notify other devices
@@ -539,7 +565,7 @@ export default function StockHarianPage({
         const pg = computePengiriman(pabrik, nama, selectedDate);
         const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
         const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
-        return setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
+        return setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, manuallyEdited: true, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
       }));
       // Update stockData untuk semua item supaya UI langsung sinkron
       setStockData(prev => {
@@ -552,7 +578,7 @@ export default function StockHarianPage({
           const pg = computePengiriman(pabrik, nama, selectedDate);
           const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
           const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
-          updated[docId] = { id: docId, pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() };
+          updated[docId] = { id: docId, pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, manuallyEdited: true, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() };
         });
         return updated;
       });

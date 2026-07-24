@@ -478,14 +478,13 @@ export default function StockHarianPage({
             }
 
             // Ambil stockAkhir dari hari sebelum cascadeStartDate
+            // FIX: Selalu cek hari sebelumnya, termasuk saat cascadeStartDate === earliestDate
             let prevSk = 0;
-            if (cascadeStartDate > earliestDate) {
-              const prevCascadeDate = getPrevDate(cascadeStartDate);
-              const prevCascadeDocId = makeDocId(pabrik, nama, prevCascadeDate);
-              const prevCascadeDoc = existingDocs.get(prevCascadeDocId);
-              if (prevCascadeDoc) {
-                prevSk = Number(prevCascadeDoc.stockAkhir) || 0;
-              }
+            const prevCascadeDate = getPrevDate(cascadeStartDate);
+            const prevCascadeDocId = makeDocId(pabrik, nama, prevCascadeDate);
+            const prevCascadeDoc = existingDocs.get(prevCascadeDocId);
+            if (prevCascadeDoc) {
+              prevSk = Number(prevCascadeDoc.stockAkhir) || 0;
             }
 
             // Cascade dari cascadeStartDate sampai today

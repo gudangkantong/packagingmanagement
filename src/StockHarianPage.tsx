@@ -420,8 +420,8 @@ export default function StockHarianPage({
               continue;
             }
 
-            // Normal flow: cascade dari dokumen PALING AWAL (bukan paling akhir)
-            // supaya gap di tengah (misal Juli 2-23) juga ikut ter-fix
+            // Normal flow: cascade dari dokumen PALING AWAL ke hari ini
+            // Walk through SEMUA tanggal (termasuk gap) supaya chain tidak terputus
             const existingDocs = new Map<string, any>();
             docs.forEach(d => existingDocs.set(d.id, d.data));
 
@@ -429,66 +429,22 @@ export default function StockHarianPage({
             const earliestDoc = docs[docs.length - 1];
             const earliestDate = earliestDoc.data.tanggal;
 
-            // Cek apakah ada yang perlu di-fix: scan dari awal ke akhir
-            // untuk menemukan tanggal pertama di mana stockAwal != prev day stockAkhir
-            let firstBrokenIdx = -1;
-            for (let idx = docs.length - 1; idx >= 0; idx--) {
-              const d = docs[idx];
-              const docDate = d.data.tanggal;
-              if (docDate <= earliestDate) continue; // skip yang paling awal
-              const prevDate = getPrevDate(docDate);
-              const prevDocId = makeDocId(pabrik, nama, prevDate);
-              const prevDoc = existingDocs.get(prevDocId);
-              if (!prevDoc) { firstBrokenIdx = idx; break; }
-              const expectedSa = Number(prevDoc.stockAkhir) || 0;
-              const actualSa = Number(d.data.stockAwal) || 0;
-              if (expectedSa !== actualSa) { firstBrokenIdx = idx; break; }
-              // Also check if penerimaan/pengiriman/pemakaian changed
-              const pn = computePenerimaan(pabrik, nama, docDate);
-              const pg = computePengiriman(pabrik, nama, docDate);
-              const pk = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, docDate);
-              if (pn !== Number(d.data.penerimaan) || pg !== Number(d.data.pengiriman) || pk !== Number(d.data.pemakaian)) {
-                firstBrokenIdx = idx;
-                break;
-              }
-            }
-
-            // Juga cek: apakah ada tanggal yang SAMA SEKALI tidak ada dokumennya?
-            // (gap antara earliestDate dan today)
-            let cursor = earliestDate;
-            while (cursor <= today) {
-              const cursorDocId = makeDocId(pabrik, nama, cursor);
-              if (!existingDocs.has(cursorDocId)) {
-                // Ada gap! Cascade dari sini
-                break;
-              }
-              cursor = addDays(cursor, 1);
-            }
-            const hasGap = cursor <= today;
-
-            if (firstBrokenIdx === -1 && !hasGap) continue; // semua sudah konsisten, skip
-
-            // Tentukan tanggal mulai cascade
-            let cascadeStartDate = earliestDate;
-            if (firstBrokenIdx >= 0) {
-              const brokenDate = docs[firstBrokenIdx].data.tanggal;
-              // Mulai 1 hari SEBELUM broken date supaya stockAkhir hari sebelumnya benar
-              cascadeStartDate = getPrevDate(brokenDate);
-              if (cascadeStartDate < earliestDate) cascadeStartDate = earliestDate;
-            }
-
-            // Ambil stockAkhir dari hari sebelum cascadeStartDate
-            // FIX: Selalu cek hari sebelumnya, termasuk saat cascadeStartDate === earliestDate
+            // Mulai cascade dari 1 hari SEBELUM earliestDate (kalau ada)
+            // supaya prevSk terisi dengan benar dari stockAkhir hari sebelumnya
+            let cursor = getPrevDate(earliestDate);
             let prevSk = 0;
-            const prevCascadeDate = getPrevDate(cascadeStartDate);
-            const prevCascadeDocId = makeDocId(pabrik, nama, prevCascadeDate);
-            const prevCascadeDoc = existingDocs.get(prevCascadeDocId);
-            if (prevCascadeDoc) {
-              prevSk = Number(prevCascadeDoc.stockAkhir) || 0;
+            const startPrevDocId = makeDocId(pabrik, nama, cursor);
+            const startPrevDoc = existingDocs.get(startPrevDocId);
+            if (startPrevDoc) {
+              prevSk = Number(startPrevDoc.stockAkhir) || 0;
+              cursor = earliestDate; // mulai dari earliestDate kalau hari sebelumnya ada
+            } else {
+              // Tidak ada hari sebelumnya → mulai dari earliestDate, prevSk = 0
+              // Ini benar kalau earliestDate memang hari pertama data
+              cursor = earliestDate;
             }
 
-            // Cascade dari cascadeStartDate sampai today
-            cursor = cascadeStartDate;
+            // Walk through SEMUA tanggal dari cursor sampai today
             while (cursor <= today) {
               const cursorDocId = makeDocId(pabrik, nama, cursor);
               const existingData = existingDocs.get(cursorDocId) || null;

@@ -121,13 +121,16 @@ export default function StockHarianPage({
         const cacheKey = `stock_harian_awal_${pKey}`;
 
         // 1. Coba cache dulu (gratis, 0 reads)
-        const cached = getCached<Record<string, number>>(cacheKey);
-        if (cached && Object.keys(cached).length > 0) {
-          Object.assign(allOverrides, cached);
-          return; // skip Firestore read
+        // Skip cache saat refresh (refreshTrigger > 0) supaya data fresh dari Firestore
+        if (refreshTrigger === 0) {
+          const cached = getCached<Record<string, number>>(cacheKey);
+          if (cached && Object.keys(cached).length > 0) {
+            Object.assign(allOverrides, cached);
+            return; // skip Firestore read
+          }
         }
 
-        // 2. Cache kosong → getDoc sekali (1 read per lokasi, bukan persistent)
+        // 2. Cache kosong atau refresh → getDoc sekali (1 read per lokasi)
         try {
           const docRef = doc(db, "stock_awal_overrides", pKey);
           const snap = await getDoc(docRef);
@@ -135,15 +138,17 @@ export default function StockHarianPage({
           if (data?.overrides && Object.keys(data.overrides).length > 0) {
             Object.assign(allOverrides, data.overrides as Record<string, number>);
             setCache(cacheKey, data.overrides as Record<string, number>, 30 * 24 * 60 * 60 * 1000);
+          } else {
+            // Document kosong → hapus cache lama
+            localStorage.removeItem(cacheKey);
           }
         } catch (e) {
           console.error(`[StockHarian] Gagal load overrides ${pKey}:`, e);
         }
       }));
 
-      if (Object.keys(allOverrides).length > 0) {
-        setOverrides(allOverrides);
-      }
+      // Selalu update state (termasuk kalau kosong, supaya tidak pakai data lama)
+      setOverrides(allOverrides);
     };
 
     loadOverrides();

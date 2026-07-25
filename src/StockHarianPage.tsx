@@ -469,6 +469,9 @@ export default function StockHarianPage({
   const syncRunningRef = useRef(false);
   const syncDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSyncRef = useRef(false);
+  const lastCascadeTimeRef = useRef(0);
+  const lastCascadeDateRef = useRef("");
+  const CASCADE_COOLDOWN_MS = 5 * 60 * 1000; // 5 menit
   useEffect(() => {
     if (!currentUser || isAllowed !== true || loading) return;
     if (syncRunningRef.current) {
@@ -477,7 +480,15 @@ export default function StockHarianPage({
       return;
     }
 
-    // Debounce 10 detik supaya tidak rapid-fire saat banyak onSnapshot update
+    // Guard: skip cascade kalau baru saja berjalan (kecuali tanggal berubah)
+    const now = Date.now();
+    const dateChanged = lastCascadeDateRef.current !== selectedDate;
+    if (!dateChanged && now - lastCascadeTimeRef.current < CASCADE_COOLDOWN_MS) {
+      console.log(`[StockHarian] Cascade skipped — cooldown (${Math.round((CASCADE_COOLDOWN_MS - (now - lastCascadeTimeRef.current)) / 1000)}s remaining)`);
+      return;
+    }
+
+    // Debounce 30 detik supaya tidak rapid-fire saat banyak onSnapshot update
     if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
     syncDebounceRef.current = setTimeout(() => {
       const doFullSync = async () => {
@@ -723,6 +734,8 @@ export default function StockHarianPage({
           console.error("[StockHarian] Cascade failed:", e);
         } finally {
           syncRunningRef.current = false;
+          lastCascadeTimeRef.current = Date.now();
+          lastCascadeDateRef.current = selectedDate;
           // Jika ada perubahan yang terlewat saat cascade berjalan, jalankan ulang
           if (pendingSyncRef.current) {
             pendingSyncRef.current = false;
@@ -733,7 +746,7 @@ export default function StockHarianPage({
       };
 
       doFullSync();
-    }, 10000); // debounce 10 detik
+    }, 30000); // debounce 30 detik
 
     return () => {
       if (syncDebounceRef.current) {

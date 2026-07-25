@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  collection, doc, setDoc, getDoc, onSnapshot, getDocs, query, where,
+  doc, setDoc, getDoc,
 } from "firebase/firestore";
 import { Save, Loader2, Package, Edit2, Trash2 } from "lucide-react";
 import { db } from "./firebase";
@@ -33,6 +33,7 @@ interface StockHarianPageProps {
   selectedDate: string;
   penerimaanList: PenerimaanData[];
   pengirimanList: PengirimanData[];
+  refreshTrigger: number;
   bumpLastUpdate: () => Promise<void>;
   onEditPenerimaan: (item: PenerimaanData) => void;
   onDeletePenerimaan: (id: string) => void;
@@ -41,7 +42,7 @@ interface StockHarianPageProps {
 }
 
 export default function StockHarianPage({
-  currentUser, isAllowed, reports, allowedUsers, triggerToast, selectedDate, penerimaanList, pengirimanList, bumpLastUpdate,
+  currentUser, isAllowed, reports, allowedUsers, triggerToast, selectedDate, penerimaanList, pengirimanList, refreshTrigger, bumpLastUpdate,
   onEditPenerimaan, onDeletePenerimaan, onEditPengiriman, onDeletePengiriman,
 }: StockHarianPageProps) {
   const currentUserData = allowedUsers.find(u => u.email === currentUser?.email?.toLowerCase());
@@ -108,58 +109,45 @@ export default function StockHarianPage({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
 
-  // === 1. LOAD STOCK AWAL OVERRIDES DARI FIRESTORE (FIRESTORE PRIORITY, CACHE = FALLBACK) ===
+  // === 1. LOAD STOCK AWAL OVERRIDES: CACHE-FIRST, getDoc (bukan onSnapshot) ===
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setOverrides({}); return; }
-    const unsubList = ALL_LOCATIONS.map(pabrik => {
-      const pKey = PABRIK_SHORT[pabrik] || pabrik;
-      const cacheKey = `stock_awal_${pKey}`;
-      const docRef = doc(db, "stock_awal_overrides", pKey);
-      return onSnapshot(docRef, async (snap) => {
-        const data = snap.data();
-        console.log(`[DEBUG] Snapshot ${pKey}: exists=${snap.exists()}, data=`, JSON.stringify(data));
-        if (data?.overrides && Object.keys(data.overrides).length > 0) {
-          // Firestore punya data → pakai ini, update cache
-          console.log(`[DEBUG] Setting overrides for ${pKey}:`, JSON.stringify(data.overrides));
-          setOverrides(prev => {
-            const merged = { ...prev, ...data.overrides };
-            console.log(`[DEBUG] Overrides after merge:`, JSON.stringify(merged));
-            return merged;
-          });
-          setCache(cacheKey, data.overrides as Record<string, number>, 30 * 24 * 60 * 60 * 1000);
-        } else {
-          // Firestore kosong → coba cache (fallback offline)
-          const cached = getCached<Record<string, number>>(cacheKey);
-          if (cached && Object.keys(cached).length > 0) {
-            setOverrides(prev => ({ ...prev, ...cached }));
-          } else {
-            // Kosong semua → baca manual edits dari stock_harian (fallback lama)
-            try {
-              const q = query(
-                collection(db, "stock_harian"),
-                where("pabrik", "==", pabrik),
-                where("manuallyEdited", "==", true)
-              );
-              const oldSnap = await getDocs(q);
-              const migrated: Record<string, number> = {};
-              oldSnap.forEach(d => {
-                migrated[d.id] = Number(d.data().stockAwal) || 0;
-              });
-              if (Object.keys(migrated).length > 0) {
-                setOverrides(prev => ({ ...prev, ...migrated }));
-                setCache(cacheKey, migrated, 30 * 24 * 60 * 60 * 1000);
-                await setDoc(docRef, { overrides: migrated, migratedAt: new Date().toISOString() });
-                console.log(`[StockHarian] Migrated ${Object.keys(migrated).length} edits for ${pKey}`);
-              }
-            } catch (e) {
-              console.error(`[StockHarian] Fallback read failed for ${pKey}:`, e);
-            }
-          }
+
+    const loadOverrides = async () => {
+      const allOverrides: Record<string, number> = {};
+
+      await Promise.all(ALL_LOCATIONS.map(async (pabrik) => {
+        const pKey = PABRIK_SHORT[pabrik] || pabrik;
+        const cacheKey = `stock_harian_awal_${pKey}`;
+
+        // 1. Coba cache dulu (gratis, 0 reads)
+        const cached = getCached<Record<string, number>>(cacheKey);
+        if (cached && Object.keys(cached).length > 0) {
+          Object.assign(allOverrides, cached);
+          return; // skip Firestore read
         }
-      });
-    });
-    return () => unsubList.forEach(u => u());
-  }, [currentUser, isAllowed]);
+
+        // 2. Cache kosong → getDoc sekali (1 read per lokasi, bukan persistent)
+        try {
+          const docRef = doc(db, "stock_awal_overrides", pKey);
+          const snap = await getDoc(docRef);
+          const data = snap.data();
+          if (data?.overrides && Object.keys(data.overrides).length > 0) {
+            Object.assign(allOverrides, data.overrides as Record<string, number>);
+            setCache(cacheKey, data.overrides as Record<string, number>, 30 * 24 * 60 * 60 * 1000);
+          }
+        } catch (e) {
+          console.error(`[StockHarian] Gagal load overrides ${pKey}:`, e);
+        }
+      }));
+
+      if (Object.keys(allOverrides).length > 0) {
+        setOverrides(allOverrides);
+      }
+    };
+
+    loadOverrides();
+  }, [currentUser, isAllowed, refreshTrigger]); // refreshTrigger dari granular sync
 
   // === 2. COMPUTE STOCK DATA SECARA LOKAL (0 Firestore reads) ===
   useEffect(() => {
@@ -320,7 +308,7 @@ export default function StockHarianPage({
         setOverrides(prev => ({ ...prev, [docId]: sa }));
       }
       await setDoc(docRef, { overrides: merged, updatedAt: new Date().toISOString() }, { merge: true });
-      setCache(`stock_awal_${pKey}`, merged, 30 * 24 * 60 * 60 * 1000);
+      setCache(`stock_harian_awal_${pKey}`, merged, 30 * 24 * 60 * 60 * 1000);
       setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });
       await bumpLastUpdate("laporan");
       triggerToast(`Stock ${nama} (${PABRIK_SHORT[pabrik]}) disimpan`, "ok");
@@ -362,7 +350,7 @@ export default function StockHarianPage({
         return { ...n, ...locOverrides };
       });
       await setDoc(docRef, { overrides: merged, updatedAt: new Date().toISOString() }, { merge: true });
-      setCache(`stock_awal_${pKey}`, merged, 30 * 24 * 60 * 60 * 1000);
+      setCache(`stock_harian_awal_${pKey}`, merged, 30 * 24 * 60 * 60 * 1000);
       JENIS_KANTONG.forEach(nama => {
         const docId = makeDocId(pabrik, nama, selectedDate);
         setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });

@@ -2802,6 +2802,7 @@ export default function App() {
                       selectedDate={selectedDate}
                       penerimaanList={penerimaanList}
                       pengirimanList={pengirimanList}
+                      refreshTrigger={refreshTrigger}
                       bumpLastUpdate={bumpLastUpdate}
                       onEditPenerimaan={handleEditPenerimaan}
                       onDeletePenerimaan={handleDeletePenerimaan}

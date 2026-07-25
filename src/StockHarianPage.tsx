@@ -256,7 +256,7 @@ export default function StockHarianPage({
           const locOverrides: Record<string, number> = {};
           JENIS_KANTONG.forEach(nama => {
             const docId = makeDocId(pabrik, nama, selectedDate);
-            if (overrides[docId] !== undefined) {
+            if (overrides[docId] !== undefined && overrides[docId] !== 0) {
               locOverrides[docId] = overrides[docId];
             }
           });
@@ -305,17 +305,21 @@ export default function StockHarianPage({
     try {
       const b = editBuffer[docId] || { stockAwal: "0" };
       const sa = parseInt(b.stockAwal) || 0;
-      // Update local overrides
-      setOverrides(prev => ({ ...prev, [docId]: sa }));
-      // Read-merge-write: baca existing dulu supaya data tanggal lain tidak hilang
       const pKey = PABRIK_SHORT[pabrik] || pabrik;
       const docRef = doc(db, "stock_awal_overrides", pKey);
       const existing = await getDoc(docRef);
       const existingOverrides = (existing.data()?.overrides as Record<string, number>) || {};
-      const merged = { ...existingOverrides, [docId]: sa };
-      console.log(`[DEBUG] SaveRow: docId=${docId}, sa=${sa}, existing=`, JSON.stringify(existingOverrides), `merged=`, JSON.stringify(merged));
+      let merged: Record<string, number>;
+      if (sa === 0) {
+        // Nilai 0 → hapus override (cascade akan hitung dari hari sebelumnya)
+        merged = { ...existingOverrides };
+        delete merged[docId];
+        setOverrides(prev => { const n = { ...prev }; delete n[docId]; return n; });
+      } else {
+        merged = { ...existingOverrides, [docId]: sa };
+        setOverrides(prev => ({ ...prev, [docId]: sa }));
+      }
       await setDoc(docRef, { overrides: merged, updatedAt: new Date().toISOString() }, { merge: true });
-      console.log(`[DEBUG] SaveRow: Firestore write done for ${pKey}`);
       setCache(`stock_awal_${pKey}`, merged, 30 * 24 * 60 * 60 * 1000);
       setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });
       await bumpLastUpdate("laporan");
@@ -334,14 +338,29 @@ export default function StockHarianPage({
       JENIS_KANTONG.forEach(nama => {
         const docId = makeDocId(pabrik, nama, selectedDate);
         const b = editBuffer[docId] || { stockAwal: "0" };
-        locOverrides[docId] = parseInt(b.stockAwal) || 0;
+        const val = parseInt(b.stockAwal) || 0;
+        if (val !== 0) locOverrides[docId] = val; // Jangan simpan nilai 0
       });
-      setOverrides(prev => ({ ...prev, ...locOverrides }));
       // Read-merge-write: baca existing dulu supaya data tanggal lain tidak hilang
       const docRef = doc(db, "stock_awal_overrides", pKey);
       const existing = await getDoc(docRef);
       const existingOverrides = (existing.data()?.overrides as Record<string, number>) || {};
+      // Hapus item yang nilainya 0 dari existing (jika ada)
+      JENIS_KANTONG.forEach(nama => {
+        const docId = makeDocId(pabrik, nama, selectedDate);
+        const b = editBuffer[docId] || { stockAwal: "0" };
+        if ((parseInt(b.stockAwal) || 0) === 0) delete existingOverrides[docId];
+      });
       const merged = { ...existingOverrides, ...locOverrides };
+      setOverrides(prev => {
+        const n = { ...prev };
+        // Hapus item 0 dari local overrides
+        JENIS_KANTONG.forEach(nama => {
+          const docId = makeDocId(pabrik, nama, selectedDate);
+          if (!locOverrides[docId]) delete n[docId];
+        });
+        return { ...n, ...locOverrides };
+      });
       await setDoc(docRef, { overrides: merged, updatedAt: new Date().toISOString() }, { merge: true });
       setCache(`stock_awal_${pKey}`, merged, 30 * 24 * 60 * 60 * 1000);
       JENIS_KANTONG.forEach(nama => {

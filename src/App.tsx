@@ -662,14 +662,14 @@ export default function App() {
 
     // Real-time range: always from today to 7 days back
     const today = todayStr;
-    const realtimeFromDate = getDateString(new Date(new Date(today + "T00:00:00").getTime() - 30 * 86400000));
+    const realtimeFromDate = getDateString(new Date(new Date(today + "T00:00:00").getTime() - 7 * 86400000));
     const realtimeToDate = today;
 
     // Check if selectedDate is within the real-time range
     const selectedMs = new Date(selectedDate + "T00:00:00").getTime();
     const nowMs = new Date(today + "T00:00:00").getTime();
     const daysDiff = Math.floor((nowMs - selectedMs) / 86400000);
-    const isInRealtimeRange = daysDiff >= 0 && daysDiff <= 30;
+    const isInRealtimeRange = daysDiff >= 0 && daysDiff <= 7;
 
     // 1. Load from cache first (instant UI)
     const allCached: LaporanKantong[] = [];

@@ -6,6 +6,7 @@ import { Save, Loader2, Package, Edit2, Trash2 } from "lucide-react";
 import { db } from "./firebase";
 import { StockHarian, LaporanKantong, AllowedUser, PenerimaanData, PengirimanData } from "./types";
 import { getDateString, formatDateDisplay } from "./utils";
+import { getCached, setCache } from "./utils/cache";
 import { JENIS_KANTONG } from "./csvUtils";
 
 const OPT_GUDANG = "Gudang OPT";
@@ -107,19 +108,27 @@ export default function StockHarianPage({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
 
-  // === 1. LOAD STOCK AWAL OVERRIDES DARI FIRESTORE ===
-  // + FALLBACK: baca manual edits dari stock_harian kalau overrides belum ada
+  // === 1. LOAD STOCK AWAL OVERRIDES DARI FIRESTORE (DENGAN CACHE) ===
+  // Cache lokal biar gak baca Firestore tiap reload (hemat reads + tampil meski lagi limit)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setOverrides({}); return; }
     const unsubList = ALL_LOCATIONS.map(pabrik => {
       const pKey = PABRIK_SHORT[pabrik] || pabrik;
+      const cacheKey = `stock_awal_${pKey}`;
       const docRef = doc(db, "stock_awal_overrides", pKey);
       return onSnapshot(docRef, async (snap) => {
+        // 1. Coba dari cache dulu (0 reads)
+        const cached = getCached<Record<string, number>>(cacheKey);
+        if (cached && Object.keys(cached).length > 0) {
+          setOverrides(prev => ({ ...prev, ...cached }));
+        }
+        // 2. Baca Firestore (cuma initial load / saat ada perubahan)
         const data = snap.data();
         if (data?.overrides && Object.keys(data.overrides).length > 0) {
           setOverrides(prev => ({ ...prev, ...data.overrides }));
-        } else {
-          // Overrides kosong → baca manual edits dari stock_harian
+          setCache(cacheKey, data.overrides as Record<string, number>, 30 * 24 * 60 * 60 * 1000); // cache 30 hari
+        } else if (!cached || Object.keys(cached).length === 0) {
+          // Overrides kosong & gak ada cache → baca manual edits dari stock_harian (fallback lama)
           try {
             const q = query(
               collection(db, "stock_harian"),
@@ -133,7 +142,7 @@ export default function StockHarianPage({
             });
             if (Object.keys(migrated).length > 0) {
               setOverrides(prev => ({ ...prev, ...migrated }));
-              // Simpan ke Firestore supaya tidak perlu baca lagi
+              setCache(cacheKey, migrated, 30 * 24 * 60 * 60 * 1000);
               await setDoc(docRef, { overrides: migrated, migratedAt: new Date().toISOString() });
               console.log(`[StockHarian] Migrated ${Object.keys(migrated).length} edits for ${pKey}`);
             }

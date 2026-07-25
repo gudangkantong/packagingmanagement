@@ -108,9 +108,15 @@ service cloud.firestore {
     // Admin & super_admin can create/update
     match /pengiriman_data/{id} {
       allow read: if isAuthenticated();
-      allow create: if isAdmin();  // ✅ PERBAIKI: Dari isSuperAdmin() ke isAdmin()
-      allow update: if isAdmin();  // ✅ PERBAIKI: Dari isSuperAdmin() ke isAdmin()
+      allow create: if isAdmin();
+      allow update: if isAdmin();
       allow delete: if isSuperAdmin();
+    }
+
+    // === Stock Awal Overrides (super_admin edits) ===
+    match /stock_awal_overrides/{pabrikKey} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
     }
 
     // === App Meta (cross-device sync) ===

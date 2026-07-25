@@ -108,8 +108,8 @@ export default function StockHarianPage({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
 
-  // === 1. LOAD STOCK AWAL OVERRIDES DARI FIRESTORE (1 read per lokasi) ===
-  // + MIGRASI: copy manual edits dari stock_harian lama ke collection baru
+  // === 1. LOAD STOCK AWAL OVERRIDES DARI FIRESTORE ===
+  // + FALLBACK: baca manual edits dari stock_harian kalau overrides belum ada
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setOverrides({}); return; }
     const unsubList = ALL_LOCATIONS.map(pabrik => {
@@ -118,36 +118,34 @@ export default function StockHarianPage({
       return onSnapshot(docRef, async (snap) => {
         const data = snap.data();
         if (data?.overrides && Object.keys(data.overrides).length > 0) {
-          // Overrides sudah ada → langsung pakai
           setOverrides(prev => ({ ...prev, ...data.overrides }));
-        } else if (isMasterAdmin) {
-          // Overrides kosong → MIGRASI dari stock_harian yang manuallyEdited
-          console.log(`[StockHarian] Migrating manual edits for ${pKey}...`);
+        } else {
+          // Overrides kosong → baca manual edits dari stock_harian
           try {
             const q = query(
               collection(db, "stock_harian"),
               where("pabrik", "==", pabrik),
               where("manuallyEdited", "==", true)
             );
-            const snap = await getDocs(q);
+            const oldSnap = await getDocs(q);
             const migrated: Record<string, number> = {};
-            snap.forEach(d => {
-              const v = d.data();
-              migrated[d.id] = Number(v.stockAwal) || 0;
+            oldSnap.forEach(d => {
+              migrated[d.id] = Number(d.data().stockAwal) || 0;
             });
             if (Object.keys(migrated).length > 0) {
-              await setDoc(docRef, { overrides: migrated, migratedAt: new Date().toISOString() });
               setOverrides(prev => ({ ...prev, ...migrated }));
-              console.log(`[StockHarian] Migrated ${Object.keys(migrated).length} manual edits for ${pKey}`);
+              // Simpan ke Firestore supaya tidak perlu baca lagi
+              await setDoc(docRef, { overrides: migrated, migratedAt: new Date().toISOString() });
+              console.log(`[StockHarian] Migrated ${Object.keys(migrated).length} edits for ${pKey}`);
             }
           } catch (e) {
-            console.error(`[StockHarian] Migration failed for ${pKey}:`, e);
+            console.error(`[StockHarian] Fallback read failed for ${pKey}:`, e);
           }
         }
       });
     });
     return () => unsubList.forEach(u => u());
-  }, [currentUser, isAllowed, isMasterAdmin]);
+  }, [currentUser, isAllowed]);
 
   // === 2. COMPUTE STOCK DATA SECARA LOKAL (0 Firestore reads) ===
   useEffect(() => {

@@ -469,24 +469,35 @@ export default function StockHarianPage({
   const syncRunningRef = useRef(false);
   const syncDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSyncRef = useRef(false);
-  const lastCascadeTimeRef = useRef(0);
-  const lastCascadeDateRef = useRef("");
-  const CASCADE_COOLDOWN_MS = 5 * 60 * 1000; // 5 menit
+  const lastCascadeTriggerRef = useRef(-1);
+  const DAILY_CASCADE_KEY = "stock_harian_last_cascade";
+
+  const hasCascadeRunToday = (date: string): boolean => {
+    try {
+      return localStorage.getItem(DAILY_CASCADE_KEY) === date;
+    } catch { return false; }
+  };
+  const markCascadeDone = (date: string) => {
+    try { localStorage.setItem(DAILY_CASCADE_KEY, date); } catch {}
+  };
+
   useEffect(() => {
     if (!currentUser || isAllowed !== true || loading) return;
     if (syncRunningRef.current) {
-      // Cascade sedang berjalan, tandai bahwa ada perubahan pending
       pendingSyncRef.current = true;
       return;
     }
 
-    // Guard: skip cascade kalau baru saja berjalan (kecuali tanggal berubah)
-    const now = Date.now();
-    const dateChanged = lastCascadeDateRef.current !== selectedDate;
-    if (!dateChanged && now - lastCascadeTimeRef.current < CASCADE_COOLDOWN_MS) {
-      console.log(`[StockHarian] Cascade skipped — cooldown (${Math.round((CASCADE_COOLDOWN_MS - (now - lastCascadeTimeRef.current)) / 1000)}s remaining)`);
+    const isForceSync = refreshTrigger !== lastCascadeTriggerRef.current;
+
+    // Daily guard: cascade hanya 1x per tanggal per hari
+    // Kecuali: force sync (tombol Sync)
+    if (!isForceSync && hasCascadeRunToday(selectedDate)) {
+      console.log(`[StockHarian] Cascade skipped — already ran today for ${selectedDate}`);
       return;
     }
+
+    lastCascadeTriggerRef.current = refreshTrigger;
 
     // Debounce 30 detik supaya tidak rapid-fire saat banyak onSnapshot update
     if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
@@ -734,8 +745,8 @@ export default function StockHarianPage({
           console.error("[StockHarian] Cascade failed:", e);
         } finally {
           syncRunningRef.current = false;
-          lastCascadeTimeRef.current = Date.now();
-          lastCascadeDateRef.current = selectedDate;
+          markCascadeDone(selectedDate);
+          console.log(`[StockHarian] Cascade complete for ${selectedDate}`);
           // Jika ada perubahan yang terlewat saat cascade berjalan, jalankan ulang
           if (pendingSyncRef.current) {
             pendingSyncRef.current = false;

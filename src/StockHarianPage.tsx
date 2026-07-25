@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  collection, doc, setDoc, onSnapshot,
+  collection, doc, setDoc, onSnapshot, getDocs, query, where,
 } from "firebase/firestore";
 import { Save, Loader2, Package, RefreshCw, Edit2, Trash2 } from "lucide-react";
 import { db } from "./firebase";
@@ -109,19 +109,45 @@ export default function StockHarianPage({
   };
 
   // === 1. LOAD STOCK AWAL OVERRIDES DARI FIRESTORE (1 read per lokasi) ===
+  // + MIGRASI: copy manual edits dari stock_harian lama ke collection baru
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setOverrides({}); return; }
     const unsubList = ALL_LOCATIONS.map(pabrik => {
-      const docRef = doc(db, "stock_awal_overrides", PABRIK_SHORT[pabrik] || pabrik);
-      return onSnapshot(docRef, snap => {
+      const pKey = PABRIK_SHORT[pabrik] || pabrik;
+      const docRef = doc(db, "stock_awal_overrides", pKey);
+      return onSnapshot(docRef, async (snap) => {
         const data = snap.data();
-        if (data?.overrides) {
+        if (data?.overrides && Object.keys(data.overrides).length > 0) {
+          // Overrides sudah ada → langsung pakai
           setOverrides(prev => ({ ...prev, ...data.overrides }));
+        } else if (isMasterAdmin) {
+          // Overrides kosong → MIGRASI dari stock_harian yang manuallyEdited
+          console.log(`[StockHarian] Migrating manual edits for ${pKey}...`);
+          try {
+            const q = query(
+              collection(db, "stock_harian"),
+              where("pabrik", "==", pabrik),
+              where("manuallyEdited", "==", true)
+            );
+            const snap = await getDocs(q);
+            const migrated: Record<string, number> = {};
+            snap.forEach(d => {
+              const v = d.data();
+              migrated[d.id] = Number(v.stockAwal) || 0;
+            });
+            if (Object.keys(migrated).length > 0) {
+              await setDoc(docRef, { overrides: migrated, migratedAt: new Date().toISOString() });
+              setOverrides(prev => ({ ...prev, ...migrated }));
+              console.log(`[StockHarian] Migrated ${Object.keys(migrated).length} manual edits for ${pKey}`);
+            }
+          } catch (e) {
+            console.error(`[StockHarian] Migration failed for ${pKey}:`, e);
+          }
         }
       });
     });
     return () => unsubList.forEach(u => u());
-  }, [currentUser, isAllowed]);
+  }, [currentUser, isAllowed, isMasterAdmin]);
 
   // === 2. COMPUTE STOCK DATA SECARA LOKAL (0 Firestore reads) ===
   useEffect(() => {

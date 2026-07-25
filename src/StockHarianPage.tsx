@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  collection, doc, setDoc, onSnapshot, getDocs, query, where,
+  collection, doc, setDoc, getDoc, onSnapshot, getDocs, query, where,
 } from "firebase/firestore";
 import { Save, Loader2, Package, Edit2, Trash2 } from "lucide-react";
 import { db } from "./firebase";
@@ -252,10 +252,13 @@ export default function StockHarianPage({
           });
           if (Object.keys(locOverrides).length > 0) byLocation[pKey] = locOverrides;
         });
-        // Write each location's overrides
-        await Promise.all(Object.entries(byLocation).map(([pKey, locOverrides]) => {
+        // Read-merge-write each location's overrides (jangan overwrite tanggal lain)
+        await Promise.all(Object.entries(byLocation).map(async ([pKey, locOverrides]) => {
           const docRef = doc(db, "stock_awal_overrides", pKey);
-          return setDoc(docRef, { overrides: locOverrides, updatedAt: new Date().toISOString() }, { merge: true });
+          const existing = await getDoc(docRef);
+          const existingOverrides = (existing.data()?.overrides as Record<string, number>) || {};
+          const merged = { ...existingOverrides, ...locOverrides };
+          return setDoc(docRef, { overrides: merged, updatedAt: new Date().toISOString() }, { merge: true });
         }));
       } catch (e) { console.error("[StockHarian] Override sync failed:", e); }
     }, 2000);
@@ -297,11 +300,14 @@ export default function StockHarianPage({
       const sa = parseInt(b.stockAwal) || 0;
       // Update local overrides
       setOverrides(prev => ({ ...prev, [docId]: sa }));
-      // Sync to Firestore (gunakan document path yang benar: stock_awal_overrides/{pKey})
+      // Read-merge-write: baca existing dulu supaya data tanggal lain tidak hilang
       const pKey = PABRIK_SHORT[pabrik] || pabrik;
       const docRef = doc(db, "stock_awal_overrides", pKey);
-      await setDoc(docRef, { overrides: { [docId]: sa }, updatedAt: new Date().toISOString() }, { merge: true });
-      setCache(`stock_awal_${pKey}`, { ...(getCached<Record<string, number>>(`stock_awal_${pKey}`) || {}), [docId]: sa }, 30 * 24 * 60 * 60 * 1000);
+      const existing = await getDoc(docRef);
+      const existingOverrides = (existing.data()?.overrides as Record<string, number>) || {};
+      const merged = { ...existingOverrides, [docId]: sa };
+      await setDoc(docRef, { overrides: merged, updatedAt: new Date().toISOString() }, { merge: true });
+      setCache(`stock_awal_${pKey}`, merged, 30 * 24 * 60 * 60 * 1000);
       setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });
       await bumpLastUpdate("laporan");
       triggerToast(`Stock ${nama} (${PABRIK_SHORT[pabrik]}) disimpan`, "ok");
@@ -322,9 +328,13 @@ export default function StockHarianPage({
         locOverrides[docId] = parseInt(b.stockAwal) || 0;
       });
       setOverrides(prev => ({ ...prev, ...locOverrides }));
+      // Read-merge-write: baca existing dulu supaya data tanggal lain tidak hilang
       const docRef = doc(db, "stock_awal_overrides", pKey);
-      await setDoc(docRef, { overrides: locOverrides, updatedAt: new Date().toISOString() }, { merge: true });
-      setCache(`stock_awal_${pKey}`, { ...(getCached<Record<string, number>>(`stock_awal_${pKey}`) || {}), ...locOverrides }, 30 * 24 * 60 * 60 * 1000);
+      const existing = await getDoc(docRef);
+      const existingOverrides = (existing.data()?.overrides as Record<string, number>) || {};
+      const merged = { ...existingOverrides, ...locOverrides };
+      await setDoc(docRef, { overrides: merged, updatedAt: new Date().toISOString() }, { merge: true });
+      setCache(`stock_awal_${pKey}`, merged, 30 * 24 * 60 * 60 * 1000);
       JENIS_KANTONG.forEach(nama => {
         const docId = makeDocId(pabrik, nama, selectedDate);
         setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });

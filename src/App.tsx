@@ -644,7 +644,7 @@ export default function App() {
     doBackfill();
   }, [currentUser, isAllowed]);
 
-  // Main reports — onSnapshot + cache (real-time, cascade reads hanya 1 doc/change)
+  // Main reports — getDocs + cache (bukan onSnapshot persistent)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) {
       setReports([]);
@@ -656,105 +656,28 @@ export default function App() {
     if (selectedDate > todayStr) {
       setReports([]);
       setDataLoading(false);
-      return; // tidak perlu query Firestore untuk tanggal yang belum ada
+      return;
     }
 
     setDataLoading(true);
 
-    // Real-time range: always from today to 7 days back
-    const today = todayStr;
-    const realtimeFromDate = getDateString(new Date(new Date(today + "T00:00:00").getTime() - 7 * 86400000));
-    const realtimeToDate = today;
-
-    // Check if selectedDate is within the real-time range
-    const selectedMs = new Date(selectedDate + "T00:00:00").getTime();
-    const nowMs = new Date(today + "T00:00:00").getTime();
-    const daysDiff = Math.floor((nowMs - selectedMs) / 86400000);
-    const isInRealtimeRange = daysDiff >= 0 && daysDiff <= 7;
-
-    // 1. Load from cache first (instant UI)
-    const allCached: LaporanKantong[] = [];
-    if (isInRealtimeRange) {
-      // Cache for the real-time range
-      const d = new Date(realtimeFromDate + "T00:00:00");
-      const end = new Date(realtimeToDate + "T00:00:00");
-      while (d <= end) {
-        const dateStr = getDateString(d);
-        const cached = getCached<LaporanKantong[]>(`laporan_${dateStr}`);
-        if (cached) allCached.push(...cached);
-        d.setDate(d.getDate() + 1);
-      }
-    } else {
-      // Old date: load from cache only
-      const cachedOld = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
-      if (cachedOld) allCached.push(...cachedOld);
-    }
-    if (allCached.length > 0) {
-      setReports(allCached);
+    // Load from cache first (instant UI, 0 reads)
+    const cachedOld = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
+    if (cachedOld && refreshTrigger === 0) {
+      setReports(cachedOld);
       setDataLoading(false);
+      return;
     }
 
-    // 2. For dates within 7 days of today: onSnapshot real-time
-    //    For older dates: one-time getDocs
-    if (isInRealtimeRange) {
-      const reportsQuery = query(
-        collection(db, "laporan_kantong"),
-        where("tanggal", ">=", realtimeFromDate),
-        where("tanggal", "<=", realtimeToDate),
-        orderBy("tanggal", "desc")
-      );
-      const unsub = onSnapshot(reportsQuery, (snap) => {
-        const items: LaporanKantong[] = [];
-        snap.forEach((docSnap) => {
-          const data = docSnap.data();
-          items.push({
-            id: docSnap.id,
-            vendor: data.vendor || "",
-            nama: data.nama || "",
-            pabrik: data.pabrik || "",
-            shift: Number(data.shift) || 1,
-            tanggal: data.tanggal || "",
-            utuh: Number(data.utuh) || 0,
-            pecah: Number(data.pecah) || 0,
-            sortir: Number(data.sortir) || 0,
-            total: Number(data.total) || 0,
-            createdBy: data.createdBy || "",
-            updatedAt: data.updatedAt || ""
-          });
-        });
-
-        setReports(items);
-        setDataLoading(false);
-
-        const byDate: Record<string, LaporanKantong[]> = {};
-        items.forEach((item) => {
-          if (!byDate[item.tanggal]) byDate[item.tanggal] = [];
-          byDate[item.tanggal].push(item);
-        });
-        Object.entries(byDate).forEach(([date, dateItems]) => {
-          setCache(`laporan_${date}`, dateItems, 30 * 24 * 60 * 60 * 1000);
-        });
-      }, (err) => {
-        console.error("Failed to sync reports:", err);
-        const errMsg = err?.code || err?.message || String(err);
-        const hasCachedData = allCached.length > 0;
-        if (!hasCachedData) {
-          triggerToast(`Gagal sync real-time: ${errMsg}`, "er");
-        } else {
-          console.warn(`[Reports] Real-time sync failed, using cached data. Error: ${errMsg}`);
-        }
-        setDataLoading(false);
-        handleFirestoreError(err, OperationType.GET, "laporan_kantong");
-      });
-      return () => unsub();
-    } else {
-      // Old date: onSnapshot supaya tetap real-time saat user lain update
-      const selectedDateQuery = query(
-        collection(db, "laporan_kantong"),
-        where("tanggal", "==", selectedDate),
-        orderBy("tanggal", "desc")
-      );
-      const unsub = onSnapshot(selectedDateQuery, (snap) => {
+    // Cache miss atau refresh → getDocs sekali
+    const loadReports = async () => {
+      try {
+        const reportsQuery = query(
+          collection(db, "laporan_kantong"),
+          where("tanggal", "==", selectedDate),
+          orderBy("tanggal", "desc")
+        );
+        const snap = await getDocs(reportsQuery);
         const items: LaporanKantong[] = [];
         snap.forEach((docSnap) => {
           const data = docSnap.data();
@@ -774,68 +697,69 @@ export default function App() {
           });
         });
         setReports(items);
-        setDataLoading(false);
         setCache(`laporan_${selectedDate}`, items, 30 * 24 * 60 * 60 * 1000);
-      }, (err) => {
-        console.error("Failed to sync old date reports:", err);
-        const cachedLaporan = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
-        if (cachedLaporan && cachedLaporan.length > 0) {
-          setReports(cachedLaporan);
-        }
         setDataLoading(false);
-      });
-      return () => unsub();
-    }
+      } catch (err) {
+        console.error("Failed to load reports:", err);
+        const cached = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
+        if (cached && cached.length > 0) setReports(cached);
+        setDataLoading(false);
+      }
+    };
+    loadReports();
   }, [currentUser, isAllowed, selectedDate, refreshTrigger]);
 
-  // Penerimaan: onSnapshot real-time (lebih hemat dari polling untuk 50 user)
-  // onSnapshot: 1 initial read per doc + incremental updates (free)
-  // Polling: full read setiap 5 menit × 50 user = jutaan reads
+  // Penerimaan: getDocs + cache (bukan onSnapshot persistent)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setPenerimaanList([]); return; }
 
     // Load dari cache dulu supaya UI langsung tampil
     const cached = getCached<PenerimaanData[]>("penerimaan_data");
-    if (cached) setPenerimaanList(cached);
+    if (cached && refreshTrigger === 0) { setPenerimaanList(cached); return; }
 
-    const unsub = onSnapshot(collection(db, "penerimaan_data"), (snap) => {
-      const items: PenerimaanData[] = [];
-      snap.forEach((d) => {
-        const data = d.data();
-        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
-      });
-      setPenerimaanList(items);
-      setCache("penerimaan_data", items, 30 * 24 * 60 * 60 * 1000);
-    }, (err) => {
-      console.error("Failed to sync penerimaan_data:", err);
-      if (!cached) setPenerimaanList([]);
-    });
+    // Cache miss atau refresh → getDocs sekali
+    const load = async () => {
+      try {
+        const snap = await getDocs(collection(db, "penerimaan_data"));
+        const items: PenerimaanData[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+        });
+        setPenerimaanList(items);
+        setCache("penerimaan_data", items, 30 * 24 * 60 * 60 * 1000);
+      } catch (err) {
+        console.error("Failed to load penerimaan_data:", err);
+        if (!cached) setPenerimaanList([]);
+      }
+    };
+    load();
+  }, [currentUser, isAllowed, refreshTrigger]);
 
-    return () => unsub();
-  }, [currentUser, isAllowed]);
-
-  // Pengiriman: onSnapshot real-time
+  // Pengiriman: getDocs + cache (bukan onSnapshot persistent)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setPengirimanList([]); return; }
 
     const cached = getCached<PengirimanData[]>("pengiriman_data");
-    if (cached) setPengirimanList(cached);
+    if (cached && refreshTrigger === 0) { setPengirimanList(cached); return; }
 
-    const unsub = onSnapshot(collection(db, "pengiriman_data"), (snap) => {
-      const items: PengirimanData[] = [];
-      snap.forEach((d) => {
-        const data = d.data();
-        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
-      });
-      setPengirimanList(items);
-      setCache("pengiriman_data", items, 30 * 24 * 60 * 60 * 1000);
-    }, (err) => {
-      console.error("Failed to sync pengiriman_data:", err);
-      if (!cached) setPengirimanList([]);
-    });
-
-    return () => unsub();
-  }, [currentUser, isAllowed]);
+    const load = async () => {
+      try {
+        const snap = await getDocs(collection(db, "pengiriman_data"));
+        const items: PengirimanData[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+        });
+        setPengirimanList(items);
+        setCache("pengiriman_data", items, 30 * 24 * 60 * 60 * 1000);
+      } catch (err) {
+        console.error("Failed to load pengiriman_data:", err);
+        if (!cached) setPengirimanList([]);
+      }
+    };
+    load();
+  }, [currentUser, isAllowed, refreshTrigger]);
 
   // allowed_users: onSnapshot (lebih murah drpd polling buat 50 user)
   useEffect(() => {
@@ -1872,8 +1796,7 @@ export default function App() {
     { utuh: 0, pecah: 0, sortir: 0, total: 0 }
   );
 
-  // Real-time listener for monthly preview data (onSnapshot)
-  // Langsung update kalau ada perubahan dari browser/device lain
+  // Monthly preview data — getDocs + cache (bukan onSnapshot persistent)
   useEffect(() => {
     if (!showExportPreview || exportPreviewType !== "bulanan" || !exportMonth || !currentUser || isAllowed !== true) {
       return;
@@ -1884,49 +1807,63 @@ export default function App() {
     const startDate = `${year}-${m}-01`;
     const lastDay = new Date(parseInt(year), parseInt(m), 0).getDate();
     const endDate = `${year}-${m}-${String(lastDay).padStart(2, '0')}`;
+    const cacheKey = `monthly_${exportMonth}`;
 
-    const q = query(
-      collection(db, "laporan_kantong"),
-      where("tanggal", ">=", startDate),
-      where("tanggal", "<=", endDate),
-    );
-
-    const unsub = onSnapshot(q, (snap) => {
-      const items: LaporanKantong[] = [];
-      snap.forEach((docSnap) => {
-        const data = docSnap.data();
-        items.push({
-          id: docSnap.id,
-          vendor: data.vendor || "",
-          nama: data.nama || "",
-          pabrik: data.pabrik || "",
-          shift: Number(data.shift) || 1,
-          tanggal: data.tanggal || "",
-          utuh: Number(data.utuh) || 0,
-          pecah: Number(data.pecah) || 0,
-          sortir: Number(data.sortir) || 0,
-          total: Number(data.total) || 0,
-          createdBy: data.createdBy || "",
-          updatedAt: data.updatedAt || ""
-        });
-      });
-
-      setMonthlyData(items);
-      const firstWithData = PABRIK_LIST.find(f => items.some(r => r.pabrik === f));
+    // Cache first
+    const cached = getCached<LaporanKantong[]>(cacheKey);
+    if (cached && cached.length > 0) {
+      setMonthlyData(cached);
+      const firstWithData = PABRIK_LIST.find(f => cached.some(r => r.pabrik === f));
       setSelectedFactory(prev => {
         if (!firstWithData) return "Pabrik Baturaja 1 (PBR 1)";
-        // Preserve current selection if still valid
-        return prev && items.some(r => r.pabrik === prev) ? prev : firstWithData;
+        return prev && cached.some(r => r.pabrik === prev) ? prev : firstWithData;
       });
       setMonthlyLoading(false);
-    }, (err) => {
-      console.error("Monthly onSnapshot error:", err);
-      triggerToast("Gagal memuat data bulanan: " + (err?.message || String(err)), "er");
-      setMonthlyData([]);
-      setMonthlyLoading(false);
-    });
+    }
 
-    return () => unsub();
+    // Cache miss → getDocs sekali
+    const loadMonthly = async () => {
+      try {
+        const q = query(
+          collection(db, "laporan_kantong"),
+          where("tanggal", ">=", startDate),
+          where("tanggal", "<=", endDate),
+        );
+        const snap = await getDocs(q);
+        const items: LaporanKantong[] = [];
+        snap.forEach((docSnap) => {
+          const data = docSnap.data();
+          items.push({
+            id: docSnap.id,
+            vendor: data.vendor || "",
+            nama: data.nama || "",
+            pabrik: data.pabrik || "",
+            shift: Number(data.shift) || 1,
+            tanggal: data.tanggal || "",
+            utuh: Number(data.utuh) || 0,
+            pecah: Number(data.pecah) || 0,
+            sortir: Number(data.sortir) || 0,
+            total: Number(data.total) || 0,
+            createdBy: data.createdBy || "",
+            updatedAt: data.updatedAt || ""
+          });
+        });
+        setMonthlyData(items);
+        setCache(cacheKey, items, 30 * 24 * 60 * 60 * 1000);
+        const firstWithData = PABRIK_LIST.find(f => items.some(r => r.pabrik === f));
+        setSelectedFactory(prev => {
+          if (!firstWithData) return "Pabrik Baturaja 1 (PBR 1)";
+          return prev && items.some(r => r.pabrik === prev) ? prev : firstWithData;
+        });
+        setMonthlyLoading(false);
+      } catch (err) {
+        console.error("Monthly getDocs error:", err);
+        triggerToast("Gagal memuat data bulanan: " + (err?.message || String(err)), "er");
+        if (!cached) setMonthlyData([]);
+        setMonthlyLoading(false);
+      }
+    };
+    loadMonthly();
   }, [showExportPreview, exportPreviewType, exportMonth, currentUser, isAllowed]);
 
   // Excel Export — modals flow

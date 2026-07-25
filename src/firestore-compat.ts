@@ -29,18 +29,6 @@ function toTable(collection: string): string {
   return collection; // same name
 }
 
-// Map table → primary key column (Firestore uses 'id' for everything,
-// but Supabase tables have different PK column names)
-const PK_MAP: Record<string, string> = {
-  allowed_users: "email",
-  locked_dates: "date",
-  app_meta: "key",
-  stock_awal_overrides: "pabrik",
-};
-function getPK(table: string): string {
-  return PK_MAP[table] || "id";
-}
-
 // Convert Firestore camelCase data → Supabase snake_case
 function toSnake(obj: Record<string, any>): Record<string, any> {
   const result: Record<string, any> = {};
@@ -69,12 +57,12 @@ function toCamel(obj: Record<string, any>): Record<string, any> {
 
 /** Mimic doc(db, collection, id) */
 export function doc(_db: any, collection: string, id: string) {
-  return { _table: toTable(collection), _id: id, _pk: getPK(toTable(collection)) };
+  return { _table: toTable(collection), _id: id };
 }
 
 /** Mimic collection(db, name) */
 export function collection(_db: any, name: string) {
-  return { _table: toTable(name), _pk: getPK(toTable(name)), _filters: [] as any[], _orderBy: null as any, _limit: null as number | null };
+  return { _table: toTable(name), _filters: [] as any[], _orderBy: null as any, _limit: null as number | null };
 }
 
 /** Mimic query(collectionRef, ...constraints) */
@@ -109,11 +97,10 @@ export function limit(n: number) {
 
 /** Mimic getDoc(ref) → single document */
 export async function getDoc(ref: any): Promise<FakeDocSnapshot> {
-  const pk = ref._pk || "id";
   const { data, error } = await supabase
     .from(ref._table)
     .select("*")
-    .eq(pk, ref._id)
+    .eq("id", ref._id)
     .single();
 
   if (error || !data) {
@@ -121,7 +108,7 @@ export async function getDoc(ref: any): Promise<FakeDocSnapshot> {
   }
   const camel = toCamel(data);
   return {
-    id: data[pk] || ref._id,
+    id: data.id || ref._id,
     data: () => camel,
     exists: true,
   };
@@ -161,9 +148,8 @@ export async function getDocs(qRef: any): Promise<FakeSnapshot> {
   }
 
   const rows = (data || []).map(toCamel);
-  const pk = qRef._pk || "id";
   const docs: FakeDocSnapshot[] = rows.map((row: any) => ({
-    id: row[pk] || row.id,
+    id: row.id,
     data: () => row,
     exists: true,
   }));
@@ -185,17 +171,14 @@ export async function getDocs(qRef: any): Promise<FakeSnapshot> {
 
 /** Mimic setDoc(ref, data, options?) */
 export async function setDoc(ref: any, data: any, options?: { merge?: boolean }): Promise<void> {
-  const pk = ref._pk || "id";
-  const row = toSnake({ ...data });
-  row[pk] = ref._id; // set PK column
-  const { error } = await supabase.from(ref._table).upsert(row, { onConflict: pk });
+  const row = toSnake({ ...data, id: ref._id });
+  const { error } = await supabase.from(ref._table).upsert(row, { onConflict: "id" });
   if (error) console.error("[Supabase setDoc]", error);
 }
 
 /** Mimic deleteDoc(ref) */
 export async function deleteDoc(ref: any): Promise<void> {
-  const pk = ref._pk || "id";
-  const { error } = await supabase.from(ref._table).delete().eq(pk, ref._id);
+  const { error } = await supabase.from(ref._table).delete().eq("id", ref._id);
   if (error) console.error("[Supabase deleteDoc]", error);
 }
 

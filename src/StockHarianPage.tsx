@@ -189,6 +189,9 @@ export default function StockHarianPage({
             if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) allDates.add(date);
           }
         });
+        // Selalu masukkan selectedDate supaya cascade jalan
+        // (stock awal hari ini = stock akhir kemarin)
+        allDates.add(selectedDate);
 
         if (allDates.size === 0) return;
         const sortedDates = Array.from(allDates).sort();

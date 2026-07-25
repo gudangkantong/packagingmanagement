@@ -20,9 +20,7 @@ import {
   query,
   where,
   orderBy,
-  limit,
-  db,
-} from "./firestore-compat";
+} from "firebase/firestore";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Plus,
@@ -52,8 +50,7 @@ import {
   Package,
   Save
 } from "lucide-react";
-import { auth, firebaseConfig } from "./firebase";
-import { db } from "./firestore-compat";
+import { auth, db, firebaseConfig } from "./firebase";
 import { getCached, setCache, removeCache } from "./utils/cache";
 import { LaporanKantong, AllowedUser, LockedDate, ROLE_MAP, PABRIK_ROLE_MAP, PenerimaanData, PengirimanData } from "./types";
 import StockHarianPage from "./StockHarianPage";
@@ -571,7 +568,7 @@ export default function App() {
         if (datesToFetch.length > 0) {
           // Fetch only uncached dates
           const laporanQuery = query(
-            "laporan_kantong",
+            collection(db, "laporan_kantong"),
             where("tanggal", ">=", datesToFetch[0]),
             where("tanggal", "<=", datesToFetch[datesToFetch.length - 1]),
             orderBy("tanggal", "desc")
@@ -700,7 +697,7 @@ export default function App() {
     //    For older dates: one-time getDocs
     if (isInRealtimeRange) {
       const reportsQuery = query(
-        "laporan_kantong",
+        collection(db, "laporan_kantong"),
         where("tanggal", ">=", realtimeFromDate),
         where("tanggal", "<=", realtimeToDate),
         orderBy("tanggal", "desc")
@@ -752,7 +749,7 @@ export default function App() {
     } else {
       // Old date: onSnapshot supaya tetap real-time saat user lain update
       const selectedDateQuery = query(
-        "laporan_kantong",
+        collection(db, "laporan_kantong"),
         where("tanggal", "==", selectedDate),
         orderBy("tanggal", "desc")
       );
@@ -846,7 +843,7 @@ export default function App() {
       return;
     }
 
-    const usersQuery = "allowed_users";
+    const usersQuery = collection(db, "allowed_users");
     const unsubUsers = onSnapshot(usersQuery, (querySnapshot) => {
       const items: AllowedUser[] = [];
       querySnapshot.forEach((docSnap) => {
@@ -875,7 +872,7 @@ export default function App() {
       return;
     }
 
-    const lockedQuery = "locked_dates";
+    const lockedQuery = collection(db, "locked_dates");
     const unsubLocked = onSnapshot(lockedQuery, (querySnapshot) => {
       const datesMap: Record<string, LockedDate> = {};
       querySnapshot.forEach((docSnap) => {
@@ -912,7 +909,7 @@ export default function App() {
       defaults: string[]
     ) => {
       try {
-        const { getDocs, deleteDoc } = await import("./firestore-compat");
+        const { getDocs, deleteDoc } = await import("firebase/firestore");
         const snap = await getDocs(collection(db, collectionName));
         const existingNames = new Set<string>();
         const existingDocs: Record<string, string> = {};
@@ -961,11 +958,11 @@ export default function App() {
       await bootstrapCollection("pabrik_list", PABRIK_LIST);
 
       try {
-        const { getDocs: getDocsFn } = await import("./firestore-compat");
+        const { getDocs: getDocsFn } = await import("firebase/firestore");
         const [vSnap, jSnap, pSnap] = await Promise.all([
-          getDocsFn("vendors"),
-          getDocsFn("jenis_kantong"),
-          getDocsFn("pabrik_list"),
+          getDocsFn(collection(db, "vendors")),
+          getDocsFn(collection(db, "jenis_kantong")),
+          getDocsFn(collection(db, "pabrik_list")),
         ]);
 
         const vItems: string[] = [];
@@ -1459,7 +1456,7 @@ export default function App() {
     };
 
     try {
-      await setDoc(doc(db, "laporan_kantong", docId), entryData);
+      await setDoc(doc(db, "laporan_kantong", docId), entryData, { merge: true });
       updateLaporanCache(entryData as LaporanKantong); // incremental cache update
       bumpLastUpdate(); // notify other devices
       setIsModalOpen(false);
@@ -1888,7 +1885,7 @@ export default function App() {
     const endDate = `${year}-${m}-${String(lastDay).padStart(2, '0')}`;
 
     const q = query(
-      "laporan_kantong",
+      collection(db, "laporan_kantong"),
       where("tanggal", ">=", startDate),
       where("tanggal", "<=", endDate),
     );

@@ -787,48 +787,87 @@ export default function App() {
     }
   }, [currentUser, isAllowed, selectedDate, refreshTrigger]);
 
-  // Penerimaan: onSnapshot real-time untuk semua user (fix: data stale sebelumnya)
+  // Penerimaan: one-time read + cache (hemat Firestore reads)
+  // Data ini jarang berubah, tidak perlu onSnapshot real-time
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setPenerimaanList([]); return; }
 
-    const unsub = onSnapshot(collection(db, "penerimaan_data"), (snap) => {
-      const items: PenerimaanData[] = [];
-      snap.forEach((d) => {
-        const data = d.data();
-        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+    // Load dari cache dulu supaya UI langsung tampil
+    const cached = getCached<PenerimaanData[]>("penerimaan_data");
+    if (cached) setPenerimaanList(cached);
+
+    // One-time read dari server
+    import("firebase/firestore").then(({ getDocs: getDocsFn }) => {
+      getDocsFn(collection(db, "penerimaan_data")).then(snap => {
+        const items: PenerimaanData[] = [];
+        snap.forEach(d => {
+          const data = d.data();
+          items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+        });
+        setPenerimaanList(items);
+        setCache("penerimaan_data", items, 30 * 24 * 60 * 60 * 1000);
+      }).catch(err => {
+        console.error("Failed to read penerimaan_data:", err);
+        if (!cached) setPenerimaanList([]);
       });
-      setPenerimaanList(items);
-      setCache("penerimaan_data", items, 30 * 24 * 60 * 60 * 1000);
-    }, (err) => {
-      console.error("Failed to sync penerimaan_data:", err);
-      // Fallback ke cache kalau onSnapshot gagal
-      const cached = getCached<PenerimaanData[]>("penerimaan_data");
-      if (cached) setPenerimaanList(cached);
     });
 
-    return () => unsub();
-  }, [currentUser, isAllowed]);
-  // Pengiriman: onSnapshot real-time untuk semua user (fix: data stale sebelumnya)
+    // Re-read setiap 5 menit atau saat refreshTrigger berubah
+    const interval = setInterval(() => {
+      import("firebase/firestore").then(({ getDocs: getDocsFn }) => {
+        getDocsFn(collection(db, "penerimaan_data")).then(snap => {
+          const items: PenerimaanData[] = [];
+          snap.forEach(d => {
+            const data = d.data();
+            items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+          });
+          setPenerimaanList(items);
+          setCache("penerimaan_data", items, 30 * 24 * 60 * 60 * 1000);
+        }).catch(() => {});
+      });
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [currentUser, isAllowed, refreshTrigger]);
+
+  // Pengiriman: one-time read + cache (hemat Firestore reads)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setPengirimanList([]); return; }
 
-    const unsub = onSnapshot(collection(db, "pengiriman_data"), (snap) => {
-      const items: PengirimanData[] = [];
-      snap.forEach((d) => {
-        const data = d.data();
-        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+    const cached = getCached<PengirimanData[]>("pengiriman_data");
+    if (cached) setPengirimanList(cached);
+
+    import("firebase/firestore").then(({ getDocs: getDocsFn }) => {
+      getDocsFn(collection(db, "pengiriman_data")).then(snap => {
+        const items: PengirimanData[] = [];
+        snap.forEach(d => {
+          const data = d.data();
+          items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+        });
+        setPengirimanList(items);
+        setCache("pengiriman_data", items, 30 * 24 * 60 * 60 * 1000);
+      }).catch(err => {
+        console.error("Failed to read pengiriman_data:", err);
+        if (!cached) setPengirimanList([]);
       });
-      setPengirimanList(items);
-      setCache("pengiriman_data", items, 30 * 24 * 60 * 60 * 1000);
-    }, (err) => {
-      console.error("Failed to sync pengiriman_data:", err);
-      // Fallback ke cache kalau onSnapshot gagal
-      const cached = getCached<PengirimanData[]>("pengiriman_data");
-      if (cached) setPengirimanList(cached);
     });
 
-    return () => unsub();
-  }, [currentUser, isAllowed]);
+    const interval = setInterval(() => {
+      import("firebase/firestore").then(({ getDocs: getDocsFn }) => {
+        getDocsFn(collection(db, "pengiriman_data")).then(snap => {
+          const items: PengirimanData[] = [];
+          snap.forEach(d => {
+            const data = d.data();
+            items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+          });
+          setPengirimanList(items);
+          setCache("pengiriman_data", items, 30 * 24 * 60 * 60 * 1000);
+        }).catch(() => {});
+      });
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [currentUser, isAllowed, refreshTrigger]);
 
   // allowed_users: onSnapshot (lebih murah drpd polling buat 50 user)
   useEffect(() => {

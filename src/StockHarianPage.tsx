@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import {
-  collection, doc, setDoc, onSnapshot, getDocs, query, where,
-} from "firebase/firestore";
+import { doc, setDoc, onSnapshot, db, getDocs, query, collection, where } from "./firestore-compat";
 import { Save, Loader2, Package, Edit2, Trash2 } from "lucide-react";
-import { db } from "./firebase";
 import { StockHarian, LaporanKantong, AllowedUser, PenerimaanData, PengirimanData } from "./types";
 import { getDateString, formatDateDisplay } from "./utils";
 import { JENIS_KANTONG } from "./csvUtils";

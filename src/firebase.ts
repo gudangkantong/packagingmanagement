@@ -1,9 +1,8 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { initializeFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDWNfn8Eee2YJeCHisM5rO1oVdxmW1_Fek",
+  apiKey: "AIzaSy…_Fek",
   authDomain: "gen-lang-client-0065314458.firebaseapp.com",
   projectId: "gen-lang-client-0065314458",
   storageBucket: "gen-lang-client-0065314458.firebasestorage.app",
@@ -14,7 +13,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-// Initialize Firestore with the specific custom database ID provisioned for this applet
-const db = initializeFirestore(app, {}, "ai-studio-laporanpemakaian-f52ca6cd-9816-43c6-9473-dc3719544175");
+// Firestore removed — using Supabase instead
+// See: src/supabase.ts, src/dataLayer.ts, src/db-compat.ts
 
-export { app, auth, db, firebaseConfig };
+export { app, auth, firebaseConfig };

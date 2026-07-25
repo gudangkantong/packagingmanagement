@@ -351,72 +351,73 @@ export default function App() {
     }, 4000);
   };
 
-  // Debounced: update meta timestamp untuk sync antar device (max 1×/30 detik hemat writes)
-  const lastBumpRef = useRef(0);
+  // GRANULAR SYNC: nulis per-collection timestamp biar device lain
+  // cuma reload cache yg jenisnya berubah (hemat reads).
+  // dataType: "laporan" | "penerimaan" | "pengiriman" | "stock" | "master"
+  const lastBumpRef = useRef<Record<string, number>>({});
   const midnightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const bumpLastUpdate = async () => {
+  const bumpLastUpdate = async (dataType?: "laporan" | "penerimaan" | "pengiriman" | "stock" | "master") => {
+    const key = dataType || "generic";
     const now = Date.now();
-    if (now - lastBumpRef.current < 30000) return; // skip kalo <30 detik sejak bump terakhir
-    lastBumpRef.current = now;
+    // Debounce per-jenis: skip kalo <30 detik sejak bump terakhir untuk jenis yg sama
+    if (lastBumpRef.current[key] && now - lastBumpRef.current[key] < 30000) return;
+    lastBumpRef.current[key] = now;
     try {
-      await setDoc(doc(db, "app_meta", "last_update"), {
-        timestamp: new Date().toISOString(),
-        updatedBy: currentUser?.email || "unknown"
-      }, { merge: true });
+      const ts = new Date().toISOString();
+      const patch: Record<string, unknown> = { updatedBy: currentUser?.email || "unknown" };
+      if (dataType) patch[`sync.${dataType}`] = ts;
+      else patch.timestamp = ts;
+      await setDoc(doc(db, "app_meta", "sync_timestamps"), patch, { merge: true });
     } catch (err) {
-      console.error("Failed to bump last_update:", err);
+      console.error("Failed to bump sync_timestamps:", err);
     }
   };
 
-  // Listen to app_meta/last_update untuk auto-sync antar device
+  // GRANULAR SYNC: dengarkan per-collection timestamp, cuma clear cache
+  // yg jenisnya berubah (hemat reads — gak reload semua data tiap ada edit).
   useEffect(() => {
     if (!currentUser || isAllowed !== true) return;
 
-    const metaRef = doc(db, "app_meta", "last_update");
+    const metaRef = doc(db, "app_meta", "sync_timestamps");
     const unsub = onSnapshot(metaRef, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        const remoteTimestamp = data?.timestamp;
-        const localTimestamp = getCached<string>("last_meta_timestamp");
+      if (!snap.exists()) return;
+      const sync = (snap.data()?.sync as Record<string, string>) || {};
 
-        if (remoteTimestamp && remoteTimestamp !== localTimestamp) {
-          // Ada update dari device lain → clear cache & refresh
-          setCache("last_meta_timestamp", remoteTimestamp, 365 * 24 * 60 * 60 * 1000);
+      const local = getCached<Record<string, string>>("sync_versions") || {};
+      const changed: string[] = [];
 
-          // Clear cache laporan per tanggal (paksa refresh)
-          // Hapus semua cache laporan_ dari localStorage
-          const keys = Object.keys(localStorage);
-          keys.forEach((key) => {
-            if (key.includes("laporan_")) localStorage.removeItem(key);
-          });
-
-          // Clear stock harian cache
-          const stockKeys = Object.keys(localStorage);
-          stockKeys.forEach((key) => {
-            if (key.includes("stock_harian_")) localStorage.removeItem(key);
-          });
-
-          // Clear monthly preview cache
-          const monthlyKeys = Object.keys(localStorage);
-          monthlyKeys.forEach((key) => {
-            if (key.includes("monthly_")) localStorage.removeItem(key);
-          });
-
-          // Clear penerimaan & pengiriman cache (biar export pake data terbaru)
-          removeCache("penerimaan_data");
-          removeCache("pengiriman_data");
-
-          // Clear master data cache
-          removeCache("vendors");
-          removeCache("jenis_kantong");
-          removeCache("pabrik_list");
-
-          console.log("[AutoSync] Remote update detected, refreshing data...");
-          setRefreshTrigger(prev => prev + 1); // trigger data refresh
+      (["laporan", "penerimaan", "pengiriman", "stock", "master"] as const).forEach((t) => {
+        const remote = sync[t];
+        if (remote && remote !== local[t]) {
+          changed.push(t);
+          local[t] = remote;
         }
+      });
+
+      if (changed.length === 0) return;
+
+      setCache("sync_versions", local, 365 * 24 * 60 * 60 * 1000);
+      console.log(`[GranularSync] perubahan terdeteksi: ${changed.join(", ")}`);
+
+      // Clear HANYA cache yg jenisnya berubah
+      if (changed.includes("laporan") || changed.includes("stock")) {
+        Object.keys(localStorage).forEach((k) => {
+          if (k.includes("laporan_") || k.includes("stock_harian_") || k.includes("monthly_")) {
+            localStorage.removeItem(k);
+          }
+        });
       }
+      if (changed.includes("penerimaan")) removeCache("penerimaan_data");
+      if (changed.includes("pengiriman")) removeCache("pengiriman_data");
+      if (changed.includes("master")) {
+        removeCache("vendors");
+        removeCache("jenis_kantong");
+        removeCache("pabrik_list");
+      }
+
+      setRefreshTrigger(prev => prev + 1); // trigger reload selective
     }, (err) => {
-      console.warn("Meta listener failed:", err.message);
+      console.warn("Granular sync listener failed:", err.message);
     });
 
     return () => unsub();
@@ -1255,7 +1256,7 @@ export default function App() {
           return next.sort((a, b) => (orderMap.get(a) ?? 999) - (orderMap.get(b) ?? 999));
         });
       }
-      bumpLastUpdate(); // notify other devices
+      bumpLastUpdate("master"); // notify other devices (granular)
       setValue("");
       triggerToast(`${label} "${trimmed}" berhasil ditambahkan`, "ok");
     } catch (err: any) {
@@ -1289,7 +1290,7 @@ export default function App() {
           } else if (collectionName === "pabrik_list") {
             setDynamicPabrikList(prev => prev.filter(v => v !== displayName));
           }
-          bumpLastUpdate(); // notify other devices
+          bumpLastUpdate("master"); // notify other devices (granular)
           triggerToast(`${label} "${displayName}" berhasil dihapus`, "ok");
         } catch (err) {
           console.error(`Delete ${label} failed:`, err);
@@ -1339,7 +1340,7 @@ export default function App() {
       } else if (coll === "pabrik_list") {
         setDynamicPabrikList(prev => prev.map(v => v === editingMasterData.originalName ? trimmed : v));
       }
-      bumpLastUpdate(); // notify other devices
+      bumpLastUpdate("master"); // notify other devices (granular)
       setEditingMasterData(null);
       triggerToast(`Berhasil mengubah nama menjadi "${trimmed}"`, "ok");
     } catch (err: any) {
@@ -1458,7 +1459,7 @@ export default function App() {
     try {
       await setDoc(doc(db, "laporan_kantong", docId), entryData, { merge: true });
       updateLaporanCache(entryData as LaporanKantong); // incremental cache update
-      bumpLastUpdate(); // notify other devices
+      bumpLastUpdate("laporan"); // notify other devices (granular)
       setIsModalOpen(false);
       triggerToast(editingId ? "Laporan diperbarui" : "Laporan ditambahkan", "ok");
     } catch (err) {
@@ -1486,7 +1487,7 @@ export default function App() {
         try {
           await deleteDoc(doc(db, "laporan_kantong", id));
           if (item?.tanggal) removeLaporanFromCache(id, item.tanggal);
-          bumpLastUpdate(); // notify other devices
+          bumpLastUpdate("laporan"); // notify other devices (granular)
           triggerToast("Laporan berhasil dihapus", "ok");
         } catch (err) {
           console.error("Delete entry failed:", err);
@@ -1511,7 +1512,7 @@ export default function App() {
       const pnData: PenerimaanData = { id: docId, nama: pnFormNama, pabrik: pnFormPabrik, tanggal: pnFormTanggal, jumlah: parseInt(pnFormJumlah) || 0, sumber: pnFormSumber, keterangan: pnFormKeterangan, createdBy: currentUser.email || "", createdAt: new Date().toISOString() };
       await setDoc(doc(db, "penerimaan_data", docId), pnData);
       updatePenerimaanCache(pnData);
-      bumpLastUpdate(); // notify other devices
+      bumpLastUpdate("penerimaan"); // notify other devices (granular)
       triggerToast(`Penerimaan ${pnFormNama} (${PABRIK_SHORT[pnFormPabrik] || pnFormPabrik}) berhasil ${editingPenerimaanId ? "diperbarui" : "disimpan"}`, "ok");
       setPnFormJumlah("");
       setPnFormKeterangan("");
@@ -1542,7 +1543,7 @@ export default function App() {
       const pgData: PengirimanData = { id: docId, nama: pgFormNama, pabrik: pgFormPabrik, tanggal: pgFormTanggal, jumlah: parseInt(pgFormJumlah) || 0, tujuan: pgFormTujuan, keterangan: pgFormKeterangan, createdBy: currentUser.email || "", createdAt: new Date().toISOString() };
       await setDoc(doc(db, "pengiriman_data", docId), pgData);
       updatePengirimanCache(pgData);
-      bumpLastUpdate(); // notify other devices
+      bumpLastUpdate("pengiriman"); // notify other devices (granular)
       triggerToast(`Pengiriman ${pgFormNama} (${PABRIK_SHORT[pgFormPabrik] || pgFormPabrik}) berhasil ${editingPengirimanId ? "diperbarui" : "disimpan"}`, "ok");
       setPgFormJumlah("");
       setPgFormKeterangan("");
@@ -1569,7 +1570,7 @@ export default function App() {
         try {
           await deleteDoc(doc(db, "penerimaan_data", id));
           removePenerimaanFromCache(id);
-          bumpLastUpdate(); // notify other devices
+          bumpLastUpdate("penerimaan"); // notify other devices (granular)
           triggerToast("Data penerimaan berhasil dihapus", "ok");
         } catch (err) {
           console.error("Delete penerimaan failed:", err);
@@ -1589,7 +1590,7 @@ export default function App() {
         try {
           await deleteDoc(doc(db, "pengiriman_data", id));
           removePengirimanFromCache(id);
-          bumpLastUpdate(); // notify other devices
+          bumpLastUpdate("pengiriman"); // notify other devices (granular)
           triggerToast("Data pengiriman berhasil dihapus", "ok");
         } catch (err) {
           console.error("Delete pengiriman failed:", err);
@@ -1767,7 +1768,7 @@ export default function App() {
               unlockedAt: new Date().toISOString()
             }, { merge: true });
             triggerToast(`Status tanggal ${formatDateDisplay(selectedDate)} diubah menjadi Unverified.`, "ok");
-            bumpLastUpdate();
+            bumpLastUpdate("laporan");
           } else {
             await setDoc(docRef, {
               locked: true,
@@ -1775,7 +1776,7 @@ export default function App() {
               lockedAt: new Date().toISOString()
             }, { merge: true });
             triggerToast(`Status tanggal ${formatDateDisplay(selectedDate)} diubah menjadi Verified.`, "ok");
-            bumpLastUpdate();
+            bumpLastUpdate("laporan");
 
             // Auto-upload to Drive for Admin Utama
             if (isMasterAdmin && driveToken) {

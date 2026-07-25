@@ -96,20 +96,20 @@ service cloud.firestore {
     }
 
     // === Penerimaan Data (from Pelaporan page) ===
-    // Only super_admin can create/delete; all authenticated can read
+    // Admin & super_admin can create/update
     match /penerimaan_data/{id} {
       allow read: if isAuthenticated();
-      allow create: if isSuperAdmin();
-      allow update: if isSuperAdmin();
+      allow create: if isAdmin();  // ✅ PERBAIKI: Dari isSuperAdmin() ke isAdmin()
+      allow update: if isAdmin();  // ✅ PERBAIKI: Dari isSuperAdmin() ke isAdmin()
       allow delete: if isSuperAdmin();
     }
 
     // === Pengiriman Data (from Pelaporan page) ===
-    // Only super_admin can create/delete; all authenticated can read
+    // Admin & super_admin can create/update
     match /pengiriman_data/{id} {
       allow read: if isAuthenticated();
-      allow create: if isSuperAdmin();
-      allow update: if isSuperAdmin();
+      allow create: if isAdmin();  // ✅ PERBAIKI: Dari isSuperAdmin() ke isAdmin()
+      allow update: if isAdmin();  // ✅ PERBAIKI: Dari isSuperAdmin() ke isAdmin()
       allow delete: if isSuperAdmin();
     }
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   collection, doc, setDoc, onSnapshot, query, where, getDocs, orderBy, limit,
 } from "firebase/firestore";
+import { getDocsFromServer } from "firebase/firestore";
 import { Save, Loader2, Package, RefreshCw, Edit2, Trash2 } from "lucide-react";
 import { db } from "./firebase";
 import { StockHarian, LaporanKantong, AllowedUser, PenerimaanData, PengirimanData } from "./types";
@@ -160,7 +161,7 @@ export default function StockHarianPage({
         setLoading(false);
         return;
       }
-      getDocs(q).then(snap => {
+      getDocsFromServer(q).then(snap => {
         const data: Record<string, StockHarian> = {};
         snap.forEach(d => {
           const v = d.data();
@@ -227,7 +228,7 @@ export default function StockHarianPage({
         setPrevDayLoaded(true);
         return;
       }
-      getDocs(q).then(snap => {
+      getDocsFromServer(q).then(snap => {
         const data: Record<string, StockHarian> = {};
         snap.forEach(d => { data[d.id] = d.data() as StockHarian; });
         setPrevDayData(data);
@@ -505,7 +506,7 @@ export default function StockHarianPage({
               where("tanggal", "<=", today),
               orderBy("tanggal", "desc")
             );
-            const locSnap = await getDocs(locQuery);
+            const locSnap = await getDocsFromServer(locQuery);
 
             if (pabrik === OPT_GUDANG) {
               console.log(`[StockHarian] OPT: fetched ${locSnap.size} stock_harian docs FROM SERVER`);
@@ -861,17 +862,20 @@ export default function StockHarianPage({
     let sa: number;
 
     if (isOPT) {
-      // === GUDANG OPT: hitung stockAwal langsung dari prevDayData ===
+      // === GUDANG OPT: Prioritas: manuallyEdited > saved stockData > prevDayData ===
       const saved = stockData[docId];
       if (saved && saved.manuallyEdited) {
+        // Admin sudah edit manual → gunakan nilai tersimpan
+        sa = Number(saved.stockAwal) || 0;
+      } else if (saved && saved.stockAwal !== undefined) {
+        // Ada data tersimpan (dari cascade/DirectSync/onSnapshot) → gunakan itu
         sa = Number(saved.stockAwal) || 0;
       } else {
+        // Belum ada data → hitung dari stockAkhir kemarin
         const prevId = makeDocId(pabrik, nama, prevDate);
         const pv = prevDayData[prevId];
         const prevAkhir = pv ? Number(pv.stockAkhir) : NaN;
-        sa = !isNaN(prevAkhir) ? prevAkhir : (saved ? Number(saved.stockAwal) || 0 : 0);
-        // Debug: log SETIAP render untuk diagnosa
-        console.log(`[OPT] ${nama}: prevId=${prevId} prevDayData.exists=${!!pv} prevAkhir=${prevAkhir} → sa=${sa}`);
+        sa = !isNaN(prevAkhir) ? prevAkhir : 0;
       }
     } else {
       const b = editBuffer[docId] || { stockAwal: "0" };
@@ -937,7 +941,7 @@ export default function StockHarianPage({
                   <td className="px-3 py-2 text-right">
                     {isMasterAdmin ? (
                       <div className="flex items-center justify-end gap-1.5">
-                        <input type="text" inputMode="numeric" value={touchedInputs[docId] ? (buf.stockAwal ? Number(buf.stockAwal).toLocaleString("en-US") : "") : (d.stockAwal ? d.stockAwal.toLocaleString("en-US") : "")} onChange={e => handleInputChange(docId, e.target.value)} onFocus={() => handleInputFocus(docId)} onBlur={() => handleInputBlur(docId)} className="w-28 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
+                        <input type="text" inputMode="numeric" value={touchedInputs[docId] ? (buf.stockAwal ? Number(buf.stockAwal).toLocaleString("en-US") : "") : (buf.stockAwal ? Number(buf.stockAwal).toLocaleString("en-US") : (d.stockAwal ? d.stockAwal.toLocaleString("en-US") : ""))} onChange={e => handleInputChange(docId, e.target.value)} onFocus={() => handleInputFocus(docId)} onBlur={() => handleInputBlur(docId)} className="w-28 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
                         {changed && (
                           <button onClick={(e) => { e.stopPropagation(); handleSaveRow(OPT_GUDANG, nama, docId); }} disabled={saving === docId} className="text-emerald-600 hover:text-emerald-800 disabled:text-gray-300 transition-colors" title="Simpan">
                             {saving === docId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

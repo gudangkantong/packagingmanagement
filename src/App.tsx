@@ -2835,7 +2835,6 @@ export default function App() {
                       penerimaanList={penerimaanList}
                       pengirimanList={pengirimanList}
                       bumpLastUpdate={bumpLastUpdate}
-                      refreshTrigger={refreshTrigger}
                       onEditPenerimaan={handleEditPenerimaan}
                       onDeletePenerimaan={handleDeletePenerimaan}
                       onEditPengiriman={handleEditPengiriman}

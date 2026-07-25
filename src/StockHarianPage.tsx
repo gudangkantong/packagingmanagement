@@ -56,6 +56,7 @@ export default function StockHarianPage({
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const [touchedInputs, setTouchedInputs] = useState<Record<string, boolean>>({});
   const originalValuesRef = useRef<Record<string, string>>({});
+  const savingDocIdRef = useRef<string | null>(null);
   // Manual stock awal overrides dari Firestore (super admin edits)
   const [overrides, setOverrides] = useState<Record<string, number>>({});
 
@@ -276,9 +277,12 @@ export default function StockHarianPage({
   };
 
   const handleInputBlur = (docId: string) => {
-    const original = originalValuesRef.current[docId];
-    if (original !== undefined) {
-      setEditBuffer(p => ({ ...p, [docId]: { ...p[docId], stockAwal: original } }));
+    // Jangan revert jika user sedang klik tombol Simpan (onMouseDown sudah jalan)
+    if (savingDocIdRef.current !== docId) {
+      const original = originalValuesRef.current[docId];
+      if (original !== undefined) {
+        setEditBuffer(p => ({ ...p, [docId]: { ...p[docId], stockAwal: original } }));
+      }
     }
     setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });
     delete originalValuesRef.current[docId];
@@ -409,7 +413,7 @@ export default function StockHarianPage({
                       <div className="flex items-center justify-end gap-1.5">
                         <input type="text" inputMode="numeric" value={touchedInputs[docId] ? (buf.stockAwal ? Number(buf.stockAwal).toLocaleString("en-US") : "") : (buf.stockAwal ? Number(buf.stockAwal).toLocaleString("en-US") : (d.stockAwal ? d.stockAwal.toLocaleString("en-US") : ""))} onChange={e => handleInputChange(docId, e.target.value)} onFocus={() => handleInputFocus(docId)} onBlur={() => handleInputBlur(docId)} className="w-28 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
                         {changed && (
-                          <button onClick={(e) => { e.stopPropagation(); handleSaveRow(OPT_GUDANG, nama, docId); }} disabled={saving === docId} className="text-emerald-600 hover:text-emerald-800 disabled:text-gray-300 transition-colors" title="Simpan">
+                          <button onMouseDown={() => { savingDocIdRef.current = docId; }} onClick={(e) => { e.stopPropagation(); handleSaveRow(OPT_GUDANG, nama, docId).finally(() => { savingDocIdRef.current = null; }); }} disabled={saving === docId} className="text-emerald-600 hover:text-emerald-800 disabled:text-gray-300 transition-colors" title="Simpan">
                             {saving === docId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                           </button>
                         )}
@@ -513,7 +517,7 @@ export default function StockHarianPage({
                         <div className="flex items-center justify-end gap-1.5">
                           <input type="text" inputMode="numeric" value={buf.stockAwal ? Number(buf.stockAwal).toLocaleString("en-US") : ""} onChange={e => handleInputChange(docId, e.target.value)} onFocus={() => handleInputFocus(docId)} onBlur={() => handleInputBlur(docId)} className="w-28 text-right bg-yellow-50 border border-yellow-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300" placeholder="0" />
                           {changed && (
-                            <button onClick={(e) => { e.stopPropagation(); handleSaveRow(pabrik, nama, docId); }} disabled={saving === docId} className="text-emerald-600 hover:text-emerald-800 disabled:text-gray-300 transition-colors" title="Simpan">
+                            <button onMouseDown={() => { savingDocIdRef.current = docId; }} onClick={(e) => { e.stopPropagation(); handleSaveRow(pabrik, nama, docId).finally(() => { savingDocIdRef.current = null; }); }} disabled={saving === docId} className="text-emerald-600 hover:text-emerald-800 disabled:text-gray-300 transition-colors" title="Simpan">
                               {saving === docId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                             </button>
                           )}

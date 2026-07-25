@@ -118,9 +118,15 @@ export default function StockHarianPage({
       const docRef = doc(db, "stock_awal_overrides", pKey);
       return onSnapshot(docRef, async (snap) => {
         const data = snap.data();
+        console.log(`[DEBUG] Snapshot ${pKey}: exists=${snap.exists()}, data=`, JSON.stringify(data));
         if (data?.overrides && Object.keys(data.overrides).length > 0) {
           // Firestore punya data → pakai ini, update cache
-          setOverrides(prev => ({ ...prev, ...data.overrides }));
+          console.log(`[DEBUG] Setting overrides for ${pKey}:`, JSON.stringify(data.overrides));
+          setOverrides(prev => {
+            const merged = { ...prev, ...data.overrides };
+            console.log(`[DEBUG] Overrides after merge:`, JSON.stringify(merged));
+            return merged;
+          });
           setCache(cacheKey, data.overrides as Record<string, number>, 30 * 24 * 60 * 60 * 1000);
         } else {
           // Firestore kosong → coba cache (fallback offline)
@@ -162,6 +168,8 @@ export default function StockHarianPage({
     const todayStr = getDateString(new Date());
     if (selectedDate > todayStr) { setStockData({}); setLoading(false); return; }
     setLoading(true);
+
+    console.log(`[DEBUG] Compute effect: overrides=`, JSON.stringify(overrides), `selectedDate=${selectedDate}`);
 
     const newStockData: Record<string, StockHarian> = {};
 
@@ -306,7 +314,9 @@ export default function StockHarianPage({
       const existing = await getDoc(docRef);
       const existingOverrides = (existing.data()?.overrides as Record<string, number>) || {};
       const merged = { ...existingOverrides, [docId]: sa };
+      console.log(`[DEBUG] SaveRow: docId=${docId}, sa=${sa}, existing=`, JSON.stringify(existingOverrides), `merged=`, JSON.stringify(merged));
       await setDoc(docRef, { overrides: merged, updatedAt: new Date().toISOString() }, { merge: true });
+      console.log(`[DEBUG] SaveRow: Firestore write done for ${pKey}`);
       setCache(`stock_awal_${pKey}`, merged, 30 * 24 * 60 * 60 * 1000);
       setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });
       await bumpLastUpdate("laporan");

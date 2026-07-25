@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  collection, doc, setDoc, onSnapshot, query, where, getDocs, orderBy, limit,
+  collection, doc, setDoc, onSnapshot,
 } from "firebase/firestore";
-import { getDocsFromServer } from "firebase/firestore";
 import { Save, Loader2, Package, RefreshCw, Edit2, Trash2 } from "lucide-react";
 import { db } from "./firebase";
 import { StockHarian, LaporanKantong, AllowedUser, PenerimaanData, PengirimanData } from "./types";
 import { getDateString, formatDateDisplay } from "./utils";
-import { getCached, setCache, removeCache } from "./utils/cache";
 import { JENIS_KANTONG } from "./csvUtils";
 
 const OPT_GUDANG = "Gudang OPT";
@@ -50,8 +48,7 @@ export default function StockHarianPage({
   const userRole = currentUserData?.role || (currentUser?.isAnonymous ? "guest" : null);
   const isMasterAdmin = userRole === "super_admin";
 
-  const [prevDayData, setPrevDayData] = useState<Record<string, StockHarian>>({});
-  const [prevDayLoaded, setPrevDayLoaded] = useState(false);
+  // === LOCAL-FIRST: Stock dihitung dari data sumber, bukan dari Firestore ===
   const [stockData, setStockData] = useState<Record<string, StockHarian>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -59,41 +56,20 @@ export default function StockHarianPage({
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const [touchedInputs, setTouchedInputs] = useState<Record<string, boolean>>({});
   const originalValuesRef = useRef<Record<string, string>>({});
-  // Track doc IDs yang sudah di-sync oleh cascade/DirectSync
-  // supaya effect editBuffer tidak menimpa nilai yang sudah benar
-  const cascadeSyncedRef = useRef<Set<string>>(new Set());
-  // Reset cascadeSyncedRef saat selectedDate berubah
-  useEffect(() => { cascadeSyncedRef.current = new Set(); }, [selectedDate]);
+  // Manual stock awal overrides dari Firestore (super admin edits)
+  const [overrides, setOverrides] = useState<Record<string, number>>({});
 
   const ALL_LOCATIONS = [OPT_GUDANG, ...PABRIK_LIST];
-  const prevDate = (() => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate()-1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); })();
-
-  // Hapus semua cache stock_harian HANYA sekali saat mount
-  useEffect(() => {
-    const keys = Object.keys(localStorage);
-    keys.forEach(key => {
-      if (key.includes("stock_harian_")) localStorage.removeItem(key);
-    });
-  }, []);
 
   const makeDocId = (pabrik: string, nama: string, tanggal: string) => {
     const pKey = PABRIK_SHORT[pabrik] || pabrik;
     return `${pKey}_${nama.replace(/\s+/g, "_")}_${tanggal}`;
   };
 
-  const getPrevDate = (dateStr: string): string => {
-    const d = new Date(dateStr + "T00:00:00");
-    d.setDate(d.getDate() - 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  };
-
-  // === SEMUA NILAI DIHITUNG SECARA DINAMIS DARI LIST ===
-  // Tidak ada yang dibaca dari stockData (Firestore) selain stockAwal
-
+  // Helper functions (unchanged)
   const computePemakaian = (pabrikLabel: string, nama: string, tanggal: string): number =>
     reports.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik.includes(pabrikLabel)).reduce((s, r) => s + r.total, 0);
 
-  // Penerimaan = dari vendor + transfer masuk dari pabrik lain
   const computePenerimaan = (pabrik: string, nama: string, tanggal: string): number => {
     const directPenerimaan = penerimaanList
       .filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik)
@@ -104,15 +80,12 @@ export default function StockHarianPage({
     return directPenerimaan + incomingPengiriman;
   };
 
-  // Pengiriman keluar = data pengiriman dari pabrik ini ke pabrik lain
   const computePengiriman = (pabrik: string, nama: string, tanggal: string): number =>
     pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik).reduce((s, r) => s + r.jumlah, 0);
 
-  // Transfer masuk = pengiriman dari pabrik lain yang tujuannya ke pabrik ini (untuk detail view)
   const computeIncomingPengiriman = (pabrik: string, nama: string, tanggal: string): number =>
     pengirimanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.tujuan === pabrik).reduce((s, r) => s + r.jumlah, 0);
 
-  // Get detail data for expanded rows
   const getPenerimaanDetails = (pabrik: string, nama: string, tanggal: string) =>
     penerimaanList.filter(r => r.tanggal === tanggal && r.nama === nama && r.pabrik === pabrik);
 
@@ -129,646 +102,134 @@ export default function StockHarianPage({
     return Object.entries(vendorMap).map(([vendor, total]) => ({ vendor, total }));
   };
 
-  // Stock data: real-time listener for recent dates, cache for old dates
-  useEffect(() => {
-    if (!currentUser || isAllowed !== true) { setStockData({}); setLoading(false); return; }
-
-    const todayStr = getDateString(new Date());
-    if (selectedDate > todayStr) {
-      setStockData({});
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-
-    const cacheKey = `stock_harian_${selectedDate}`;
-    const cached = getCached<Record<string, StockHarian>>(cacheKey);
-    if (cached && Object.keys(cached).length > 0) {
-      setStockData(cached);
-      setLoading(false);
-    }
-
-    const todayMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
-    const selectedMs = new Date(selectedDate + "T00:00:00").getTime();
-    const isOldDate = Math.floor((todayMs - selectedMs) / 86400000) > 7;
-
-    const q = query(collection(db, "stock_harian"), where("tanggal", "==", selectedDate));
-
-    if (isOldDate) {
-      if (cached && Object.keys(cached).length > 0) {
-        setStockData(cached);
-        setLoading(false);
-        return;
-      }
-      getDocsFromServer(q).then(snap => {
-        const data: Record<string, StockHarian> = {};
-        snap.forEach(d => {
-          const v = d.data();
-          data[d.id] = { id: d.id, pabrik: v.pabrik || "", nama: v.nama || "", tanggal: v.tanggal || "", stockAwal: Number(v.stockAwal) || 0, penerimaan: Number(v.penerimaan) || 0, pengiriman: Number(v.pengiriman) || 0, pemakaian: Number(v.pemakaian) || 0, stockAkhir: Number(v.stockAkhir) || 0, createdBy: v.createdBy || "", updatedAt: v.updatedAt || "" };
-        });
-        setStockData(data);
-        setLoading(false);
-        setCache(cacheKey, data, 7 * 24 * 60 * 60 * 1000);
-      }).catch(err => {
-        console.error("[StockHarian] getDocs error:", err);
-        triggerToast("Gagal load stock: " + (err?.code || err?.message || "unknown"), "er");
-        setLoading(false);
-      });
-      return;
-    }
-
-    const unsub = onSnapshot(q, snap => {
-      const data: Record<string, StockHarian> = {};
-      snap.forEach(d => {
-        const v = d.data();
-        data[d.id] = { id: d.id, pabrik: v.pabrik || "", nama: v.nama || "", tanggal: v.tanggal || "", stockAwal: Number(v.stockAwal) || 0, penerimaan: Number(v.penerimaan) || 0, pengiriman: Number(v.pengiriman) || 0, pemakaian: Number(v.pemakaian) || 0, stockAkhir: Number(v.stockAkhir) || 0, createdBy: v.createdBy || "", updatedAt: v.updatedAt || "" };
-      });
-      setStockData(data);
-      setLoading(false);
-      setCache(cacheKey, data, 7 * 24 * 60 * 60 * 1000);
-    }, err => {
-      console.error("[StockHarian] snapshot error:", err);
-      const _hasCache = cached && Object.keys(cached).length > 0;
-      if (!_hasCache) {
-        triggerToast("Gagal sync stock: " + (err?.code || err?.message || "unknown"), "er");
-      }
-      setLoading(false);
-    });
-    return () => unsub();
-  }, [currentUser, isAllowed, selectedDate]);
-
-  // Prev day data: real-time for recent, cache for old
-  useEffect(() => {
-    if (!currentUser || isAllowed !== true) { setPrevDayData({}); setPrevDayLoaded(false); return; }
-
-    const todayStr = getDateString(new Date());
-    if (selectedDate > todayStr) {
-      setPrevDayData({});
-      setPrevDayLoaded(true);
-      return;
-    }
-
-    const cacheKey = `stock_harian_${prevDate}`;
-    const cached = getCached<Record<string, StockHarian>>(cacheKey);
-    if (cached && Object.keys(cached).length > 0) {
-      setPrevDayData(cached);
-      setPrevDayLoaded(true);
-    }
-
-    const todayMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
-    const prevMs = new Date(prevDate + "T00:00:00").getTime();
-    const isOldDate = Math.floor((todayMs - prevMs) / 86400000) > 7;
-
-    const q = query(collection(db, "stock_harian"), where("tanggal", "==", prevDate));
-
-    if (isOldDate) {
-      if (cached && Object.keys(cached).length > 0) {
-        setPrevDayData(cached);
-        setPrevDayLoaded(true);
-        return;
-      }
-      getDocsFromServer(q).then(snap => {
-        const data: Record<string, StockHarian> = {};
-        snap.forEach(d => { data[d.id] = d.data() as StockHarian; });
-        setPrevDayData(data);
-        setPrevDayLoaded(true);
-        setCache(cacheKey, data, 7 * 24 * 60 * 60 * 1000);
-      }).catch(err => { console.error(err); setPrevDayLoaded(true); });
-      return;
-    }
-
-    const unsub = onSnapshot(q, snap => {
-      const data: Record<string, StockHarian> = {};
-      snap.forEach(d => { data[d.id] = d.data() as StockHarian; });
-      setPrevDayData(data);
-      setPrevDayLoaded(true);
-      setCache(cacheKey, data, 7 * 24 * 60 * 60 * 1000);
-    }, err => { console.error(err); setPrevDayLoaded(true); });
-    return () => unsub();
-  }, [currentUser, isAllowed, prevDate]);
-
-  useEffect(() => {
-    if (!prevDayLoaded) return;
-    setEditBuffer(prev => {
-      const buf: Record<string, { stockAwal: string }> = {};
-      ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
-        const id = makeDocId(p, n, selectedDate);
-
-        // JANGAN overwrite kalau admin sedang edit (touched)
-        if (touchedInputs[id]) {
-          buf[id] = prev[id] || { stockAwal: "" };
-          return;
-        }
-
-        // JANGAN overwrite kalau cascade/DirectSync sudah set nilai ini
-        if (cascadeSyncedRef.current.has(id)) {
-          buf[id] = prev[id] || { stockAwal: "" };
-          return;
-        }
-
-        // JANGAN overwrite kalau admin sudah edit manual (manuallyEdited)
-        const saved = stockData[id];
-        if (saved && saved.manuallyEdited) {
-          buf[id] = { stockAwal: String(saved.stockAwal) };
-          return;
-        }
-
-        const prevId = makeDocId(p, n, prevDate);
-        const pv = prevDayData[prevId];
-
-        if (pv) {
-          const ps = Number(pv.stockAkhir) || 0;
-          buf[id] = { stockAwal: ps !== 0 ? String(ps) : "" };
-        } else if (saved) {
-          buf[id] = { stockAwal: String(saved.stockAwal) };
-        } else {
-          buf[id] = { stockAwal: "" };
-        }
-      }));
-      return buf;
-    });
-  }, [stockData, prevDayData, prevDayLoaded, selectedDate]);
-
-  // === AUTO-SAVE: persist stockAwal changes to Firestore when prev day data changes ===
-  const autoSaveRunningRef = useRef(false);
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (!currentUser || !isMasterAdmin || !prevDayLoaded || loading) return;
-    if (autoSaveRunningRef.current) return;
-    if (Object.keys(editBuffer).length === 0) return;
-    if (Object.keys(stockData).length === 0) return; // skip kalau stockData blm loaded
-
-    // Skip auto-save for future dates and dates older than 7 days (view-only, no writes)
-    const todayMs = new Date(getDateString(new Date()) + "T00:00:00").getTime();
-    const selectedMs = new Date(selectedDate + "T00:00:00").getTime();
-    const daysDiff = Math.floor((todayMs - selectedMs) / 86400000);
-    if (daysDiff < 0 || daysDiff > 30) return;
-
-    // Find rows where editBuffer stockAwal differs from saved stockData
-    const toSave: { docId: string; pabrik: string; nama: string; stockAwal: number }[] = [];
-    ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
-      const id = makeDocId(p, n, selectedDate);
-      const buf = editBuffer[id];
-      if (!buf) return;
-      const bufVal = parseInt(buf.stockAwal) || 0;
-      const saved = stockData[id];
-      const savedVal = saved ? Number(saved.stockAwal) || 0 : 0;
-      // Auto-save if value differs (including when document doesn't exist yet)
-      // Also require: has prev day data OR buffer is non-empty
-      if (bufVal !== savedVal && buf.stockAwal !== "") {
-        toSave.push({ docId: id, pabrik: p, nama: n, stockAwal: bufVal });
-      }
-    }));
-
-    if (toSave.length === 0) return;
-
-    // Debounce: tunggu 500ms supaya gak rapid-fire saat multiple state update
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(() => {
-      const doAutoSave = async () => {
-        if (autoSaveRunningRef.current) return;
-        autoSaveRunningRef.current = true;
-        try {
-          await Promise.all(toSave.map(({ docId, pabrik, nama, stockAwal }) => {
-            const isOPT = pabrik === OPT_GUDANG;
-            const pKey = PABRIK_SHORT[pabrik] || pabrik;
-            const pn = computePenerimaan(pabrik, nama, selectedDate);
-            const pg = computePengiriman(pabrik, nama, selectedDate);
-            const pk = isOPT ? 0 : computePemakaian(pKey, nama, selectedDate);
-            const sk = isOPT ? stockAwal + pn - pg : stockAwal + pn - pg - pk;
-            return setDoc(doc(db, "stock_harian", docId), {
-              pabrik, nama, tanggal: selectedDate,
-              stockAwal, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
-              manuallyEdited: true,
-              createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
-            }, { merge: true });
-          }));
-          await bumpLastUpdate();
-          console.log(`[StockHarian] Auto-saved ${toSave.length} stock awal rows`);
-        } catch (e) {
-          console.error("[StockHarian] Auto-save failed:", e);
-        } finally {
-          autoSaveRunningRef.current = false;
-        }
-      };
-      doAutoSave();
-    }, 500);
-
-    // Cleanup timer on unmount or dependency change
-    return () => {
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
-        autoSaveTimerRef.current = null;
-      }
-    };
-  }, [editBuffer, prevDayData, prevDayLoaded, stockData, loading]);
-
-  // === DIRECT SYNC: stockAwal[today] = stockAkhir[yesterday] ===
-  // Effect ini JAUH lebih cepat dari cascade karena:
-  // 1. Hanya proses selectedDate (bukan semua tanggal)
-  // 2. Langsung baca dari prevDayData (sudah di-cache)
-  // 3. Langsung tulis ke Firestore tanpa query tambahan
-  // Ini memastikan stockAkhir kemarin SELALU ter-refleksi sebagai stockAwal hari ini
-  const directSyncRef = useRef(false);
-  const directSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (!currentUser || isAllowed !== true || !prevDayLoaded || loading) return;
-    if (directSyncRef.current) return;
-
-    // Debounce 1 detik supaya tidak rapid-fire
-    if (directSyncTimerRef.current) clearTimeout(directSyncTimerRef.current);
-    directSyncTimerRef.current = setTimeout(() => {
-      const doDirectSync = async () => {
-        if (directSyncRef.current) return;
-        directSyncRef.current = true;
-        try {
-          let writeCount = 0;
-          const bufferUpdates = new Map<string, number>();
-
-          for (const pabrik of ALL_LOCATIONS) {
-            const pKey = PABRIK_SHORT[pabrik] || pabrik;
-            const isOPT = pabrik === OPT_GUDANG;
-
-            for (const nama of JENIS_KANTONG) {
-              const prevId = makeDocId(pabrik, nama, prevDate);
-              const pv = prevDayData[prevId];
-              if (!pv) continue; // Tidak ada data kemarin
-
-              const prevSk = Number(pv.stockAkhir) || 0;
-              const docId = makeDocId(pabrik, nama, selectedDate);
-              const existing = stockData[docId];
-              const existingSa = existing ? Number(existing.stockAwal) || 0 : -1;
-
-              // Hanya tulis jika stockAwal berbeda DAN BUKAN edit manual admin
-              if (prevSk !== existingSa && !(existing && existing.manuallyEdited)) {
-                const pn = computePenerimaan(pabrik, nama, selectedDate);
-                const pg = computePengiriman(pabrik, nama, selectedDate);
-                const pk = isOPT ? 0 : computePemakaian(pKey, nama, selectedDate);
-                const sk = isOPT ? prevSk + pn - pg : prevSk + pn - pg - pk;
-
-                await setDoc(doc(db, "stock_harian", docId), {
-                  pabrik, nama, tanggal: selectedDate,
-                  stockAwal: prevSk, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
-                  createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
-                }, { merge: true });
-                writeCount++;
-                bufferUpdates.set(docId, prevSk);
-
-                if (isOPT) {
-                  console.log(`[DirectSync] OPT ${nama}: stockAkhir kemarin=${prevSk} → stockAwal hari ini=${prevSk}, pn=${pn}, pg=${pg}, sk=${sk}`);
-                }
-              }
-            }
-          }
-
-          // Update editBuffer langsung supaya UI sinkron
-          if (bufferUpdates.size > 0) {
-            // Tandai doc yang sudah di-sync supaya effect tidak overwrite
-            bufferUpdates.forEach((_, key) => cascadeSyncedRef.current.add(key));
-            setEditBuffer(prev => {
-              const next = { ...prev };
-              bufferUpdates.forEach((val, key) => {
-                if (!touchedInputs[key]) {
-                  next[key] = { stockAwal: String(val) };
-                }
-              });
-              return next;
-            });
-            await bumpLastUpdate();
-            console.log(`[DirectSync] ${writeCount} docs synced: stockAwal = stockAkhir kemarin`);
-          }
-        } catch (e) {
-          console.error("[DirectSync] Failed:", e);
-        } finally {
-          directSyncRef.current = false;
-        }
-      };
-      doDirectSync();
-    }, 5000); // debounce 5 detik
-
-    return () => {
-      if (directSyncTimerRef.current) {
-        clearTimeout(directSyncTimerRef.current);
-        directSyncTimerRef.current = null;
-      }
-    };
-  }, [prevDayData, prevDayLoaded, selectedDate, penerimaanList, pengirimanList, reports, loading]);
-
-  // === HELPER: add days to YYYY-MM-DD string ===
   const addDays = (dateStr: string, days: number): string => {
     const d = new Date(dateStr + "T00:00:00");
     d.setDate(d.getDate() + days);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
 
-  // === FULL SYNC: Cascade dari anchor date ke hari ini ===
-  // Anchor = dokumen stock_harian paling awal (biasanya 1 Juli)
-  // stockAwal anchor TIDAK diubah (itu data real dari admin)
-  // Cascade hanya MAJU: stockAwal[t+1] = stockAkhir[t]
-  const syncRunningRef = useRef(false);
-  const syncDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingSyncRef = useRef(false);
-  const lastCascadeTriggerRef = useRef(-1);
-  const DAILY_CASCADE_KEY = "stock_harian_last_cascade";
-
-  const hasCascadeRunToday = (date: string): boolean => {
-    try {
-      return localStorage.getItem(DAILY_CASCADE_KEY) === date;
-    } catch { return false; }
-  };
-  const markCascadeDone = (date: string) => {
-    try { localStorage.setItem(DAILY_CASCADE_KEY, date); } catch {}
-  };
-
+  // === 1. LOAD STOCK AWAL OVERRIDES DARI FIRESTORE (1 read per lokasi) ===
   useEffect(() => {
-    if (!currentUser || isAllowed !== true || loading) return;
-    if (syncRunningRef.current) {
-      pendingSyncRef.current = true;
-      return;
-    }
-
-    const isForceSync = refreshTrigger !== lastCascadeTriggerRef.current;
-
-    // Daily guard: cascade hanya 1x per tanggal per hari
-    // Kecuali: force sync (tombol Sync)
-    if (!isForceSync && hasCascadeRunToday(selectedDate)) {
-      console.log(`[StockHarian] Cascade skipped — already ran today for ${selectedDate}`);
-      return;
-    }
-
-    lastCascadeTriggerRef.current = refreshTrigger;
-
-    // Debounce 30 detik supaya tidak rapid-fire saat banyak onSnapshot update
-    if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
-    syncDebounceRef.current = setTimeout(() => {
-      const doFullSync = async () => {
-        if (syncRunningRef.current) return;
-        syncRunningRef.current = true;
-        pendingSyncRef.current = false;
-        try {
-          const today = getDateString(new Date());
-          const isOPT = (pabrik: string) => pabrik === OPT_GUDANG;
-
-          console.log(`[StockHarian] === CASCADE START === selectedDate=${selectedDate}, today=${today}`);
-          console.log(`[StockHarian] penerimaanList.length=${penerimaanList.length}, pengirimanList.length=${pengirimanList.length}, reports.length=${reports.length}`);
-
-          let totalSaved = 0;
-          // Track stockAwal yang ditulis cascade untuk selectedDate
-          // supaya bisa sync editBuffer setelah selesai
-          const todayBufferUpdates = new Map<string, number>();
-
-          for (let i = 0; i < ALL_LOCATIONS.length; i++) {
-            const pabrik = ALL_LOCATIONS[i];
-            const pKey = PABRIK_SHORT[pabrik] || pabrik;
-
-            const locQuery = query(
-              collection(db, "stock_harian"),
-              where("pabrik", "==", pabrik),
-              where("tanggal", "<=", today),
-              orderBy("tanggal", "desc")
-            );
-            const locSnap = await getDocsFromServer(locQuery);
-
-            if (pabrik === OPT_GUDANG) {
-              console.log(`[StockHarian] OPT: fetched ${locSnap.size} stock_harian docs FROM SERVER`);
-            }
-
-            const docsByNama = new Map<string, { id: string; data: any }[]>();
-            locSnap.forEach(d => {
-              const v = d.data();
-              const nama = v.nama || "";
-              if (!docsByNama.has(nama)) docsByNama.set(nama, []);
-              docsByNama.get(nama)!.push({ id: d.id, data: v });
-            });
-
-            for (const nama of JENIS_KANTONG) {
-              const docs = docsByNama.get(nama) || [];
-
-              if (docs.length === 0) {
-                // Belum ada data stock_harian → inisialisasi dari 0
-                // Untuk SEMUA lokasi termasuk Gudang OPT (tidak perlu cek data)
-
-                // Cari tanggal paling awal dari semua sumber data, atau pakai hari ini
-                const dates: string[] = [];
-                reports.filter(r => r.nama === nama && r.pabrik.includes(pKey)).forEach(r => dates.push(r.tanggal));
-                penerimaanList.filter(r => r.nama === nama && r.pabrik === pabrik).forEach(r => dates.push(r.tanggal));
-                pengirimanList.filter(r => r.nama === nama && (r.pabrik === pabrik || r.tujuan === pabrik)).forEach(r => dates.push(r.tanggal));
-                const earliestDate = dates.length > 0 ? dates.reduce((a, b) => a < b ? a : b) : today;
-
-                let prevSk = 0;
-                let cursor = earliestDate;
-                while (cursor <= today) {
-                  const cursorDocId = makeDocId(pabrik, nama, cursor);
-                  const pn = computePenerimaan(pabrik, nama, cursor);
-                  const pg = computePengiriman(pabrik, nama, cursor);
-                  const pk = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, cursor);
-                  const sa = prevSk;
-                  const sk = isOPT(pabrik) ? sa + pn - pg : sa + pn - pg - pk;
-
-                  await setDoc(doc(db, "stock_harian", cursorDocId), {
-                    pabrik, nama, tanggal: cursor,
-                    stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
-                    createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
-                  }, { merge: true });
-                  totalSaved++;
-
-                  // Track untuk sync editBuffer jika ini selectedDate
-                  if (cursor === selectedDate) {
-                    todayBufferUpdates.set(cursorDocId, sa);
-                  }
-
-                  prevSk = sk;
-                  cursor = addDays(cursor, 1);
-                }
-
-                // === FIX: Update besok stockAwal = hari ini stockAkhir ===
-                const tomorrowInit = addDays(today, 1);
-                const tomorrowInitId = makeDocId(pabrik, nama, tomorrowInit);
-                // Note: existingDocs not available in this branch (docs.length === 0),
-                // so tomorrow doc definitely doesn't exist yet
-                const tomorrowInitData = null;
-                if (!tomorrowInitData || !tomorrowInitData.manuallyEdited) {
-                  const tomorrowSa = prevSk;
-                  const pnT = computePenerimaan(pabrik, nama, tomorrowInit);
-                  const pgT = computePengiriman(pabrik, nama, tomorrowInit);
-                  const pkT = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, tomorrowInit);
-                  const skT = isOPT(pabrik) ? tomorrowSa + pnT - pgT : tomorrowSa + pnT - pgT - pkT;
-                  await setDoc(doc(db, "stock_harian", tomorrowInitId), {
-                    pabrik, nama, tanggal: tomorrowInit,
-                    stockAwal: tomorrowSa, penerimaan: pnT, pengiriman: pgT, pemakaian: pkT, stockAkhir: skT,
-                    createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
-                  }, { merge: true });
-                  totalSaved++;
-                }
-                continue;
-              }
-
-              // === NORMAL FLOW ===
-              // Anchor = dokumen paling awal (stockAwal-nya TIDAK diubah)
-              // Cascade dari anchor+1 sampai today
-              const existingDocs = new Map<string, any>();
-              docs.forEach(d => existingDocs.set(d.id, d.data));
-
-              // docs sorted desc → yang paling awal = docs[docs.length - 1]
-              const anchorDoc = docs[docs.length - 1];
-              const anchorDate = anchorDoc.data.tanggal;
-              const anchorSk = Number(anchorDoc.data.stockAkhir) || 0;
-
-              // Cascade dari anchor+1 sampai today
-              let prevSk = anchorSk;
-              let cursor = addDays(anchorDate, 1);
-
-              while (cursor <= today) {
-                const cursorDocId = makeDocId(pabrik, nama, cursor);
-                const existingData = existingDocs.get(cursorDocId) || null;
-
-                // Hormati edit manual: kalau admin sudah edit stockAwal,
-                // jangan overwrite, tapi pakai stockAkhir-nya sebagai anchor baru
-                if (existingData && existingData.manuallyEdited) {
-                  const manualSk = Number(existingData.stockAkhir) || 0;
-                  // Recalculate stockAkhir kalau penerimaan/pengiriman/pemakaian berubah
-                  const manualSa = Number(existingData.stockAwal) || 0;
-                  const pn = computePenerimaan(pabrik, nama, cursor);
-                  const pg = computePengiriman(pabrik, nama, cursor);
-                  const pk = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, cursor);
-                  const newSk = isOPT(pabrik) ? manualSa + pn - pg : manualSa + pn - pg - pk;
-                  if (newSk !== manualSk || pn !== Number(existingData.penerimaan) || pg !== Number(existingData.pengiriman) || pk !== Number(existingData.pemakaian)) {
-                    await setDoc(doc(db, "stock_harian", cursorDocId), {
-                      pabrik, nama, tanggal: cursor,
-                      stockAwal: manualSa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: newSk,
-                      manuallyEdited: true,
-                      createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
-                    }, { merge: true });
-                    totalSaved++;
-                  }
-                  prevSk = newSk; // anchor baru dari edit manual
-                  cursor = addDays(cursor, 1);
-                  continue;
-                }
-
-                // Normal: hitung dari prevSk
-                const pn = computePenerimaan(pabrik, nama, cursor);
-                const pg = computePengiriman(pabrik, nama, cursor);
-                const pk = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, cursor);
-
-                // Jika dokumen sudah ada, JANGAN overwrite stockAwal
-                // (admin mungkin sudah edit manual, atau ini data asli)
-                // Hanya update penerimaan/pengiriman/pemakaian dan recalculate stockAkhir
-                const sa = existingData ? Number(existingData.stockAwal) || 0 : prevSk;
-                const sk = isOPT(pabrik) ? sa + pn - pg : sa + pn - pg - pk;
-
-                const existingSa = existingData ? Number(existingData.stockAwal) || 0 : -1;
-                const existingPn = existingData ? Number(existingData.penerimaan) || 0 : -1;
-                const existingPg = existingData ? Number(existingData.pengiriman) || 0 : -1;
-                const existingPk = existingData ? Number(existingData.pemakaian) || 0 : -1;
-                const existingSk = existingData ? Number(existingData.stockAkhir) || 0 : -1;
-                const needsWrite = !existingData
-                  || pn !== existingPn || pg !== existingPg
-                  || pk !== existingPk || sk !== existingSk;
-
-                if (needsWrite) {
-                  await setDoc(doc(db, "stock_harian", cursorDocId), {
-                    pabrik, nama, tanggal: cursor,
-                    stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
-                    createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
-                  }, { merge: true });
-                  totalSaved++;
-
-                  // Track untuk sync editBuffer jika ini selectedDate
-                  if (cursor === selectedDate) {
-                    todayBufferUpdates.set(cursorDocId, sa);
-                  }
-                } else if (cursor === selectedDate && existingData) {
-                  // Walau tidak perlu write, track juga supaya editBuffer sinkron
-                  todayBufferUpdates.set(cursorDocId, sa);
-                }
-
-                prevSk = sk;
-                cursor = addDays(cursor, 1);
-              }
-
-              // === FIX: Update besok stockAwal = hari ini stockAkhir ===
-              const tomorrow = addDays(today, 1);
-              const tomorrowDocId = makeDocId(pabrik, nama, tomorrow);
-              const tomorrowData = existingDocs.get(tomorrowDocId) || null;
-              if (!tomorrowData || !tomorrowData.manuallyEdited) {
-                const tomorrowSa = prevSk;
-                if (!tomorrowData || Number(tomorrowData.stockAwal) !== tomorrowSa) {
-                  const pnT = computePenerimaan(pabrik, nama, tomorrow);
-                  const pgT = computePengiriman(pabrik, nama, tomorrow);
-                  const pkT = isOPT(pabrik) ? 0 : computePemakaian(pKey, nama, tomorrow);
-                  const skT = isOPT(pabrik) ? tomorrowSa + pnT - pgT : tomorrowSa + pnT - pgT - pkT;
-                  await setDoc(doc(db, "stock_harian", tomorrowDocId), {
-                    pabrik, nama, tanggal: tomorrow,
-                    stockAwal: tomorrowSa, penerimaan: pnT, pengiriman: pgT, pemakaian: pkT, stockAkhir: skT,
-                    createdBy: currentUser?.email || "", updatedAt: new Date().toISOString()
-                  }, { merge: true });
-                  totalSaved++;
-                }
-              }
-            }
-
-            if (i < ALL_LOCATIONS.length - 1) {
-              await new Promise(r => setTimeout(r, 100));
-            }
-          }
-
-          // === SYNC EDIT BUFFER ===
-          // Setelah cascade menulis ke Firestore, update editBuffer untuk selectedDate
-          // supaya UI langsung menampilkan stockAwal yang benar (= prev day stockAkhir)
-          // tanpa menunggu onSnapshot yang bisa race condition
-          console.log(`[StockHarian] Cascade buffer sync: todayBufferUpdates.size=${todayBufferUpdates.size}, selectedDate=${selectedDate}`);
-          todayBufferUpdates.forEach((val, key) => {
-            console.log(`[StockHarian] Buffer: ${key} = ${val}`);
-          });
-          if (todayBufferUpdates.size > 0) {
-            // Tandai doc yang sudah di-sync cascade supaya effect tidak overwrite
-            todayBufferUpdates.forEach((_, key) => cascadeSyncedRef.current.add(key));
-            setEditBuffer(prev => {
-              const next = { ...prev };
-              todayBufferUpdates.forEach((val, key) => {
-                // Jangan overwrite kalau admin sedang edit (touched)
-                if (!touchedInputs[key]) {
-                  next[key] = { stockAwal: String(val) };
-                }
-              });
-              return next;
-            });
-          }
-
-          if (totalSaved > 0) {
-            console.log(`[StockHarian] Cascade: ${totalSaved} rows updated`);
-            await bumpLastUpdate();
-          }
-        } catch (e) {
-          console.error("[StockHarian] Cascade failed:", e);
-        } finally {
-          syncRunningRef.current = false;
-          markCascadeDone(selectedDate);
-          console.log(`[StockHarian] Cascade complete for ${selectedDate}`);
-          // Jika ada perubahan yang terlewat saat cascade berjalan, jalankan ulang
-          if (pendingSyncRef.current) {
-            pendingSyncRef.current = false;
-            console.log("[StockHarian] Pending sync detected, re-triggering cascade...");
-            setTimeout(() => setRefreshTrigger(prev => prev + 1), 100);
-          }
+    if (!currentUser || isAllowed !== true) { setOverrides({}); return; }
+    const unsubList = ALL_LOCATIONS.map(pabrik => {
+      const docRef = doc(db, "stock_awal_overrides", PABRIK_SHORT[pabrik] || pabrik);
+      return onSnapshot(docRef, snap => {
+        const data = snap.data();
+        if (data?.overrides) {
+          setOverrides(prev => ({ ...prev, ...data.overrides }));
         }
-      };
+      });
+    });
+    return () => unsubList.forEach(u => u());
+  }, [currentUser, isAllowed]);
 
-      doFullSync();
-    }, 30000); // debounce 30 detik
+  // === 2. COMPUTE STOCK DATA SECARA LOKAL (0 Firestore reads) ===
+  useEffect(() => {
+    if (!currentUser || isAllowed !== true) { setStockData({}); setLoading(false); return; }
+    const todayStr = getDateString(new Date());
+    if (selectedDate > todayStr) { setStockData({}); setLoading(false); return; }
+    setLoading(true);
 
-    return () => {
-      if (syncDebounceRef.current) {
-        clearTimeout(syncDebounceRef.current);
-        syncDebounceRef.current = null;
-      }
-    };
-  }, [currentUser, isAllowed, loading, selectedDate, penerimaanList, pengirimanList, reports, refreshTrigger]);
+    const newStockData: Record<string, StockHarian> = {};
 
+    ALL_LOCATIONS.forEach(pabrik => {
+      const isOPT = pabrik === OPT_GUDANG;
+      const pKey = PABRIK_SHORT[pabrik] || pabrik;
 
+      JENIS_KANTONG.forEach(nama => {
+        // Kumpulkan semua tanggal yang punya data untuk item ini
+        const allDates = new Set<string>();
+        reports.filter(r => r.nama === nama && r.pabrik.includes(pKey)).forEach(r => allDates.add(r.tanggal));
+        penerimaanList.filter(r => r.nama === nama && r.pabrik === pabrik).forEach(r => allDates.add(r.tanggal));
+        pengirimanList.filter(r => r.nama === nama && (r.pabrik === pabrik || r.tujuan === pabrik)).forEach(r => allDates.add(r.tanggal));
+        // Tambahkan tanggal dari overrides
+        Object.keys(overrides).forEach(key => {
+          if (key.startsWith(`${PABRIK_SHORT[pabrik]}_${nama.replace(/\s+/g, "_")}_`)) {
+            const date = key.split("_").pop();
+            if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) allDates.add(date);
+          }
+        });
 
+        if (allDates.size === 0) return;
+        const sortedDates = Array.from(allDates).sort();
+        const earliestDate = sortedDates[0];
+        if (selectedDate < earliestDate) return;
+
+        // Cascade dari earliest ke selectedDate (semua di memori, 0 reads)
+        let prevSk = 0;
+        let cursor = earliestDate;
+        while (cursor <= selectedDate) {
+          const docId = makeDocId(pabrik, nama, cursor);
+          const override = overrides[docId];
+          const pn = computePenerimaan(pabrik, nama, cursor);
+          const pg = computePengiriman(pabrik, nama, cursor);
+          const pk = isOPT ? 0 : computePemakaian(pKey, nama, cursor);
+          const sa = override !== undefined ? override : prevSk;
+          const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
+
+          if (cursor === selectedDate) {
+            newStockData[docId] = {
+              id: docId, pabrik, nama, tanggal: cursor,
+              stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk,
+              createdBy: "", updatedAt: "",
+            };
+          }
+          prevSk = sk;
+          cursor = addDays(cursor, 1);
+        }
+      });
+    });
+
+    setStockData(newStockData);
+    setLoading(false);
+  }, [currentUser, isAllowed, selectedDate, reports, penerimaanList, pengirimanList, overrides]);
+
+  // === 3. EDIT BUFFER: sync dari stockData ===
+  useEffect(() => {
+    setEditBuffer(prev => {
+      const buf: Record<string, { stockAwal: string }> = {};
+      ALL_LOCATIONS.forEach(p => JENIS_KANTONG.forEach(n => {
+        const id = makeDocId(p, n, selectedDate);
+        if (touchedInputs[id]) { buf[id] = prev[id] || { stockAwal: "" }; return; }
+        const computed = stockData[id];
+        if (computed) { buf[id] = { stockAwal: String(computed.stockAwal) }; }
+        else { buf[id] = prev[id] || { stockAwal: "" }; }
+      }));
+      return buf;
+    });
+  }, [stockData, selectedDate]);
+
+  // === 4. AUTO-SYNC overrides ke Firestore (debounced) ===
+  const overrideSyncRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!currentUser || !isMasterAdmin) return;
+    if (overrideSyncRef.current) clearTimeout(overrideSyncRef.current);
+    overrideSyncRef.current = setTimeout(async () => {
+      try {
+        // Group overrides by location
+        const byLocation: Record<string, Record<string, number>> = {};
+        ALL_LOCATIONS.forEach(pabrik => {
+          const pKey = PABRIK_SHORT[pabrik] || pabrik;
+          const locOverrides: Record<string, number> = {};
+          JENIS_KANTONG.forEach(nama => {
+            const docId = makeDocId(pabrik, nama, selectedDate);
+            if (overrides[docId] !== undefined) {
+              locOverrides[docId] = overrides[docId];
+            }
+          });
+          if (Object.keys(locOverrides).length > 0) byLocation[pKey] = locOverrides;
+        });
+        // Write each location's overrides
+        await Promise.all(Object.entries(byLocation).map(([pKey, locOverrides]) => {
+          const docRef = doc(db, "stock_awal_overrides", pKey);
+          return setDoc(docRef, { overrides: locOverrides, updatedAt: new Date().toISOString() }, { merge: true });
+        }));
+      } catch (e) { console.error("[StockHarian] Override sync failed:", e); }
+    }, 2000);
+    return () => { if (overrideSyncRef.current) clearTimeout(overrideSyncRef.current); };
+  }, [overrides]);
+
+  // === HANDLERS ===
   const handleInputChange = (docId: string, value: string) => {
     const digits = value.replace(/[^\d]/g, "");
     setEditBuffer(p => ({ ...p, [docId]: { ...p[docId], stockAwal: digits } }));
@@ -776,7 +237,6 @@ export default function StockHarianPage({
   };
 
   const handleInputFocus = (docId: string) => {
-    // Simpan nilai asli saat pertama kali fokus
     if (!(docId in originalValuesRef.current)) {
       const buf = editBuffer[docId];
       originalValuesRef.current[docId] = buf?.stockAwal || "0";
@@ -784,13 +244,10 @@ export default function StockHarianPage({
   };
 
   const handleInputBlur = (docId: string) => {
-    // Admin batal edit (klik lain tanpa save) → revert ke nilai asli
     const original = originalValuesRef.current[docId];
     if (original !== undefined) {
-      // Kembalikan ke nilai asli
       setEditBuffer(p => ({ ...p, [docId]: { ...p[docId], stockAwal: original } }));
     }
-    // Selalu hapus touched supaya save icon hilang
     setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });
     delete originalValuesRef.current[docId];
   };
@@ -801,19 +258,14 @@ export default function StockHarianPage({
     try {
       const b = editBuffer[docId] || { stockAwal: "0" };
       const sa = parseInt(b.stockAwal) || 0;
-      const pn = computePenerimaan(pabrik, nama, selectedDate);
-      const pg = computePengiriman(pabrik, nama, selectedDate);
-      const isOPT = pabrik === OPT_GUDANG;
-      const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
-      const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
-      await setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, manuallyEdited: true, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
-      // Update stockData supaya UI langsung sinkron & isStockAwalChanged jadi false
-      setStockData(prev => ({ ...prev, [docId]: { id: docId, pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, manuallyEdited: true, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() } }));
-      // Invalidate cache supaya reload baca dari Firestore, bukan data lama
-      removeCache(`stock_harian_${selectedDate}`);
-      // Hapus touched state supaya save icon hilang
+      // Update local overrides
+      setOverrides(prev => ({ ...prev, [docId]: sa }));
+      // Sync to Firestore
+      const pKey = PABRIK_SHORT[pabrik] || pabrik;
+      const docRef = doc(db, "stock_awal_overrides", pKey);
+      await setDoc(docRef, { overrides: { [docId]: sa }, updatedAt: new Date().toISOString() }, { merge: true });
       setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });
-      await bumpLastUpdate(); // notify other devices
+      await bumpLastUpdate();
       triggerToast(`Stock ${nama} (${PABRIK_SHORT[pabrik]}) disimpan`, "ok");
     } catch (e) { console.error(e); triggerToast("Gagal simpan", "er"); }
     finally { setSaving(null); }
@@ -823,55 +275,40 @@ export default function StockHarianPage({
     if (!currentUser || !isMasterAdmin) return;
     setSaving(pabrik);
     try {
-      const isOPT = pabrik === OPT_GUDANG;
-      await Promise.all(JENIS_KANTONG.map(nama => {
+      const locOverrides: Record<string, number> = {};
+      JENIS_KANTONG.forEach(nama => {
         const docId = makeDocId(pabrik, nama, selectedDate);
         const b = editBuffer[docId] || { stockAwal: "0" };
-        const sa = parseInt(b.stockAwal) || 0;
-        const pn = computePenerimaan(pabrik, nama, selectedDate);
-        const pg = computePengiriman(pabrik, nama, selectedDate);
-        const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
-        const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
-        return setDoc(doc(db, "stock_harian", docId), { pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, manuallyEdited: true, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() }, { merge: true });
-      }));
-      // Update stockData untuk semua item supaya UI langsung sinkron
-      setStockData(prev => {
-        const updated = { ...prev };
-        JENIS_KANTONG.forEach(nama => {
-          const docId = makeDocId(pabrik, nama, selectedDate);
-          const b = editBuffer[docId] || { stockAwal: "0" };
-          const sa = parseInt(b.stockAwal) || 0;
-          const pn = computePenerimaan(pabrik, nama, selectedDate);
-          const pg = computePengiriman(pabrik, nama, selectedDate);
-          const pk = isOPT ? 0 : computePemakaian(PABRIK_SHORT[pabrik], nama, selectedDate);
-          const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
-          updated[docId] = { id: docId, pabrik, nama, tanggal: selectedDate, stockAwal: sa, penerimaan: pn, pengiriman: pg, pemakaian: pk, stockAkhir: sk, manuallyEdited: true, createdBy: currentUser.email || "", updatedAt: new Date().toISOString() };
-        });
-        return updated;
+        locOverrides[docId] = parseInt(b.stockAwal) || 0;
       });
-      // Invalidate cache supaya reload baca dari Firestore
-      removeCache(`stock_harian_${selectedDate}`);
-      await bumpLastUpdate(); // notify other devices
+      setOverrides(prev => ({ ...prev, ...locOverrides }));
+      const pKey = PABRIK_SHORT[pabrik] || pabrik;
+      const docRef = doc(db, "stock_awal_overrides", pKey);
+      await setDoc(docRef, { overrides: locOverrides, updatedAt: new Date().toISOString() }, { merge: true });
+      JENIS_KANTONG.forEach(nama => {
+        const docId = makeDocId(pabrik, nama, selectedDate);
+        setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });
+      });
+      await bumpLastUpdate();
       triggerToast(`Semua stock ${PABRIK_SHORT[pabrik]} disimpan`, "ok");
     } catch (e) { console.error(e); triggerToast("Gagal simpan", "er"); }
     finally { setSaving(null); }
   };
 
-  const handleAutoFillStockAwal = async (pabrik: string) => {
+  const handleAutoFillStockAwal = (pabrik: string) => {
     if (!currentUser || !isMasterAdmin) return;
-    const prevDate = getPrevDate(selectedDate);
-    try {
-      const updates: Record<string, string> = {};
-      let cnt = 0;
-      for (const nama of JENIS_KANTONG) {
-        const pv = prevDayData[makeDocId(pabrik, nama, prevDate)];
-        if (pv) { updates[makeDocId(pabrik, nama, selectedDate)] = String(Number(pv.stockAkhir) || 0); cnt++; }
-      }
-      if (cnt > 0) {
-        setEditBuffer(p => { const n = { ...p }; for (const [id, v] of Object.entries(updates)) n[id] = { stockAwal: v }; return n; });
-        triggerToast(`Stock awal ${PABRIK_SHORT[pabrik]} dari ${formatDateDisplay(prevDate)} (${cnt} item)`, "ok");
-      } else triggerToast(`Tidak ada data sebelumnya untuk ${PABRIK_SHORT[pabrik]}`, "inf");
-    } catch (e) { console.error(e); triggerToast("Gagal auto-fill", "er"); }
+    const prevDateStr = (() => { const d = new Date(selectedDate + "T00:00:00"); d.setDate(d.getDate()-1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); })();
+    const updates: Record<string, string> = {};
+    let cnt = 0;
+    JENIS_KANTONG.forEach(nama => {
+      const prevId = makeDocId(pabrik, nama, prevDateStr);
+      const prevData = stockData[prevId];
+      if (prevData) { updates[makeDocId(pabrik, nama, selectedDate)] = String(Number(prevData.stockAkhir) || 0); cnt++; }
+    });
+    if (cnt > 0) {
+      setEditBuffer(p => { const n = { ...p }; for (const [id, v] of Object.entries(updates)) n[id] = { stockAwal: v }; return n; });
+      triggerToast(`Stock awal ${PABRIK_SHORT[pabrik]} dari ${formatDateDisplay(prevDateStr)} (${cnt} item)`, "ok");
+    } else triggerToast(`Tidak ada data sebelumnya untuk ${PABRIK_SHORT[pabrik]}`, "inf");
   };
 
   const formatNumber = (num: number): string => {
@@ -879,33 +316,15 @@ export default function StockHarianPage({
     return num.toLocaleString("en-US");
   };
 
-  // getRowDisplay: SELALU hitung dari list terkini
-  // stockAkhir = stockAwal + penerimaan(vendor+transfer masuk) - pengiriman(keluar) - pemakaian
   const getRowDisplay = (pabrik: string, nama: string, docId: string) => {
     const isOPT = pabrik === OPT_GUDANG;
+    const computed = stockData[docId];
     let sa: number;
-
-    if (isOPT) {
-      // === GUDANG OPT: Prioritas: manuallyEdited > saved stockData > prevDayData ===
-      const saved = stockData[docId];
-      if (saved && saved.manuallyEdited) {
-        // Admin sudah edit manual → gunakan nilai tersimpan
-        sa = Number(saved.stockAwal) || 0;
-      } else if (saved && saved.stockAwal !== undefined) {
-        // Ada data tersimpan (dari cascade/DirectSync/onSnapshot) → gunakan itu
-        sa = Number(saved.stockAwal) || 0;
-      } else {
-        // Belum ada data → hitung dari stockAkhir kemarin
-        const prevId = makeDocId(pabrik, nama, prevDate);
-        const pv = prevDayData[prevId];
-        const prevAkhir = pv ? Number(pv.stockAkhir) : NaN;
-        sa = !isNaN(prevAkhir) ? prevAkhir : 0;
-      }
+    if (computed) {
+      sa = computed.stockAwal;
     } else {
-      const b = editBuffer[docId] || { stockAwal: "0" };
-      sa = parseInt(b.stockAwal) || 0;
+      sa = 0;
     }
-
     const pn = computePenerimaan(pabrik, nama, selectedDate);
     const pg = computePengiriman(pabrik, nama, selectedDate);
     const inc = computeIncomingPengiriman(pabrik, nama, selectedDate);
@@ -914,12 +333,9 @@ export default function StockHarianPage({
     return { stockAwal: sa, penerimaan: pn, pengiriman: pg, incomingPengiriman: inc, pemakaian: pk, stockAkhir: sk };
   };
 
-  // Check if stock awal has been changed from saved value
-  const isStockAwalChanged = (docId: string): boolean => {
-    // Hanya tampilkan save icon kalau admin benar-benar mengubah nilai
-    return !!touchedInputs[docId];
-  };
+  const isStockAwalChanged = (docId: string): boolean => !!touchedInputs[docId];
 
+  // === RENDER FUNCTIONS (UNCHANGED) ===
   const renderOPTTable = () => (
     <div className="rounded-3xl border-2 border-[#e8e4de] overflow-hidden mb-6 shadow-xs">
       <div className="bg-brand-green text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2 rounded-t-3xl">
@@ -1147,7 +563,6 @@ export default function StockHarianPage({
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-brand-green" /><span className="ml-3 text-[#6b6560]">Memuat data stock harian...</span></div>;
 
-  // === FUTURE DATE GUARD: tampilkan pesan jika tanggal setelah hari ini ===
   const _todayStr = getDateString(new Date());
   if (selectedDate > _todayStr) {
     return (

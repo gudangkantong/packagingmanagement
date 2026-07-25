@@ -108,8 +108,7 @@ export default function StockHarianPage({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
 
-  // === 1. LOAD STOCK AWAL OVERRIDES DARI FIRESTORE (DENGAN CACHE) ===
-  // Cache lokal biar gak baca Firestore tiap reload (hemat reads + tampil meski lagi limit)
+  // === 1. LOAD STOCK AWAL OVERRIDES DARI FIRESTORE (FIRESTORE PRIORITY, CACHE = FALLBACK) ===
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setOverrides({}); return; }
     const unsubList = ALL_LOCATIONS.map(pabrik => {
@@ -117,37 +116,38 @@ export default function StockHarianPage({
       const cacheKey = `stock_awal_${pKey}`;
       const docRef = doc(db, "stock_awal_overrides", pKey);
       return onSnapshot(docRef, async (snap) => {
-        // 1. Coba dari cache dulu (0 reads)
-        const cached = getCached<Record<string, number>>(cacheKey);
-        if (cached && Object.keys(cached).length > 0) {
-          setOverrides(prev => ({ ...prev, ...cached }));
-        }
-        // 2. Baca Firestore (cuma initial load / saat ada perubahan)
         const data = snap.data();
         if (data?.overrides && Object.keys(data.overrides).length > 0) {
+          // Firestore punya data → pakai ini, update cache
           setOverrides(prev => ({ ...prev, ...data.overrides }));
-          setCache(cacheKey, data.overrides as Record<string, number>, 30 * 24 * 60 * 60 * 1000); // cache 30 hari
-        } else if (!cached || Object.keys(cached).length === 0) {
-          // Overrides kosong & gak ada cache → baca manual edits dari stock_harian (fallback lama)
-          try {
-            const q = query(
-              collection(db, "stock_harian"),
-              where("pabrik", "==", pabrik),
-              where("manuallyEdited", "==", true)
-            );
-            const oldSnap = await getDocs(q);
-            const migrated: Record<string, number> = {};
-            oldSnap.forEach(d => {
-              migrated[d.id] = Number(d.data().stockAwal) || 0;
-            });
-            if (Object.keys(migrated).length > 0) {
-              setOverrides(prev => ({ ...prev, ...migrated }));
-              setCache(cacheKey, migrated, 30 * 24 * 60 * 60 * 1000);
-              await setDoc(docRef, { overrides: migrated, migratedAt: new Date().toISOString() });
-              console.log(`[StockHarian] Migrated ${Object.keys(migrated).length} edits for ${pKey}`);
+          setCache(cacheKey, data.overrides as Record<string, number>, 30 * 24 * 60 * 60 * 1000);
+        } else {
+          // Firestore kosong → coba cache (fallback offline)
+          const cached = getCached<Record<string, number>>(cacheKey);
+          if (cached && Object.keys(cached).length > 0) {
+            setOverrides(prev => ({ ...prev, ...cached }));
+          } else {
+            // Kosong semua → baca manual edits dari stock_harian (fallback lama)
+            try {
+              const q = query(
+                collection(db, "stock_harian"),
+                where("pabrik", "==", pabrik),
+                where("manuallyEdited", "==", true)
+              );
+              const oldSnap = await getDocs(q);
+              const migrated: Record<string, number> = {};
+              oldSnap.forEach(d => {
+                migrated[d.id] = Number(d.data().stockAwal) || 0;
+              });
+              if (Object.keys(migrated).length > 0) {
+                setOverrides(prev => ({ ...prev, ...migrated }));
+                setCache(cacheKey, migrated, 30 * 24 * 60 * 60 * 1000);
+                await setDoc(docRef, { overrides: migrated, migratedAt: new Date().toISOString() });
+                console.log(`[StockHarian] Migrated ${Object.keys(migrated).length} edits for ${pKey}`);
+              }
+            } catch (e) {
+              console.error(`[StockHarian] Fallback read failed for ${pKey}:`, e);
             }
-          } catch (e) {
-            console.error(`[StockHarian] Fallback read failed for ${pKey}:`, e);
           }
         }
       });
@@ -285,28 +285,32 @@ export default function StockHarianPage({
   };
 
   const handleSaveRow = async (pabrik: string, nama: string, docId: string) => {
-    if (!currentUser || !isMasterAdmin) return;
+    if (!currentUser) { triggerToast("Belum login", "er"); return; }
+    if (!isMasterAdmin) { triggerToast("Hanya Super Admin yang bisa edit stock awal", "er"); return; }
     setSaving(docId);
     try {
       const b = editBuffer[docId] || { stockAwal: "0" };
       const sa = parseInt(b.stockAwal) || 0;
       // Update local overrides
       setOverrides(prev => ({ ...prev, [docId]: sa }));
-      // Sync to Firestore
+      // Sync to Firestore (gunakan document path yang benar: stock_awal_overrides/{pKey})
       const pKey = PABRIK_SHORT[pabrik] || pabrik;
       const docRef = doc(db, "stock_awal_overrides", pKey);
       await setDoc(docRef, { overrides: { [docId]: sa }, updatedAt: new Date().toISOString() }, { merge: true });
+      setCache(`stock_awal_${pKey}`, { ...(getCached<Record<string, number>>(`stock_awal_${pKey}`) || {}), [docId]: sa }, 30 * 24 * 60 * 60 * 1000);
       setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });
-      await bumpLastUpdate();
+      await bumpLastUpdate("laporan");
       triggerToast(`Stock ${nama} (${PABRIK_SHORT[pabrik]}) disimpan`, "ok");
-    } catch (e) { console.error(e); triggerToast("Gagal simpan", "er"); }
+    } catch (e) { console.error(e); triggerToast("Gagal simpan: " + (e as Error)?.message, "er"); }
     finally { setSaving(null); }
   };
 
   const handleSaveAll = async (pabrik: string) => {
-    if (!currentUser || !isMasterAdmin) return;
+    if (!currentUser) { triggerToast("Belum login", "er"); return; }
+    if (!isMasterAdmin) { triggerToast("Hanya Super Admin yang bisa edit stock awal", "er"); return; }
     setSaving(pabrik);
     try {
+      const pKey = PABRIK_SHORT[pabrik] || pabrik;
       const locOverrides: Record<string, number> = {};
       JENIS_KANTONG.forEach(nama => {
         const docId = makeDocId(pabrik, nama, selectedDate);
@@ -314,16 +318,16 @@ export default function StockHarianPage({
         locOverrides[docId] = parseInt(b.stockAwal) || 0;
       });
       setOverrides(prev => ({ ...prev, ...locOverrides }));
-      const pKey = PABRIK_SHORT[pabrik] || pabrik;
       const docRef = doc(db, "stock_awal_overrides", pKey);
       await setDoc(docRef, { overrides: locOverrides, updatedAt: new Date().toISOString() }, { merge: true });
+      setCache(`stock_awal_${pKey}`, { ...(getCached<Record<string, number>>(`stock_awal_${pKey}`) || {}), ...locOverrides }, 30 * 24 * 60 * 60 * 1000);
       JENIS_KANTONG.forEach(nama => {
         const docId = makeDocId(pabrik, nama, selectedDate);
         setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });
       });
-      await bumpLastUpdate();
+      await bumpLastUpdate("laporan");
       triggerToast(`Semua stock ${PABRIK_SHORT[pabrik]} disimpan`, "ok");
-    } catch (e) { console.error(e); triggerToast("Gagal simpan", "er"); }
+    } catch (e) { console.error(e); triggerToast("Gagal simpan: " + (e as Error)?.message, "er"); }
     finally { setSaving(null); }
   };
 

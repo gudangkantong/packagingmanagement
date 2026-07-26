@@ -402,7 +402,7 @@ export default function App() {
       // Clear HANYA cache yg jenisnya berubah
       if (changed.includes("laporan") || changed.includes("stock")) {
         Object.keys(localStorage).forEach((k) => {
-          if (k.includes("laporan_") || k.includes("stock_harian_") || k.includes("monthly_")) {
+          if (k.includes("laporan_") || k.includes("stock_harian_") || k.includes("monthly_") || k.includes("stock_harian_awal_")) {
             localStorage.removeItem(k);
           }
         });

@@ -179,6 +179,9 @@ export default function StockHarianPage({
         // Selalu masukkan selectedDate supaya cascade jalan
         // (stock awal hari ini = stock akhir kemarin)
         allDates.add(selectedDate);
+        // FIX: tambahkan hari sebelum selectedDate supaya cascade
+        // selalu bisa hitung stock awal dari stock akhir kemarin
+        allDates.add(addDays(selectedDate, -1));
 
         if (allDates.size === 0) return;
         const sortedDates = Array.from(allDates).sort();
@@ -196,6 +199,11 @@ export default function StockHarianPage({
           const pk = isOPT ? 0 : computePemakaian(pKey, nama, cursor);
           const sa = override !== undefined ? override : prevSk;
           const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
+
+          // Debug logging untuk trace cascade
+          if (cursor >= addDays(selectedDate, -1)) {
+            console.log(`[CASCADE] ${pKey} ${nama} ${cursor}: override=${override ?? "none"}, prevSk=${prevSk}, SA=${sa}, PN=${pn}, PG=${pg}, PK=${pk}, SK=${sk}`);
+          }
 
           if (cursor === selectedDate) {
             newStockData[docId] = {

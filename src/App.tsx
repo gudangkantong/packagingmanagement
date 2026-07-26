@@ -705,7 +705,7 @@ export default function App() {
     return () => unsubReports();
   }, [currentUser, isAllowed, selectedDate]);
 
-  // Penerimaan: onSnapshot REAL-TIME (admin update → semua user langsung lihat)
+  // Penerimaan: onSnapshot REAL-TIME + filter 30 hari (hemat reads)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setPenerimaanList([]); return; }
 
@@ -713,8 +713,14 @@ export default function App() {
     const cached = getCached<PenerimaanData[]>("penerimaan_data");
     if (cached) setPenerimaanList(cached);
 
-    // Real-time listener: data berubah → UI langsung update
-    const unsubPenerimaan = onSnapshot(collection(db, "penerimaan_data"), (snap) => {
+    // Filter 30 hari terakhir — hemat reads, tetap real-time
+    const thirtyDaysAgo = getDateString(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+    const penerimaanQuery = query(
+      collection(db, "penerimaan_data"),
+      where("tanggal", ">=", thirtyDaysAgo)
+    );
+
+    const unsubPenerimaan = onSnapshot(penerimaanQuery, (snap) => {
       const items: PenerimaanData[] = [];
       snap.forEach((d) => {
         const data = d.data();
@@ -730,7 +736,7 @@ export default function App() {
     return () => unsubPenerimaan();
   }, [currentUser, isAllowed]);
 
-  // Pengiriman: onSnapshot REAL-TIME (admin update → semua user langsung lihat)
+  // Pengiriman: onSnapshot REAL-TIME + filter 30 hari (hemat reads)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setPengirimanList([]); return; }
 
@@ -738,8 +744,14 @@ export default function App() {
     const cached = getCached<PengirimanData[]>("pengiriman_data");
     if (cached) setPengirimanList(cached);
 
-    // Real-time listener: data berubah → UI langsung update
-    const unsubPengiriman = onSnapshot(collection(db, "pengiriman_data"), (snap) => {
+    // Filter 30 hari terakhir — hemat reads, tetap real-time
+    const thirtyDaysAgo = getDateString(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+    const pengirimanQuery = query(
+      collection(db, "pengiriman_data"),
+      where("tanggal", ">=", thirtyDaysAgo)
+    );
+
+    const unsubPengiriman = onSnapshot(pengirimanQuery, (snap) => {
       const items: PengirimanData[] = [];
       snap.forEach((d) => {
         const data = d.data();

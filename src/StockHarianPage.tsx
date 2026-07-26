@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  doc, setDoc, getDoc,
+  doc, setDoc, getDoc, onSnapshot,
 } from "firebase/firestore";
 import { Save, Loader2, Package, Edit2, Trash2 } from "lucide-react";
 import { db } from "./firebase";
@@ -34,7 +34,7 @@ interface StockHarianPageProps {
   penerimaanList: PenerimaanData[];
   pengirimanList: PengirimanData[];
   refreshTrigger: number;
-  bumpLastUpdate: () => Promise<void>;
+  bumpLastUpdate: (dataType?: "laporan" | "penerimaan" | "pengiriman" | "stock" | "master") => Promise<void>;
   onEditPenerimaan: (item: PenerimaanData) => void;
   onDeletePenerimaan: (id: string) => void;
   onEditPengiriman: (item: PengirimanData) => void;
@@ -109,50 +109,44 @@ export default function StockHarianPage({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
 
-  // === 1. LOAD STOCK AWAL OVERRIDES: CACHE-FIRST, getDoc (bukan onSnapshot) ===
+  // === 1. LOAD STOCK AWAL OVERRIDES: REAL-TIME via onSnapshot ===
+  // Semua user (termasuk tamu) langsung lihat perubahan stock awal
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setOverrides({}); return; }
 
-    const loadOverrides = async () => {
-      const allOverrides: Record<string, number> = {};
+    const unsubs = ALL_LOCATIONS.map(pabrik => {
+      const pKey = PABRIK_SHORT[pabrik] || pabrik;
+      const docRef = doc(db, "stock_awal_overrides", pKey);
 
-      await Promise.all(ALL_LOCATIONS.map(async (pabrik) => {
-        const pKey = PABRIK_SHORT[pabrik] || pabrik;
-        const cacheKey = `stock_harian_awal_${pKey}`;
+      return onSnapshot(docRef, (snap) => {
+        const data = snap.data();
+        const locOverrides = (data?.overrides as Record<string, number>) || {};
 
-        // 1. Coba cache dulu (gratis, 0 reads)
-        // Skip cache saat refresh (refreshTrigger > 0) supaya data fresh dari Firestore
-        if (refreshTrigger === 0) {
-          const cached = getCached<Record<string, number>>(cacheKey);
-          if (cached && Object.keys(cached).length > 0) {
-            Object.assign(allOverrides, cached);
-            return; // skip Firestore read
-          }
+        // Update cache untuk lokasi ini
+        if (Object.keys(locOverrides).length > 0) {
+          setCache(`stock_harian_awal_${pKey}`, locOverrides, 30 * 24 * 60 * 60 * 1000);
+        } else {
+          localStorage.removeItem(`smb_cache_stock_harian_awal_${pKey}`);
         }
 
-        // 2. Cache kosong atau refresh → getDoc sekali (1 read per lokasi)
-        try {
-          const docRef = doc(db, "stock_awal_overrides", pKey);
-          const snap = await getDoc(docRef);
-          const data = snap.data();
-          if (data?.overrides && Object.keys(data.overrides).length > 0) {
-            Object.assign(allOverrides, data.overrides as Record<string, number>);
-            setCache(cacheKey, data.overrides as Record<string, number>, 30 * 24 * 60 * 60 * 1000);
-          } else {
-            // Document kosong → hapus cache lama
-            localStorage.removeItem(cacheKey);
-          }
-        } catch (e) {
-          console.error(`[StockHarian] Gagal load overrides ${pKey}:`, e);
-        }
-      }));
+        // Merge ke overrides state (per-location update)
+        setOverrides(prev => {
+          const next = { ...prev };
+          // Hapus key lama untuk lokasi ini
+          Object.keys(next).forEach(k => {
+            if (k.startsWith(`${pKey}_`)) delete next[k];
+          });
+          // Merge key baru
+          Object.assign(next, locOverrides);
+          return next;
+        });
+      }, (err) => {
+        console.error(`[StockHarian] onSnapshot error ${pKey}:`, err);
+      });
+    });
 
-      // Selalu update state (termasuk kalau kosong, supaya tidak pakai data lama)
-      setOverrides(allOverrides);
-    };
-
-    loadOverrides();
-  }, [currentUser, isAllowed, refreshTrigger]); // refreshTrigger dari granular sync
+    return () => unsubs.forEach(unsub => unsub());
+  }, [currentUser, isAllowed]);
 
   // === 2. COMPUTE STOCK DATA SECARA LOKAL (0 Firestore reads) ===
   useEffect(() => {
@@ -263,6 +257,8 @@ export default function StockHarianPage({
           const merged = { ...existingOverrides, ...locOverrides };
           return setDoc(docRef, { overrides: merged, updatedAt: new Date().toISOString() }, { merge: true });
         }));
+        // Notify other devices about stock change
+        await bumpLastUpdate("stock");
       } catch (e) { console.error("[StockHarian] Override sync failed:", e); }
     }, 2000);
     return () => { if (overrideSyncRef.current) clearTimeout(overrideSyncRef.current); };
@@ -315,7 +311,7 @@ export default function StockHarianPage({
       await setDoc(docRef, { overrides: merged, updatedAt: new Date().toISOString() }, { merge: true });
       setCache(`stock_harian_awal_${pKey}`, merged, 30 * 24 * 60 * 60 * 1000);
       setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });
-      await bumpLastUpdate("laporan");
+      await bumpLastUpdate("stock");
       triggerToast(`Stock ${nama} (${PABRIK_SHORT[pabrik]}) disimpan`, "ok");
     } catch (e) { console.error(e); triggerToast("Gagal simpan: " + (e as Error)?.message, "er"); }
     finally { setSaving(null); }
@@ -360,7 +356,7 @@ export default function StockHarianPage({
         const docId = makeDocId(pabrik, nama, selectedDate);
         setTouchedInputs(p => { const n = { ...p }; delete n[docId]; return n; });
       });
-      await bumpLastUpdate("laporan");
+      await bumpLastUpdate("stock");
       triggerToast(`Semua stock ${PABRIK_SHORT[pabrik]} disimpan`, "ok");
     } catch (e) { console.error(e); triggerToast("Gagal simpan: " + (e as Error)?.message, "er"); }
     finally { setSaving(null); }

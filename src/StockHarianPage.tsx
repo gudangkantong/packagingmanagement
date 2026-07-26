@@ -114,6 +114,18 @@ export default function StockHarianPage({
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setOverrides({}); return; }
 
+    // Load dari cache dulu supaya compute effect langsung punya data
+    // (tanpa ini, stock awal = 0 sampai onSnapshot fire)
+    const cachedOverrides: Record<string, number> = {};
+    ALL_LOCATIONS.forEach(pabrik => {
+      const pKey = PABRIK_SHORT[pabrik] || pabrik;
+      const cached = getCached<Record<string, number>>(`stock_harian_awal_${pKey}`);
+      if (cached) Object.assign(cachedOverrides, cached);
+    });
+    if (Object.keys(cachedOverrides).length > 0) {
+      setOverrides(cachedOverrides);
+    }
+
     const unsubs = ALL_LOCATIONS.map(pabrik => {
       const pKey = PABRIK_SHORT[pabrik] || pabrik;
       const docRef = doc(db, "stock_awal_overrides", pKey);

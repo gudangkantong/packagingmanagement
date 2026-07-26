@@ -200,6 +200,13 @@ export default function StockHarianPage({
         const earliestDate = sortedDates[0];
         if (selectedDate < earliestDate) return;
 
+        // Helper: ambil reports untuk tanggal tertentu
+        // selectedDate dari props, tanggal lain dari cache (30 hari backfill)
+        const getReportsForDate = (date: string): LaporanKantong[] => {
+          if (date === selectedDate) return reports;
+          return getCached<LaporanKantong[]>(`laporan_${date}`) || [];
+        };
+
         // Cascade dari earliest ke selectedDate (semua di memori, 0 reads)
         let prevSk = 0;
         let cursor = earliestDate;
@@ -208,7 +215,11 @@ export default function StockHarianPage({
           const override = overrides[docId];
           const pn = computePenerimaan(pabrik, nama, cursor);
           const pg = computePengiriman(pabrik, nama, cursor);
-          const pk = isOPT ? 0 : computePemakaian(pKey, nama, cursor);
+          // Pakai reports dari cache untuk tanggal selain selectedDate
+          const cursorReports = getReportsForDate(cursor);
+          const pk = isOPT ? 0 : cursorReports
+            .filter(r => r.nama === nama && r.pabrik.includes(pKey))
+            .reduce((s, r) => s + r.total, 0);
           const sa = override !== undefined ? override : prevSk;
           const sk = isOPT ? sa + pn - pg : sa + pn - pg - pk;
 

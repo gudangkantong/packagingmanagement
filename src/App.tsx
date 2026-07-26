@@ -644,7 +644,7 @@ export default function App() {
     doBackfill();
   }, [currentUser, isAllowed]);
 
-  // Main reports — getDocs + cache (bukan onSnapshot persistent)
+  // Main reports — onSnapshot REAL-TIME (admin update → semua user langsung lihat)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) {
       setReports([]);
@@ -663,103 +663,97 @@ export default function App() {
 
     // Load from cache first (instant UI, 0 reads)
     const cachedOld = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
-    if (cachedOld && refreshTrigger === 0) {
+    if (cachedOld) {
       setReports(cachedOld);
       setDataLoading(false);
-      return;
     }
 
-    // Cache miss atau refresh → getDocs sekali
-    const loadReports = async () => {
-      try {
-        const reportsQuery = query(
-          collection(db, "laporan_kantong"),
-          where("tanggal", "==", selectedDate),
-          orderBy("tanggal", "desc")
-        );
-        const snap = await getDocs(reportsQuery);
-        const items: LaporanKantong[] = [];
-        snap.forEach((docSnap) => {
-          const data = docSnap.data();
-          items.push({
-            id: docSnap.id,
-            vendor: data.vendor || "",
-            nama: data.nama || "",
-            pabrik: data.pabrik || "",
-            shift: Number(data.shift) || 1,
-            tanggal: data.tanggal || "",
-            utuh: Number(data.utuh) || 0,
-            pecah: Number(data.pecah) || 0,
-            sortir: Number(data.sortir) || 0,
-            total: Number(data.total) || 0,
-            createdBy: data.createdBy || "",
-            updatedAt: data.updatedAt || ""
-          });
+    // Real-time listener: data berubah → UI langsung update
+    const reportsQuery = query(
+      collection(db, "laporan_kantong"),
+      where("tanggal", "==", selectedDate)
+    );
+    const unsubReports = onSnapshot(reportsQuery, (snap) => {
+      const items: LaporanKantong[] = [];
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        items.push({
+          id: docSnap.id,
+          vendor: data.vendor || "",
+          nama: data.nama || "",
+          pabrik: data.pabrik || "",
+          shift: Number(data.shift) || 1,
+          tanggal: data.tanggal || "",
+          utuh: Number(data.utuh) || 0,
+          pecah: Number(data.pecah) || 0,
+          sortir: Number(data.sortir) || 0,
+          total: Number(data.total) || 0,
+          createdBy: data.createdBy || "",
+          updatedAt: data.updatedAt || ""
         });
-        setReports(items);
-        setCache(`laporan_${selectedDate}`, items, 30 * 24 * 60 * 60 * 1000);
-        setDataLoading(false);
-      } catch (err) {
-        console.error("Failed to load reports:", err);
-        const cached = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
-        if (cached && cached.length > 0) setReports(cached);
-        setDataLoading(false);
-      }
-    };
-    loadReports();
-  }, [currentUser, isAllowed, selectedDate, refreshTrigger]);
+      });
+      setReports(items);
+      setCache(`laporan_${selectedDate}`, items, 30 * 24 * 60 * 60 * 1000);
+      setDataLoading(false);
+    }, (err) => {
+      console.error("Reports onSnapshot error:", err);
+      const cached = getCached<LaporanKantong[]>(`laporan_${selectedDate}`);
+      if (cached && cached.length > 0) setReports(cached);
+      setDataLoading(false);
+    });
 
-  // Penerimaan: getDocs + cache (bukan onSnapshot persistent)
+    return () => unsubReports();
+  }, [currentUser, isAllowed, selectedDate]);
+
+  // Penerimaan: onSnapshot REAL-TIME (admin update → semua user langsung lihat)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setPenerimaanList([]); return; }
 
     // Load dari cache dulu supaya UI langsung tampil
     const cached = getCached<PenerimaanData[]>("penerimaan_data");
-    if (cached && refreshTrigger === 0) { setPenerimaanList(cached); return; }
+    if (cached) setPenerimaanList(cached);
 
-    // Cache miss atau refresh → getDocs sekali
-    const load = async () => {
-      try {
-        const snap = await getDocs(collection(db, "penerimaan_data"));
-        const items: PenerimaanData[] = [];
-        snap.forEach((d) => {
-          const data = d.data();
-          items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
-        });
-        setPenerimaanList(items);
-        setCache("penerimaan_data", items, 30 * 24 * 60 * 60 * 1000);
-      } catch (err) {
-        console.error("Failed to load penerimaan_data:", err);
-        if (!cached) setPenerimaanList([]);
-      }
-    };
-    load();
-  }, [currentUser, isAllowed, refreshTrigger]);
+    // Real-time listener: data berubah → UI langsung update
+    const unsubPenerimaan = onSnapshot(collection(db, "penerimaan_data"), (snap) => {
+      const items: PenerimaanData[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, sumber: data.sumber || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+      });
+      setPenerimaanList(items);
+      setCache("penerimaan_data", items, 30 * 24 * 60 * 60 * 1000);
+    }, (err) => {
+      console.error("Penerimaan onSnapshot error:", err);
+      if (!cached) setPenerimaanList([]);
+    });
 
-  // Pengiriman: getDocs + cache (bukan onSnapshot persistent)
+    return () => unsubPenerimaan();
+  }, [currentUser, isAllowed]);
+
+  // Pengiriman: onSnapshot REAL-TIME (admin update → semua user langsung lihat)
   useEffect(() => {
     if (!currentUser || isAllowed !== true) { setPengirimanList([]); return; }
 
+    // Load dari cache dulu supaya UI langsung tampil
     const cached = getCached<PengirimanData[]>("pengiriman_data");
-    if (cached && refreshTrigger === 0) { setPengirimanList(cached); return; }
+    if (cached) setPengirimanList(cached);
 
-    const load = async () => {
-      try {
-        const snap = await getDocs(collection(db, "pengiriman_data"));
-        const items: PengirimanData[] = [];
-        snap.forEach((d) => {
-          const data = d.data();
-          items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
-        });
-        setPengirimanList(items);
-        setCache("pengiriman_data", items, 30 * 24 * 60 * 60 * 1000);
-      } catch (err) {
-        console.error("Failed to load pengiriman_data:", err);
-        if (!cached) setPengirimanList([]);
-      }
-    };
-    load();
-  }, [currentUser, isAllowed, refreshTrigger]);
+    // Real-time listener: data berubah → UI langsung update
+    const unsubPengiriman = onSnapshot(collection(db, "pengiriman_data"), (snap) => {
+      const items: PengirimanData[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        items.push({ id: d.id, nama: data.nama || "", pabrik: data.pabrik || "", tanggal: data.tanggal || "", jumlah: Number(data.jumlah) || 0, tujuan: data.tujuan || "", keterangan: data.keterangan || "", createdBy: data.createdBy || "", createdAt: data.createdAt || "" });
+      });
+      setPengirimanList(items);
+      setCache("pengiriman_data", items, 30 * 24 * 60 * 60 * 1000);
+    }, (err) => {
+      console.error("Pengiriman onSnapshot error:", err);
+      if (!cached) setPengirimanList([]);
+    });
+
+    return () => unsubPengiriman();
+  }, [currentUser, isAllowed]);
 
   // allowed_users: onSnapshot (lebih murah drpd polling buat 50 user)
   useEffect(() => {
